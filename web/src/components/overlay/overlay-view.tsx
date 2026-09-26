@@ -13,7 +13,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { WhyChips } from "@/components/dashboard/why-chips";
 import { LogoMark } from "@/components/site/logo";
 import { Button } from "@/components/ui/button";
-import { ChallengeFlow } from "@/components/verify-stub/challenge-flow";
+import { ChallengeFlow as RealChallengeFlow } from "@/components/voice/challenge-flow";
+import { ChallengeFlow as MockChallengeFlow } from "@/components/verify-stub/challenge-flow";
 import { mockBackend, realBackend } from "@/components/verify-stub/backend";
 import { ApiError } from "@/lib/api";
 import type { TrustPoint } from "@/lib/contracts";
@@ -130,13 +131,17 @@ export function OverlayView() {
             <div className="mb-4">
               <WhyChips blocks={state.blocks} limit={4} />
             </div>
-            <ChallengeFlow
-              key={challengeKey(challenge) ?? ""}
-              challengeId={challenge.challenge_id}
-              decisionId={null}
-              backend={backend}
-              devControls={devControls}
-            />
+            {mock ? (
+              <MockChallengeFlow
+                key={challengeKey(challenge) ?? ""}
+                challengeId={challenge.challenge_id}
+                decisionId={null}
+                backend={backend}
+                devControls={devControls}
+              />
+            ) : (
+              <RealChallengeFlow key={challengeKey(challenge) ?? ""} challengeId={challenge.challenge_id} />
+            )}
             <div className="mt-4 flex items-center justify-between gap-3 text-xs text-muted-foreground">
               <span>Until you verify, purchases and other high-risk actions keep asking for a step-up.</span>
               <Button variant="ghost" size="sm" onClick={() => setSnoozedKey(challengeKey(challenge))}>
@@ -375,7 +380,11 @@ function LockScreen({
           </div>
         ) : unlockId ? (
           <div className="rounded-2xl border border-border bg-card p-6">
-            <ChallengeFlow challengeId={unlockId} decisionId={null} backend={backend} devControls={devControls} />
+            {backend.mock ? (
+              <MockChallengeFlow challengeId={unlockId} decisionId={null} backend={backend} devControls={devControls} />
+            ) : (
+              <RealChallengeFlow challengeId={unlockId} />
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
