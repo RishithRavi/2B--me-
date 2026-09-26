@@ -229,3 +229,22 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
     - web tests: `jsdom` isn't in `web/package.json`.
     - `voice_test.sh` needs `python3.12` on PATH.
 - 19:05 · Codex 1 · **Real-data follow-up on `ml-wider-gap-13wf`:** processed the three local A recordings and one B recording without Tiger or upload. With all signals, v2 held-out fused AUC/EER was .830/.273 versus v1 .761/.375; OOF AUC improved for all five groups, but temporal remained below chance (.418) and workflow had only 13 A blocks. At the user's direction, the active model is now keyboard/mouse/scroll only: training, loaded artifacts, trust contributions, evaluation, gap comparison and the enroll UI exclude workflow/temporal while the frozen wire schema continues to accept them. Requested the same restriction in Claude-owned fallback/docs; fresh B validation is still required for a final claim.
+
+## 2026-09-26 — Codex 2 — gate-green demo integration
+
+- Integrated the prepared core commits for workspace model dependencies,
+  opt-in real-voice image dependencies, model fallback, tick-order handling,
+  decision recovery and paced E2E support. Added the locked `jsdom` dependency
+  and made the production web build use webpack to avoid Turbopack's internal
+  localhost-port requirement in restricted builders.
+- `scripts/gate.sh voice` now passes without skips: privacy, uv sync, 15 contract
+  tests, generated contracts, 124 voice tests, 98 Hearsay tests, 49 server tests
+  (4 optional skips), 44 web tests, 6 overlay tests and the complete Docker/Tiger
+  E2E all pass.
+- The E2E demonstrates enrollment and training, stable genuine trust, simulated
+  takeover detection, proactive voice step-up, impostor block and device lock,
+  verified unlock, co-presence and an approved owner checkout. A production
+  static web build also passes and emits all 12 application routes.
+- This is merge-ready for the explicit stub-voice demo. Real voice remains
+  fail-closed until the operator installs the image's `voice` extra, pinned model
+  weights and measured calibration on Vultr and runs the 20+20 hardware smoke.

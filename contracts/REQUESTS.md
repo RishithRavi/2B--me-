@@ -135,3 +135,17 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
   "Out-of-order tick must not be scored" inside the hub (`hub.py` → `on_tick`). This fails
   `server/tests/test_flows.py::test_copresent_owner_frictionless_purchase` and `core_e2e_local.sh` on `main`. The server's
   fallback engine clamps `dt = max(0, t_end - t_prev)` (`trust_fallback.py:57`) instead of raising.
+
+## Codex 2 — gate resolution (2026-09-26 19:46 ET)
+
+- **Resolved:** `server/pyproject.toml` now installs the base Hearsay package and
+  exposes the `voice` extra for `hearsay[server]`; the API/base Dockerfiles accept
+  the matching `UV_EXTRAS` build argument. `.env.example` documents every real
+  voice setting while keeping the deployable demo on explicit stub mode.
+- **Resolved:** the core hub safely stores and acknowledges out-of-order ticks
+  without scoring them, `jsdom` is locked for web tests, and the fast E2E pins
+  the fallback backend without weakening real-model enrollment gates.
+- **Validation:** `scripts/gate.sh voice` passes every step, including 49 server
+  tests, 44 web tests, overlay tests and the complete local Tiger E2E. Remaining
+  operator work is the real Vultr model preload, measured voice calibration and
+  hardware smoke test; those are deployment evidence, not merge-gate failures.
