@@ -209,6 +209,8 @@ async def e2e(args: argparse.Namespace) -> int:
         async with FakeAgent(args.api, dev["device_token"], "enroll") as agent:
             for _ in range(args.enroll_ticks):
                 await agent.tick("a")
+                if args.enroll_interval:  # paced enrollment: twobme_ml's purged folds need real time spread
+                    await asyncio.sleep(args.enroll_interval)
             j = await c.post("/api/enroll/train", json={"device_id": dev["device_id"], "source": "tiger"})
             check("train job accepted", j.status_code == 200, j.text)
             mi = {}
@@ -287,6 +289,8 @@ def main() -> int:
     ap.add_argument("--interval", type=float, default=5.0, help="seconds between ticks (5 = real time)")
     ap.add_argument("--e2e", action="store_true")
     ap.add_argument("--enroll-ticks", type=int, default=40)
+    ap.add_argument("--enroll-interval", type=float, default=0.0,
+                    help="seconds between enrollment ticks (paced twobme_ml variant: 110 ticks x 3 s)")
     args = ap.parse_args()
     if args.e2e:
         return asyncio.run(e2e(args))
