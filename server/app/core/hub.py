@@ -248,6 +248,7 @@ class DeviceRuntime:
     last_block_at: dict[str, datetime] = field(default_factory=dict)
     activity: dict[int, int] = field(default_factory=dict)
     tap_rate: float | None = None
+    rtt_ms: float | None = None
     secure_input: bool = False
     idle_s: float = 0.0
     below: int = 0
@@ -568,6 +569,8 @@ class DeviceHub:
             drt.tap_rate = (c.keys + c.mouse_moves + c.clicks + c.scroll_events) / 5.0
             drt.secure_input = flags.secure_input
             drt.idle_s = flags.idle_s
+            if flags.rtt_ms is not None:
+                drt.rtt_ms = flags.rtt_ms
             drt.last_tick_json = tick.model_dump(mode="json")
 
         scorer = self.models.scorer(drt.dev.user_id)
@@ -1247,7 +1250,7 @@ class DeviceHub:
         return HealthLive(
             heartbeat_age_s=drt.heartbeat_age(), tap_events_per_s=drt.tap_rate, secure_input=drt.secure_input,
             last_block_age_s={m: (now - t).total_seconds() for m, t in drt.last_block_at.items()},
-            rtt_ms=None, voice_warm=warm, elevenlabs_quota=quota,
+            rtt_ms=drt.rtt_ms, voice_warm=warm, elevenlabs_quota=quota,
             activity=[drt.activity.get(base - 30 + i, 0) for i in range(30)],
         )
 

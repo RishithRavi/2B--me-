@@ -10,7 +10,8 @@
     "pointer": "trackpad",
     "late": false,
     "idle_s": 0.0,
-    "clock_skew": false
+    "clock_skew": false,
+    "rtt_ms": null
   },
   "counts": {
     "keys": 24,

@@ -32,3 +32,4 @@ If blocked → `contracts/REQUESTS.md` → next item.
   to run `open verify_url` (server knows if a bound browser had /ws/live in the last 15 s). Close codes 4401 auth, 4409 superseded.
 - Presence: `POST /api/web/presence {buckets, client_now_ms: Date.now()}` (the server corrects browser clock offset).
 - Test harness showing the exact flows: `server/tests/test_flows.py`.
+- Post-CP0 additive: `TickFlags.rtt_ms` (optional) — put the lowest-RTT `clock_ping` sample (ms) of the last 8 in every tick.

@@ -96,6 +96,7 @@ export interface TickFlags {
   late: boolean;
   idle_s: number;
   clock_skew: boolean;
+  rtt_ms: number | null;
 }
 
 export interface TickCounts {

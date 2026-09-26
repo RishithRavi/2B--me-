@@ -20,3 +20,6 @@ Format: `- YYYY-MM-DD HH:MM ET · <who> · <file/type> · <change>`
     `PresenceIn.client_now_ms` (browser clock-offset correction); `AgentChallenge.open_browser`.
   - Semantics: `FeedItem.severity` 0 info · 1 notice · 2 warn · 3+ alert (5 = lock); `ModelInfo.headline_medians` keyed by
     headline column (`kb_hold_p50`); temporal `psd` = 32 bins evenly spaced 0–25 Hz.
+
+## post-CP0 (additive)
+- 2026-09-26 02:05 ET · Claude · `TickFlags.rtt_ms: float|null` — agent's lowest-RTT clock_ping sample (ms) for the dashboard RTT pill.

@@ -179,6 +179,8 @@ class TickFlags(_Wire):
     late: bool = False
     idle_s: float = 0.0
     clock_skew: bool = False
+    # lowest-RTT clock_ping sample (ms) — feeds the dashboard RTT pill (post-CP0 additive)
+    rtt_ms: float | None = None
 
 
 class TickCounts(_Wire):
