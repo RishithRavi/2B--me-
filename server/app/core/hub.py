@@ -892,7 +892,8 @@ class DeviceHub:
                 await self._agent_trust(drt, tl)
             self.publish(drt, "model", info)
             self.feed(drt, "model", f"Identity model v{info.version} active", 1)
-            await self.send_agent(drt, self._welcome(drt))
+            if drt.agent_ws is not None and drt.session_id is not None:
+                await self.send_agent(drt, self._welcome(drt))
         if not any(d.dev.user_id == user_id for d in self.devices.values()):
             self.live.publish(None, user_id, "model", info)
 

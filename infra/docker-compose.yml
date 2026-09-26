@@ -1,0 +1,51 @@
+# Production on the Vultr VM (vhp-8c-16gb-amd, ewr). Run from the repo root via infra/deploy.sh.
+#   caddy: TLS + static web (web/out) + reverse proxy /api and /ws → api
+#   api:   FastAPI, single worker, never published directly (expose, not ports)
+name: twobme
+services:
+  caddy:
+    image: caddy:2.11.4
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-2bme.tech}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      # staging first: ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory
+      ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../web/out:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+      args:
+        BASE: twobme-base:latest
+    image: twobme-api:latest
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      DATA_DIR: /app/data
+      MODEL_DIR: /app/data/models
+      HF_HOME: /models/hf
+      COOKIE_SECURE: "true"
+    expose:
+      - "8000"
+    volumes:
+      - ../data:/app/data
+      - ../reports:/app/reports:ro
+      - hf:/models/hf
+
+volumes:
+  caddy_data:
+  caddy_config:
+  hf:

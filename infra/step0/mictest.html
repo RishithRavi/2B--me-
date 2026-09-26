@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2bME mic test</title>
+<style>
+  :root { --bg:#0b0d10; --panel:#14181d; --fg:#e6e8eb; --muted:#8b949e; --ok:#3fb950; --warn:#d29922; --bad:#f85149; }
+  body { font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); margin:0; padding:24px 16px; }
+  main { max-width:640px; margin:0 auto; }
+  .card { background:var(--panel); border-radius:12px; padding:16px 20px; margin:12px 0; }
+  button, select { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid #30363d; background:#1f242b; color:var(--fg); }
+  button:disabled { opacity:.5; }
+  #meter { height:14px; background:#1f242b; border-radius:7px; overflow:hidden; }
+  #bar { height:100%; width:0; background:var(--ok); transition:width 60ms linear; }
+  .muted { color:var(--muted); } .ok { color:var(--ok); } .bad { color:var(--bad); }
+  code { background:#1f242b; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>2bME mic test</h1>
+  <p class="muted">Checks HTTPS + getUserMedia with the exact constraints the voice step-up uses
+     (no echo cancellation, noise suppression or auto gain). Nothing is uploaded.</p>
+  <div class="card">
+    <p>Secure context: <b id="secure"></b> · Permission: <b id="perm">unknown</b></p>
+    <p><button id="start">Start mic</button> <select id="devices" disabled></select></p>
+    <p>Input: <b id="label">—</b> · Sample rate: <b id="rate">—</b> · Channels: <b id="ch">—</b></p>
+    <div id="meter"><div id="bar"></div></div>
+    <p class="muted" id="peak">peak —</p>
+  </div>
+  <div class="card">
+    <p><button id="rec" disabled>Record 3 s</button> <button id="play" disabled>Play back</button></p>
+    <p class="muted" id="recinfo">Local only; the recording never leaves this page.</p>
+  </div>
+  <p class="muted">Pass = the meter moves when you speak and playback sounds clean. In Chrome also set
+     Site settings → Microphone → <b>Allow</b> (not "this time"), and enable Chrome under macOS
+     Privacy &amp; Security → Microphone.</p>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+$("secure").textContent = window.isSecureContext ? "yes" : "NO (needs https)";
+$("secure").className = window.isSecureContext ? "ok" : "bad";
+let stream, ctx, analyser, raf, chunks = [], recUrl;
+
+async function perm() {
+  try { const p = await navigator.permissions.query({ name: "microphone" }); $("perm").textContent = p.state;
+        p.onchange = () => ($("perm").textContent = p.state); } catch { /* not supported */ }
+}
+perm();
+
+async function listDevices(selectedId) {
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput");
+  const sel = $("devices"); sel.innerHTML = "";
+  for (const d of devs) { const o = document.createElement("option"); o.value = d.deviceId;
+    o.textContent = d.label || "(unnamed input)"; if (d.deviceId === selectedId) o.selected = true; sel.appendChild(o); }
+  sel.disabled = devs.length === 0;
+}
+
+async function start(deviceId) {
+  stop();
+  const audio = { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  if (deviceId) audio.deviceId = { exact: deviceId };
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio }); }
+  catch (e) { $("label").textContent = "getUserMedia failed: " + e.name; $("label").className = "bad"; return; }
+  const track = stream.getAudioTracks()[0]; const s = track.getSettings();
+  $("label").textContent = track.label; $("label").className = "ok";
+  ctx = new AudioContext(); // native rate — no sampleRate option (avoids aliasing / Firefox errors)
+  $("rate").textContent = ctx.sampleRate + " Hz"; $("ch").textContent = s.channelCount ?? "?";
+  const src = ctx.createMediaStreamSource(stream); analyser = ctx.createAnalyser(); analyser.fftSize = 2048;
+  src.connect(analyser);
+  const buf = new Float32Array(analyser.fftSize); let peak = 0;
+  const tick = () => { analyser.getFloatTimeDomainData(buf); let rms = 0;
+    for (const v of buf) rms += v * v; rms = Math.sqrt(rms / buf.length); peak = Math.max(peak * 0.995, rms);
+    const db = 20 * Math.log10(rms + 1e-9); $("bar").style.width = Math.max(0, Math.min(100, (db + 60) * 1.7)) + "%";
+    $("peak").textContent = `level ${db.toFixed(1)} dBFS · peak ${(20 * Math.log10(peak + 1e-9)).toFixed(1)} dBFS`;
+    raf = requestAnimationFrame(tick); };
+  tick();
+  $("rec").disabled = false;
+  await listDevices(s.deviceId);
+}
+function stop() { cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach((t) => t.stop()); if (ctx) ctx.close(); }
+
+$("start").onclick = () => start();
+$("devices").onchange = (e) => start(e.target.value);
+$("rec").onclick = () => {
+  if (!stream) return; chunks = []; const mr = new MediaRecorder(stream);
+  mr.ondataavailable = (e) => chunks.push(e.data);
+  mr.onstop = () => { if (recUrl) URL.revokeObjectURL(recUrl); recUrl = URL.createObjectURL(new Blob(chunks));
+    $("play").disabled = false; $("recinfo").textContent = "Recorded 3 s (kept in this tab only)."; };
+  mr.start(); $("rec").disabled = true; $("recinfo").textContent = "Recording…";
+  setTimeout(() => { mr.stop(); $("rec").disabled = false; }, 3000);
+};
+$("play").onclick = () => new Audio(recUrl).play();
+</script>
+</body>
+</html>

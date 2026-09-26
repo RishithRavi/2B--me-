@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1.7
+# API image: FROM the prebuilt base, code copied last so a deploy takes seconds.
+ARG BASE=twobme-base:latest
+FROM ${BASE}
+WORKDIR /app
+COPY . /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --package twobme-server
+ENV TWOBME_CONTRACTS_DIR=/app/contracts \
+    MIGRATIONS_DIR=/app/infra/migrations \
+    REPORTS_DIR=/app/reports \
+    DATA_DIR=/app/data \
+    MODEL_DIR=/app/data/models \
+    HF_HOME=/models/hf
+EXPOSE 8000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=240s --retries=5 \
+  CMD curl -fsS http://localhost:8000/api/status >/dev/null || exit 1
+# single worker by design: the hub is in-memory (§6 A1)
+CMD ["uvicorn", "app.main:app", "--app-dir", "server", "--host", "0.0.0.0", "--port", "8000", \
+     "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*", \
+     "--ws-ping-interval", "20", "--ws-ping-timeout", "20"]

@@ -67,8 +67,10 @@ def setup_monitored(client) -> tuple[str, str, Agent]:
 
 # ---------------------------------------------------------------------------------------------------------
 def test_degraded_mode_login_status_healthz(client):
+    import os
+
     st = client.get("/api/status").json()
-    assert st["tiger"] == "down" and st["voice_warm"] is True
+    assert st["tiger"] == ("up" if os.environ.get("TEST_TIGER_URL") else "down") and st["voice_warm"] is True
     assert client.get("/api/healthz").status_code == 200
     assert client.get("/api/me").status_code == 401
     me = login(client, "a")

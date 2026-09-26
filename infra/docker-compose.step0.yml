@@ -1,0 +1,21 @@
+# Step 0 (humans, hour 1, no app code): prove DNS + TLS + mic on https://2bme.tech/mictest.
+#   ACME_EMAIL=you@x ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory \
+#     docker compose -f infra/docker-compose.step0.yml up -d
+# Pass = the browser gets a (staging) cert and the mic meter moves. Then switch ACME_CA to production
+# (unset it), `down`, and use infra/deploy.sh from then on.
+name: twobme-step0
+services:
+  caddy:
+    image: caddy:2.11.4
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN:-2bme.tech}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile.step0", "--adapter", "caddyfile"]
+    volumes:
+      - ./Caddyfile.step0:/etc/caddy/Caddyfile.step0:ro
+      - ./step0:/srv:ro
+      - caddy_data:/data
+volumes:
+  caddy_data:

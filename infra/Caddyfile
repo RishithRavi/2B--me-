@@ -1,0 +1,46 @@
+# 2bme.tech — TLS, static site, same-origin /api + /ws (§2.3, §6 A4)
+{
+	email {$ACME_EMAIL}
+	acme_ca {$ACME_CA}
+}
+
+# every URL uses the apex domain; cookies are host-only on 2bme.tech
+www.{$DOMAIN}, app.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} 308
+}
+
+{$DOMAIN}, api.{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Permissions-Policy "microphone=(self)"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	@backend path /api/* /ws/*
+	handle @backend {
+		reverse_proxy api:8000 {
+			flush_interval -1
+			transport http {
+				read_timeout 0
+			}
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} {path}.html {path}/index.html
+		file_server
+	}
+
+	handle_errors {
+		@notfound expression {err.status_code} == 404
+		handle @notfound {
+			root * /srv
+			rewrite * /404.html
+			file_server
+		}
+	}
+}
