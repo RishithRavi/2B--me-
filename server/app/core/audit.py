@@ -243,7 +243,9 @@ class AuditLog:
         else:
             t.last_anomaly, t.last_anomaly_at = a, utcnow()
         top = a.top_features[0] if a.top_features else None
-        why = f" — {top.label} {top.z:+.1f}σ" if top is not None else ""
+        why = ""
+        if top is not None:  # a never-seen category can score |z| in the thousands: say "far outside" instead
+            why = f" — {top.label} " + (f"{top.z:+.1f}σ" if abs(top.z) <= 99 else "far outside baseline (|z| > 99)")
         self._emit_dev(drt, "alert", f"Alert: {a.kind.replace('_', ' ')} (severity {a.severity}){why}",
                        a.severity, a.id)
 

@@ -354,3 +354,39 @@ def test_audit_reads_tiger(client):
     got = audit(client, limit=50)
     assert any(x["summary"] == "Note: tiger roundtrip" for x in got)
     agent.close()
+
+
+def test_audit_unit_dedupe_and_huge_z():
+    """AuditLog in isolation: an anomaly is logged once (its explanation update is not a new row) and a
+    never-seen category's |z| in the thousands reads as 'far outside baseline'."""
+    from types import SimpleNamespace
+
+    from app.core.audit import AuditLog
+    from twobme_common.types import AnomalyLive, DeviationOut
+
+    class Sink:
+        def __init__(self):
+            self.rows, self.live = [], []
+
+        def insert(self, table, row):
+            self.rows.append((table, row))
+
+        def publish(self, device_id, owner_id, type_, data):
+            self.live.append((device_id, owner_id, type_))
+
+    sink = Sink()
+    dev = SimpleNamespace(id=uuid.uuid4(), user_id=uuid.uuid4())
+    user = SimpleNamespace(id=dev.user_id, handle="Employee 07", email="emp07@org.2bme.tech")
+    reg = SimpleNamespace(devices={dev.id: dev}, users={user.id: user}, bound_device=lambda _uid: dev)
+    log = AuditLog(writer=sink, live=sink, registry=reg)
+    drt = SimpleNamespace(dev=dev)
+    a = AnomalyLive(id=uuid.uuid4(), kind="takeover_suspected", severity=4, trust_before=None, trust_after=0.2,
+                    top_features=[DeviationOut(feature="wf.markov_ll", label="app transition pattern", unit="ll",
+                                               z=-2463.7)])
+    log.observe(drt, "anomaly", a)
+    log.observe(drt, "anomaly", a.model_copy(update={"explanation": "template"}))
+    rows = log.recent(10)
+    assert len(rows) == 1 and rows[0].kind == "alert" and rows[0].handle == "Employee 07"
+    assert "far outside baseline" in rows[0].summary and "2463" not in rows[0].summary
+    assert log.track(dev.id).last_anomaly.explanation == "template"
+    assert sink.rows[0][0] == "audit_log" and sink.live == [(dev.id, None, "audit")]  # admins only (no owner)
