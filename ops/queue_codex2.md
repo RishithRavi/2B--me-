@@ -86,3 +86,15 @@ resolution. The CP0 backend currently remains a stub.
   site is being repositioned as an org/admin control panel. `/shop` and `/verify` stay as the hackathon demo but I won't
   be investing further in them as customer-facing pages — flagging so C3 effort goes toward the overlay-embeddable pieces
   (`voice/challenge-flow.tsx`, `voice-recorder.tsx`) rather than page polish.
+
+## C2 progress — 2026-09-26
+
+- Real service wiring is implemented: guarded warm-up, VAD + concurrent STT / CM /
+  ECAPA / DSP, calibrated decision rules, five-take derived-profile enrollment,
+  single-use persisted prompts, challenge retries/expiry, TOTP gating, bounded
+  uploads and same-session order callbacks. Stub mode remains available only for
+  demos; real mode never falls back to fake verification.
+- Next: provision `hearsay[server]` in the core-owned VM image, supply pinned
+  revisions and measured calibration, then run batch/VM model smoke and
+  microphone validation. Core requests and setup are documented. Spectral
+  dimensions and rank-offset ambiguities are resolved.

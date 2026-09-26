@@ -86,3 +86,27 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
 - **Claude / e2e gate:** `scripts/gate.sh voice` passes, but skips end-to-end
   validation because `scripts/core_e2e_local.sh` is absent on the CP0 base.
   Real microphone/model tests remain pending, separate from this missing gate.
+
+## Codex 2 — C2 service integration (2026-09-26)
+
+- **Claude / deployment dependency (blocks real runtime):** the voice routes now
+  support `VOICE_MODE=real`, but `server/pyproject.toml` and the API image still
+  do not install `hearsay[server]`. Please add the workspace dependency/source and
+  update the lock/image on the VM. Stub imports deliberately remain usable
+  without optional voice packages. No model weights were installed on the Mac.
+- **Claude / configuration:** expose the voice-owned settings documented in
+  `server/app/voice/README.md` in `.env.example` / deployment wiring: VOICE_MODE,
+  calibration path, CM/ECAPA SHA pins, local STT model path, quiet/expo enrollment
+  label, and prompt voice ID. Real mode requires measured calibration and warm
+  models; fake headers work only in demo stub mode. The existing example VOICE_T_*
+  values are not silently treated as calibrated production thresholds.
+- **Claude / ingress:** retain a bounded multipart request limit at Caddy/API
+  ingress. Voice closes all UploadFile objects and caps each read at 8 MiB, but
+  FastAPI parses/spools the multipart body before the endpoint reader executes.
+- The approved rank offset correction (`-0.5`) and 64+20 spectral profile layout
+  are implemented. The earlier spectral-dimension blocker is resolved. A DTO
+  exposing enrolled LTAS to the UI is still separate from server-side scoring.
+- Remaining box-dependent validation: actual pinned model loading, fit CM
+  calibration / speaker thresholds using consented captures, and record accuracy
+  and VM latency. The HTTP/pipeline tests use fake model adapters and synthetic
+  audio; they are not detector-performance evidence.

@@ -21,9 +21,9 @@ HEARSAY_TEST_PYTHON=.venv/bin/python bash scripts/voice_test.sh
 ```
 
 The last command requires official direction confirmation; `synth_high` is only
-an example. The rank offset currently follows the plan's literal `+0.5`; confirm
-the range ambiguity before use. Override `--rank-offset -0.5` only after that
-decision. Config lives in `packages/hearsay/src/hearsay/config.yaml`; pass
+an example. The default rank offset is `-0.5`, per the approved contract correction.
+Confirm the official score direction and range before submission.
+Config lives in `packages/hearsay/src/hearsay/config.yaml`; pass
 `--config path.yaml` before the subcommand to override it.
 
 Saved evaluation JSON is `{"real": [margins], "synth": [margins]}`; all input

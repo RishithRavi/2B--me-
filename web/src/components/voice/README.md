@@ -3,7 +3,7 @@
 `VoiceRecorder` owns microphone acquisition, prompt playback, six-second native
 PCM capture, cancellation and cleanup. It is shared by enrollment and challenges.
 The server resamples the mono PCM16 WAV. `client_prompt_end_ms` is the native
-AudioContext timestamp when response capture starts; the uploaded WAV already
+AudioContext time elapsed since the pinned microphone opened; the uploaded WAV already
 excludes the prompt, so the server must not trim that timestamp from the WAV.
 
 Set `NEXT_PUBLIC_VOICE_MIC_LABEL` at web build time to the demo microphone label,
@@ -18,9 +18,10 @@ handles retries and TOTP, and reports server outcomes. `/shop` resolves only its
 own pending decision and polls it to recover an expiry or completion in another
 view. A final declined order is never reopened by a later voice outcome.
 
-The CP0 server is still a stub. These components do not make its fake score a
-real model result. Actual mic capture, autoplay fallback across supported browsers,
-enrollment and model inference still need demo-hardware integration validation.
+The server supports explicit demo stub mode and calibrated real mode. Real mode
+requires installed models and calibration before accepting requests. Actual mic
+capture, autoplay fallback across supported browsers, enrollment and model
+inference still need demo-hardware integration validation.
 The current DTO does not expose the enrolled LTAS; SpectrogramView can display
 only the response until the requested contract extension is available.
 
