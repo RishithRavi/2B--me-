@@ -141,6 +141,12 @@ def test_roster_shape_order_and_flags(client):
     assert r["level"] == "suspicious" and r["confidence"] < 0.4
     assert {"takeover_suspected", "challenge_open"} <= set(r["flags"]) and "insider_drift" not in r["flags"]
     assert r["open_challenge"] is not None
+    # after an operator reset, the recent takeover window is not mistaken for a slow insider drift
+    for _ in range(30):
+        drt.history.append(TrustPoint(t=utcnow(), confidence=0.05, level="suspicious"))
+    client.post("/api/demo/reset", json={"device_id": dev_a}, headers=ADMIN)
+    r = row_for(roster(client), dev_a)
+    assert r["level"] == "normal" and "insider_drift" not in r["flags"] and "takeover_suspected" not in r["flags"]
     agent.close()
 
     login(client, "a")

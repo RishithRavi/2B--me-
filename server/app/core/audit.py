@@ -212,9 +212,11 @@ class AuditLog:
         if level != t.pending_level:
             t.pending_level, t.pending_n = level, 0
         t.pending_n += 1
-        # suspicious (in or out) and operator/anchor pushes (seq None) are immediate; normal <-> watch must hold
-        # for 2 ticks so a device hovering at 0.80 doesn't flood the trail
-        immediate = level == "suspicious" or prev == "suspicious" or getattr(tl, "seq", None) is None
+        # operator/anchor pushes (seq None) and suspicious in/out are immediate; everything else must hold for 2
+        # events, so a device hovering at 0.80 doesn't flood the trail and the transient band published by a
+        # learning -> monitor switch (right before the model-activation anchor) is never logged
+        immediate = (getattr(tl, "seq", None) is None or prev == "suspicious"
+                     or (level == "suspicious" and prev != "learning"))
         if not (immediate or t.pending_n >= 2):
             return
         t.audited_level, t.pending_level, t.pending_n = level, None, 0

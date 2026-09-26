@@ -41,6 +41,7 @@ DRIFT_WINDOW_S = 300.0
 DRIFT_MIN_POINTS = 24          # >= 2 min of 5 s ticks before the insider-drift flag can fire
 DRIFT_BELOW = 0.80
 DRIFT_FRACTION = 0.60
+DRIFT_MAX_SUSPICIOUS = 0.10    # a window that was mostly < 0.40 is a (past) takeover, not a slow drift
 REMOTE_WINDOW = timedelta(minutes=10)
 SPARK_N = 60
 LEVEL_RANK = {"locked": 0, "suspicious": 1, "watch": 2, "normal": 3, "learning": 4}
@@ -64,13 +65,16 @@ def _drt(device_id: UUID) -> DeviceRuntime:
 # --- roster ---------------------------------------------------------------------------------------------
 def insider_drift(drt: DeviceRuntime, level: str, takeover: bool) -> bool:
     """Sustained sub-0.80 confidence (>= 60% of the last 5 min) on a device still labelled genuine with no
-    takeover marker, that is not (yet) a takeover suspicion: UEBA-style slow drift, not a sudden swap."""
+    takeover marker, that is not (and in this window was not) a takeover suspicion: UEBA-style slow drift in the
+    watch band, not a sudden swap."""
     if takeover or drt.label != "genuine" or drt.in_takeover or level in ("learning", "locked"):
         return False
     now = utcnow()
     pts = [p for p in list(drt.history)
            if 0 <= (now - p.t).total_seconds() <= DRIFT_WINDOW_S and p.level not in ("learning", "locked")]
     if len(pts) < DRIFT_MIN_POINTS:
+        return False
+    if sum(1 for p in pts if p.confidence < 0.40) / len(pts) > DRIFT_MAX_SUSPICIOUS:
         return False
     return sum(1 for p in pts if p.confidence < DRIFT_BELOW) / len(pts) >= DRIFT_FRACTION
 
