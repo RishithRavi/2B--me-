@@ -56,7 +56,7 @@ export function VoiceRecorder({ phrase, promptUrl, onPromptEnded, onRecorded, di
     const token = generation.current;
     if (promptTimer.current) clearTimeout(promptTimer.current);
     try {
-      const promptEndMs = active.context.currentTime * 1000;
+      const promptEndMs = active.context.currentTime * 1000 - active.openedAtMs;
       setPhase("recording"); setSeconds(0);
       // Capture starts immediately; the acknowledgement network request runs alongside it.
       const recorded = active.capture((s) => { if (alive.current) setSeconds(s); });

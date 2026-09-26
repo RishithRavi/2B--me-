@@ -14,7 +14,7 @@ def basename(value: str) -> str:
 def rank_scores(values: Sequence[float], *, direction: str, offset: float) -> list[float]:
     """Average 1-based ranks, offset configurable until official rules are frozen.
 
-    The plan specifies +0.5 (which can exceed 1); conventional midranks use -0.5.
+    The approved correction in contracts/REQUESTS.md uses midranks with -0.5.
     Reversing the ranks is the last transformation before the offset/scale.
     """
     if direction not in {"synth_high", "bona_high"}:

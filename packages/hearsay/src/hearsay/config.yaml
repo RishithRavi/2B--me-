@@ -5,7 +5,7 @@ submission:
   template: null
   team_filename: null
   header: true
-  rank_offset: 0.5
+  rank_offset: -0.5
   score_min: null
   score_max: null
 metrics:

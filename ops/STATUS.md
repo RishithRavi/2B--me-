@@ -189,3 +189,42 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
     - e2e: the real `UserModel` can't train on the 3-min fixture at its gates.
     - web tests: `jsdom` isn't in `web/package.json`.
     - `voice_test.sh` needs `python3.12` on PATH.
+
+## 2026-09-26 — Codex 2 — C2 real service wiring
+
+- Fast-forwarded local `ws-voice` to main `770fe1e` (the earlier voice work is
+  already merged). Implemented the real service behind the frozen voice exports.
+- Real mode requires pinned CM/ECAPA revisions, matching measured calibration,
+  installed STT/model dependencies and successful warm-up. Startup failures keep
+  health and voice routes unavailable. Canned results and fake headers remain
+  confined to explicit/demo stub behavior; stub mode is refused outside DEMO_MODE.
+- Connected native PCM/WebM decode → soxr → VAD → concurrent STT, serialized CM,
+  ECAPA and DSP. Uses 64+20 spectral vectors, quiet/expo centroids, calibrated
+  spoof probability, approved spoof-first precedence and shared core callbacks.
+  No phrase context/keyterms go to STT. Missing evidence never verifies.
+- Added one-use, session-bound five-take enrollment with phrase/CM/speech quality
+  checks and minimum pairwise cosine; only derived profiles are persisted.
+  Generated prompt pool persists atomic consumption and tops up below 20 to 50.
+  Response audio remains in memory after decode and UploadFile objects always
+  close, including failures. The router closes its inference executor at shutdown.
+- Enforced prompt acknowledgement, fixed first-play TTL, retry phrase freshness,
+  attempt limit, MFA window, duplicate-submit rejection and late-result rejection
+  after cancellation/expiry. Tested real-mode checkout callbacks with injected
+  models: original cookie resolves Y; a new cookie cannot approve that order.
+- Fixed browser timing to measure prompt-end from pinned mic opening, applied the
+  approved Hearsay rank offset -0.5, and made voice_test.sh select workspace Python
+  automatically and include service tests/lint.
+- **Validation:** full `scripts/gate.sh voice` PASSED, including the local Tiger
+  end-to-end rehearsal in a separately created disposable database (removed after
+  the run; shared tsdb_e2e was not reset). 15 contract, 124 Hearsay+voice-service,
+  16 core-server, 42 web and 6 overlay tests passed; 2 optional database unit tests
+  skipped. The gate also reruns the same 98 Hearsay tests. Privacy, contracts,
+  lint/format and typechecks passed. Log: `/private/tmp/2bme-voice-final-gate.log`.
+- **Limits / next:** model adapters are injected fakes in service tests; actual
+  model accuracy, provider compatibility, calibration and VM latency are not
+  claimed. No real recordings, weights or paid speech requests were used. Claude
+  must add `hearsay[server]` to the VM package/image and expose the documented env
+  settings; requests are in contracts/REQUESTS.md. Batch box, model pins and
+  consented calibration data remain required. Runtime setup and behavior are in
+  server/app/voice/README.md. Requesting Claude's merge review after the passing
+  gate; no deployment or direct main push.

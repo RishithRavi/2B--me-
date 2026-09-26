@@ -17,6 +17,6 @@ been submitted. All unknowns below remain configurable or unset.
 | Techniques and agentic-orchestration judging | Unconfirmed |
 | Team filename | Unconfirmed |
 
-Open numerical issue: the plan's one-based rank formula uses `+0.5`, which can
-exceed 1. Confirm before generating an official TSV. A `-0.5` override produces
-conventional midpoint ranks in (0, 1); it is not silently substituted.
+Resolved internal formula: Claude confirmed `(rankdata(llr, 'average') - 0.5)/N`
+in `contracts/REQUESTS.md`. The default now uses `-0.5`; official score direction,
+range and other organizer rules still require confirmation.
