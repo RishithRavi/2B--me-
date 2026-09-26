@@ -5,6 +5,9 @@
 #   3. scripts/core_replay_ticks.py --e2e: enroll → train from Tiger → genuine → takeover → suspicious →
 #      proactive challenge → C → stub BLOCK_IMPOSTOR → lock → N → unlock VERIFY → co-present Y
 # When Codex 1's fixtures + `twobme-agent replay` land, step 3 also replays genuine_A then impostor_B.
+# MODEL_BACKEND defaults to `fallback` here: the fast synthetic run enrolls 40 ticks, below twobme_ml's gates.
+# `MODEL_BACKEND=auto scripts/core_e2e_local.sh` must pass too (twobme_ml refuses → that job trains the
+# fallback model and the identity card says so).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -28,7 +31,9 @@ fi
 
 export TIGER_DATABASE_URL="$DB_URL" DATA_DIR="$TMP/data" REPORTS_DIR="$TMP/reports" COOKIE_SECURE=false \
        DEMO_MODE=true ADMIN_TOKEN="e2e-admin" SEED_PASSWORD_A="e2e-a" SEED_PASSWORD_B="e2e-b" \
-       SEED_PASSWORD_ADMIN="e2e-admin-pw" DECISION_TICK_WAIT_S=0.2 WRITER_FLUSH_S=0.5
+       SEED_PASSWORD_ADMIN="e2e-admin-pw" DECISION_TICK_WAIT_S=0.2 WRITER_FLUSH_S=0.5 \
+       MODEL_BACKEND="${MODEL_BACKEND:-fallback}"
+echo "e2e: MODEL_BACKEND=$MODEL_BACKEND port=$PORT db=${DB_URL##*/}"
 uv run uvicorn app.main:app --app-dir server --port "$PORT" --log-level warning >"$LOG" 2>&1 &
 PID=$!
 for _ in $(seq 1 60); do

@@ -218,6 +218,8 @@ async def e2e(args: argparse.Namespace) -> int:
                     break
                 await asyncio.sleep(0.25)
             check("model ready", mi.get("status") == "ready", mi)
+            note = (mi.get("metrics") or {}).get("backend_note")
+            print(f"      (model v{mi.get('version')} backend={mi.get('backend')}" + (f"; {note[:90]}" if note else "") + ")")
             trs = [await agent.tick("a") for _ in range(8)]
             check("genuine stays ≥ 0.80", min(t["confidence"] for t in trs) >= 0.8, [round(t["confidence"], 3) for t in trs])
             await c.post("/api/demo/marker", json={"device_id": dev["device_id"], "label": "takeover_start"})
