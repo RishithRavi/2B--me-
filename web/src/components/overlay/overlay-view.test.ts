@@ -64,7 +64,7 @@ describe("OverlayView (mock mode)", () => {
     expect(modes.at(-1)).toBe("pill");
   });
 
-  it("the pill expands into My behavior (and Escape collapses it)", async () => {
+  it("the pill expands into My behavior (and × collapses it)", async () => {
     await mount();
     const expand = host.querySelector<HTMLButtonElement>('button[aria-label="Open My behavior"]');
     expect(expand).not.toBeNull();
@@ -74,7 +74,7 @@ describe("OverlayView (mock mode)", () => {
     const text = host.textContent ?? "";
     for (const s of ["My behavior", "What counted", "What left this laptop", "Your identity model", "Recent events"]) expect(text).toContain(s);
     expect(text).toContain("one-class ensemble (twobme_ml)");
-    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Collapse to the pill"]')!.click());
     expect(mode()).toBe("pill");
   });
 

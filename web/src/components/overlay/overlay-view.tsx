@@ -188,14 +188,6 @@ export function OverlayView() {
   useEffect(() => {
     if (fullScreen(mode)) setWantDetails(false);
   }, [mode]);
-  useEffect(() => {
-    if (mode !== "details") return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setWantDetails(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mode]);
 
   const onSignedIn = useCallback(() => {
     store?.reconnect();
