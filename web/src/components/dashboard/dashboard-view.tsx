@@ -7,6 +7,7 @@ import { Dot } from "@/components/site/empty-state";
 import { Panel } from "@/components/site/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useNow } from "@/lib/hooks";
 import type { LiveState, LiveStore } from "@/lib/live";
 import { fmtAgo, shortId } from "@/lib/ui";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,8 @@ import { TrustChart } from "./trust-chart";
 import { TrustGauge } from "./trust-gauge";
 import { TtdStopwatch } from "./ttd-stopwatch";
 import type { DashboardActions } from "./use-actions";
+import { VoiceAnalysis, currentVoiceView } from "./voice-analysis";
+import type { VoiceMode } from "./voice-mode";
 import { WhyChips } from "./why-chips";
 
 export function ConnectionBadge({ state, mock }: { state: LiveState; mock: boolean }) {
@@ -45,20 +48,35 @@ export function ConnectionBadge({ state, mock }: { state: LiveState; mock: boole
   );
 }
 
+/** Stage view link that keeps the admin's drill-in device (?device_id=). */
+export function stageLink(mock: boolean, deviceId: string | null, stage = true): string {
+  const q = new URLSearchParams();
+  if (stage) q.set("stage", "1");
+  if (deviceId && !mock) q.set("device_id", deviceId);
+  if (mock) q.set("mock", "1");
+  const s = q.toString();
+  return s ? `/dashboard?${s}` : "/dashboard";
+}
+
 export function DashboardView({
   state,
   store,
   mock,
   actions,
   isAdmin,
+  voiceMode,
 }: {
   state: LiveState;
   store: LiveStore | null;
   mock: boolean;
   actions: DashboardActions;
   isAdmin: boolean;
+  voiceMode: VoiceMode;
 }) {
   const learning = !state.model || state.model.status !== "ready" || state.device?.mode === "enroll";
+  const now = useNow(5000);
+  const voice = currentVoiceView(state, now);
+  const stageHref = stageLink(mock, state.focus);
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-4 px-4 py-5 sm:px-6">
@@ -99,7 +117,7 @@ export function DashboardView({
           <DevicePicker devices={state.knownDevices} current={state.focus} onPick={(id) => store?.setFocus(id)} />
           <TickDrawer tick={state.last_tick_json} onRefresh={() => store?.reconnect()} />
           <Button asChild variant="ghost" size="sm">
-            <Link href={mock ? "/dashboard?stage=1&mock=1" : "/dashboard?stage=1"}>
+            <Link href={stageHref}>
               <MonitorPlay /> Stage view
             </Link>
           </Button>
@@ -109,6 +127,7 @@ export function DashboardView({
       <SecureInputBanner health={state.health} />
       <LockedBanner device={state.device} onUnlock={() => void actions.unlockWithVoice()} busy={actions.busy === "unlock"} />
       <ChallengeBanner challenge={state.open_challenge} />
+      {voice && <VoiceAnalysis view={voice} voiceMode={voiceMode} />}
 
       {/* operator controls + health */}
       <div className="panel space-y-3 px-4 py-3">

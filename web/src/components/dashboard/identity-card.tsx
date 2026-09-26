@@ -1,13 +1,23 @@
 "use client";
 
-import { Fingerprint, Loader2, TriangleAlert } from "lucide-react";
+import { Cpu, Fingerprint, Loader2, TriangleAlert } from "lucide-react";
 import { useMemo } from "react";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { TipBox, type TipProps } from "@/components/charts/tip";
 import { Progress } from "@/components/ui/progress";
 import type { ContextLive, EnrollProgress, ModelInfo } from "@/lib/contracts";
-import { MODALITIES, featureMeta, fmtClock, fmtValue, modalityColor, modalityIcon, modalityLabel, type FeatureMeta } from "@/lib/ui";
+import {
+  MODALITIES,
+  featureMeta,
+  fmtClock,
+  fmtValue,
+  modalityColor,
+  modalityIcon,
+  modalityLabel,
+  modelBackendLabel,
+  type FeatureMeta,
+} from "@/lib/ui";
 
 /** Raw feature values from the literal last tick (all blocks + temporal context) and the live context. */
 export function liveFeatureValues(lastTick: Record<string, unknown> | null, context: ContextLive | null): Record<string, number> {
@@ -115,6 +125,15 @@ export function IdentityCard({
           <span className="text-muted-foreground">No identity model yet — collect a baseline, then Train.</span>
         )}
       </div>
+
+      {model && (status === "ready" || status === "training") && modelBackendLabel(model.backend) && (
+        <div
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground"
+          title={model.backend === "fallback" ? "Median/MAD mean-|z| fallback scorer (twobme_ml unavailable)" : "One-class model trained only on this user's own blocks"}
+        >
+          <Cpu className="size-3" /> scored by <span className="font-medium text-foreground">{modelBackendLabel(model.backend)}</span>
+        </div>
+      )}
 
       {model && status === "ready" && (
         <div className="flex flex-wrap gap-1.5">

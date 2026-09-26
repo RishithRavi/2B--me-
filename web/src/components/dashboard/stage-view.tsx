@@ -2,14 +2,16 @@
 
 import { Flag, FlagOff, Loader2, RotateCcw, Target, X } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import { Wordmark } from "@/components/site/logo";
 import { Button } from "@/components/ui/button";
+import { useNow } from "@/lib/hooks";
 import type { LiveState } from "@/lib/live";
 import { takeoverOpen } from "@/lib/ttd";
 
 import { ChallengeBanner } from "./banners";
-import { ConnectionBadge } from "./dashboard-view";
+import { ConnectionBadge, stageLink } from "./dashboard-view";
 import { EventFeed } from "./event-feed";
 import { SecureInputBanner } from "./health-pills";
 import { ModalityBars } from "./modality-bars";
@@ -17,17 +19,37 @@ import { TrustChart } from "./trust-chart";
 import { TrustGauge } from "./trust-gauge";
 import { TtdStopwatch } from "./ttd-stopwatch";
 import type { DashboardActions } from "./use-actions";
+import { VoiceAnalysis, currentVoiceView } from "./voice-analysis";
+import type { VoiceMode } from "./voice-mode";
+import { VoiceOutcomeControl } from "./voice-outcome-control";
 import { WhyChips } from "./why-chips";
 
 /**
  * `?stage=1` observer layout for the projector laptop (§2.3): big gauge, chart, TTD stopwatch, feed, and big
  * Mark takeover / Reset / Re-arm buttons, so the attacker never signals the system from the monitored laptop.
- * Rendered as a full-screen overlay above the site chrome.
+ * Rendered as a full-screen overlay above the site chrome. During the voice beat the voice analysis (stages, DSP,
+ * findings, decision) takes the top of the right column; stub results are badged "Simulated voice result".
  */
-export function StageView({ state, mock, actions }: { state: LiveState; mock: boolean; actions: DashboardActions }) {
+export function StageView({
+  state,
+  mock,
+  actions,
+  isAdmin,
+  voiceMode,
+}: {
+  state: LiveState;
+  mock: boolean;
+  actions: DashboardActions;
+  isAdmin: boolean;
+  voiceMode: VoiceMode;
+}) {
   const learning = !state.model || state.model.status !== "ready" || state.device?.mode === "enroll";
   const open = takeoverOpen(state.markers) || state.label === "impostor";
   const { busy } = actions;
+  const now = useNow(5000);
+  const [hidden, setHidden] = useState<string | null>(null);
+  const view = currentVoiceView(state, now);
+  const voice = view && `${view.challengeId}:${view.result?.t ?? "scoring"}` !== hidden ? view : null;
 
   return (
     <div className="bg-console-grid fixed inset-0 z-50 flex flex-col overflow-auto bg-background">
@@ -40,7 +62,7 @@ export function StageView({ state, mock, actions }: { state: LiveState; mock: bo
           <span className="text-sm text-muted-foreground">{state.device?.label ?? "no device"}</span>
           <ConnectionBadge state={state} mock={mock} />
           <Button asChild variant="ghost" size="icon-sm" aria-label="Exit stage view">
-            <Link href={mock ? "/dashboard?mock=1" : "/dashboard"}>
+            <Link href={stageLink(mock, state.focus, false)}>
               <X />
             </Link>
           </Button>
@@ -57,9 +79,17 @@ export function StageView({ state, mock, actions }: { state: LiveState; mock: bo
             <TtdStopwatch markers={state.markers} history={state.trust_history} blocks={state.blocks} large />
           </div>
           <div className="flex flex-col gap-5 xl:col-span-8">
+            {voice && (
+              <VoiceAnalysis
+                view={voice}
+                voiceMode={voiceMode}
+                large
+                onDismiss={() => setHidden(`${voice.challengeId}:${voice.result?.t ?? "scoring"}`)}
+              />
+            )}
             <div className="panel p-5">
               <div className="eyebrow mb-2 text-xs">Trust · last 10 minutes</div>
-              <TrustChart history={state.trust_history} markers={state.markers} height={360} />
+              <TrustChart history={state.trust_history} markers={state.markers} height={voice ? 240 : 360} />
             </div>
             <div className="grid gap-5 lg:grid-cols-2">
               <div className="panel p-5">
@@ -96,6 +126,7 @@ export function StageView({ state, mock, actions }: { state: LiveState; mock: bo
             Re-arm (31%)
           </Button>
         </div>
+        {isAdmin && voiceMode === "stub" && <VoiceOutcomeControl deviceId={state.device?.id ?? state.focus} mock={mock} />}
       </div>
     </div>
   );
