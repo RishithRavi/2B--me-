@@ -35,11 +35,13 @@ import {
   eerPoint,
   eerStrength,
   identificationRan,
+  impostorReuse,
   liveTrialStats,
   measuredModalities,
   operatingRows,
   recordingCounts,
   splitInfo,
+  tunedOnImpostor,
 } from "./metrics";
 
 const pct = (v: number | null | undefined, d = 1) => (v === null || v === undefined ? "—" : fmtPct(v, d));
@@ -109,6 +111,7 @@ export function EvidenceSummary({ report }: { report: EvalReport }) {
         sub={
           <>
             AUC {num(report.fused.auc)}. The equal-error rate is where false accepts equal false rejects; lower is better.
+            {tunedOnImpostor(report) && " Optimistic: not-A also helped tune the model."}
           </>
         }
       />
@@ -717,6 +720,12 @@ export function HonestyPanel({ report }: { report: EvalReport }) {
   const chance = measured.filter((m) => (report.modalities[m]?.auc ?? 1) < 0.6);
   const trials = liveTrialStats(report);
   const nb = report.n_blocks;
+  const reuse = impostorReuse(report);
+  const tuning = [
+    reuse.betaFitted.length > 0 &&
+      `set how much ${reuse.betaFitted.map((m) => modalityLabel(m, true).toLowerCase()).join(" and ")} evidence counts (β)`,
+    reuse.modelSelection && "were used to choose the detector",
+  ].filter((x): x is string => !!x);
 
   return (
     <div className="grid gap-5 lg:grid-cols-3">
@@ -760,9 +769,13 @@ export function HonestyPanel({ report }: { report: EvalReport }) {
         <h3 className="eyebrow">How it was scored</h3>
         <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
           <li>
-            <b className="text-foreground">One-class.</b> The model is trained on A only. Not-A&apos;s rows are held out and used only as impostor
-            evidence.
+            <b className="text-foreground">One-class.</b> The model is trained on A only. Not-A&apos;s blocks never enter its training data.
           </li>
+          {tuning.length > 0 && (
+            <li>
+              <b className="text-foreground">Not a blind test.</b> Not-A&apos;s blocks also {tuning.join(" and ")}, so these EERs are optimistic.
+            </li>
+          )}
           <li>
             <b className="text-foreground">Chronological split.</b> A&apos;s later blocks are the test set
             {split?.purge_s ? `, with a ${split.purge_s} s purge between train and test` : ""}, so the model never sees its own test window.
@@ -787,6 +800,12 @@ export function HonestyPanel({ report }: { report: EvalReport }) {
               <b className="text-foreground">{modalityLabel(m, true)}:</b> near chance (AUC {num(report.modalities[m]?.auc)}) on this data.
             </li>
           ))}
+          {!report.splice && (
+            <li>
+              <b className="text-foreground">FAR/FRR at the {Math.round(ALERT_THRESHOLD * 100)}% cut:</b> needs the splice replay (trust over time). The
+              FAR/FRR panel shows block-level ROC points instead.
+            </li>
+          )}
           {trials.n < LIVE_TRIALS_TARGET && (
             <li>
               <b className="text-foreground">Live trials:</b> {trials.n} of {LIVE_TRIALS_TARGET} marked takeovers recorded.

@@ -6,7 +6,7 @@ import { MODALITIES } from "@/lib/ui";
 /** [fpr, tpr] as written by twobme_ml.evaluation.roc_metrics (sklearn order: thresholds descending). */
 export type RocPoint = readonly [number, number];
 
-/** The trust threshold below which a proactive challenge is armed (§5.4); the /lab FAR/FRR panel is titled after it. */
+/** The trust threshold below which a proactive challenge is armed (§5.4); FAR/FRR at this cut needs the splice replay. */
 export const ALERT_THRESHOLD = 0.4;
 /** §0.1 #7: TTD over at least this many live takeover trials. */
 export const LIVE_TRIALS_TARGET = 5;
@@ -135,6 +135,25 @@ export function eerStrength(eer: number | null): "strong" | "moderate" | "weak" 
   if (eer < 0.1) return "strong";
   if (eer < 0.25) return "moderate";
   return "weak";
+}
+
+/**
+ * How much of not-A's data went into tuning rather than only testing. β is fitted by MLE on not-A's impostor blocks for
+ * every branch that isn't flagged weak (§7 B3: when it can't be fitted, the branch gets the default and the weak flag),
+ * and the §0.3 audit records that not-A's blocks were also used to choose the detector. The second stays true until the
+ * evaluator's own notes say otherwise, so /lab calls these EERs optimistic rather than a blind test.
+ */
+export function impostorReuse(report: EvalReport): { betaFitted: Modality[]; modelSelection: boolean } {
+  if (dataKind(report) === "sample") return { betaFitted: [], modelSelection: false };
+  const betaFitted = measuredModalities(report).filter((m) => report.modalities[m]?.weak === false);
+  const modelSelection = !report.notes.some((n) => /not used for (model |detector )?selection/i.test(n));
+  return { betaFitted, modelSelection };
+}
+
+/** True when not-A helped tune the model in any way, i.e. the EERs are not from a blind test. */
+export function tunedOnImpostor(report: EvalReport): boolean {
+  const r = impostorReuse(report);
+  return r.modelSelection || r.betaFitted.length > 0;
 }
 
 /**

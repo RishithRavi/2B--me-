@@ -11,11 +11,13 @@ import {
   eerStrength,
   frrAtFar,
   identificationRan,
+  impostorReuse,
   liveTrialStats,
   measuredModalities,
   operatingRows,
   recordingCounts,
   splitInfo,
+  tunedOnImpostor,
   type RocPoint,
 } from "./metrics";
 
@@ -132,6 +134,18 @@ describe("report provenance", () => {
     expect(recordingCounts(realLike())).toEqual({ a: 3, b: 1 });
     expect(recordingCounts({ ...realLike(), generated_at: "2026-09-27T06:00:00Z" })).toBeNull();
     expect(recordingCounts({ ...realLike(), recordings: { a: 4, b: 2 } } as EvalReport)).toEqual({ a: 4, b: 2 });
+  });
+
+  it("says when not-A tuned the model, so the EERs are not a blind test", () => {
+    const r = realLike();
+    expect(impostorReuse(r)).toEqual({ betaFitted: [], modelSelection: true });
+    const fitted = { ...r, modalities: { ...r.modalities, mouse: { ...r.modalities.mouse!, beta: 4.79, weak: false } } } as EvalReport;
+    expect(impostorReuse(fitted).betaFitted).toEqual(["mouse"]);
+    expect(tunedOnImpostor(r)).toBe(true);
+    const blind = { ...r, notes: [...r.notes, "B blocks were not used for model selection."] };
+    expect(impostorReuse(blind)).toEqual({ betaFitted: [], modelSelection: false });
+    expect(tunedOnImpostor(blind)).toBe(false);
+    expect(tunedOnImpostor(sampleEval())).toBe(false);
   });
 
   it("reads the optional split block defensively", () => {

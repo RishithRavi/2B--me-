@@ -17,7 +17,7 @@ import {
   SampleBanner,
   TtdTrials,
 } from "@/components/lab/panels";
-import { dataKind } from "@/components/lab/metrics";
+import { ALERT_THRESHOLD, dataKind, tunedOnImpostor } from "@/components/lab/metrics";
 import { EmptyState, PageHeader } from "@/components/site/empty-state";
 import { Panel } from "@/components/site/panel";
 import { ResourceBadge } from "@/components/site/resource-badge";
@@ -135,7 +135,15 @@ export default function LabPage() {
           <>
             <EvidenceSummary report={r} />
 
-            <SectionTitle sub="held-out blocks: A's later sessions vs a teammate who was never trained on">Can behavior tell A from not-A?</SectionTitle>
+            <SectionTitle
+              sub={
+                tunedOnImpostor(r)
+                  ? "A's later, held-out sessions vs a teammate used to tune the model, never to train it"
+                  : "A's later, held-out sessions vs a teammate the model never saw"
+              }
+            >
+              Can behavior tell A from not-A?
+            </SectionTitle>
             <div className="grid gap-4 xl:grid-cols-12">
               <Panel title="ROC per branch" icon={TrendingUp} hint="A vs not-A" action={<ResourceBadge res={evalR} />} className="xl:col-span-7">
                 <RocChart report={r} />
@@ -144,7 +152,12 @@ export default function LabPage() {
                 <EerTable report={r} />
               </Panel>
 
-              <Panel title="FAR / FRR" icon={Gauge} hint="at the 40% alert threshold" className="xl:col-span-4">
+              <Panel
+                title="FAR / FRR"
+                icon={Gauge}
+                hint={r.splice ? `at the ${Math.round(ALERT_THRESHOLD * 100)}% alert threshold` : "block-level, read off the ROC"}
+                className="xl:col-span-4"
+              >
                 <OperatingPoints report={r} />
               </Panel>
               <Panel title="Branch ablation" icon={Layers} hint="fused EER, one branch removed" className="xl:col-span-4">
