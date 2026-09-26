@@ -43,6 +43,7 @@ if [ "$stream" = signals ] || [ "$stream" = all ]; then
   pytest_if "agent tests" agent
 fi
 if [ "$stream" = voice ] || [ "$stream" = all ]; then
+  if [ -x scripts/voice_test.sh ]; then step "voice_test.sh" scripts/voice_test.sh; fi
   pytest_if "hearsay tests" packages/hearsay
   pytest_if "server tests (voice lives in server/app/voice)" server/tests
 fi

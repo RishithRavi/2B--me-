@@ -2,7 +2,8 @@
 
     from app.db import repo_voice
     pid = await repo_voice.insert_profile(user_id=..., speaker_embedding=..., utt_embeddings=[...],
-                                          spectral_summary=..., n_utts=5, intra_cos=0.71, label="quiet")
+                                          spectral_summary=ltas64, mfcc_mean=mfcc20, n_utts=5, intra_cos=0.71,
+                                          label="quiet")
     prof = await repo_voice.get_active_profile(user_id)          # newest 'quiet' profile (dict) or None
     profs = await repo_voice.get_profiles(user_id)               # all labels, newest first (quiet + expo)
     await repo_voice.insert_challenge(row)                       # row keys = voice_challenges columns
@@ -45,7 +46,7 @@ class RepoVoice:
     # --- profiles ------------------------------------------------------------------------------
     async def insert_profile(self, *, user_id: UUID, speaker_embedding: Any, utt_embeddings: Any,
                              spectral_summary: Any, n_utts: int, intra_cos: float | None,
-                             label: str = "quiet") -> UUID:
+                             label: str = "quiet", mfcc_mean: Any = None) -> UUID:
         pid = uuid.uuid4()
         prof = {
             "id": pid, "user_id": user_id, "label": label,
@@ -53,16 +54,17 @@ class RepoVoice:
             "utt_embeddings": [list(map(float, u)) for u in (utt_embeddings or [])],
             "spectral_summary": np.asarray(spectral_summary, dtype=np.float32),
             "n_utts": int(n_utts), "intra_cos": None if intra_cos is None else float(intra_cos),
+            "mfcc_mean": None if mfcc_mean is None else np.asarray(mfcc_mean, dtype=np.float32),
             "created_at": utcnow(),
         }
         self.profiles.setdefault(user_id, []).insert(0, prof)
         self._mirror(prof)
         self.writer.execute(
             """INSERT INTO voice_profiles (id, user_id, label, speaker_embedding, utt_embeddings, spectral_summary,
-                                           n_utts, intra_cos, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING""",
+                                           n_utts, intra_cos, created_at, mfcc_mean)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING""",
             pid, user_id, label, prof["speaker_embedding"], prof["utt_embeddings"], prof["spectral_summary"],
-            prof["n_utts"], prof["intra_cos"], prof["created_at"],
+            prof["n_utts"], prof["intra_cos"], prof["created_at"], prof["mfcc_mean"],
         )
         return pid
 
@@ -84,6 +86,7 @@ class RepoVoice:
                 utt_embeddings=np.asarray(prof["utt_embeddings"], dtype=np.float32),
                 spectral_summary=prof["spectral_summary"], n_utts=prof["n_utts"],
                 intra_cos=np.nan if prof["intra_cos"] is None else prof["intra_cos"],
+                mfcc_mean=np.zeros(0, np.float32) if prof["mfcc_mean"] is None else prof["mfcc_mean"],
                 created_at=prof["created_at"].isoformat(),
             )
         except Exception as e:
@@ -102,6 +105,7 @@ class RepoVoice:
                     "speaker_embedding": z["speaker_embedding"], "utt_embeddings": z["utt_embeddings"].tolist(),
                     "spectral_summary": z["spectral_summary"], "n_utts": int(z["n_utts"]),
                     "intra_cos": None if np.isnan(ic) else ic,
+                    "mfcc_mean": z["mfcc_mean"] if "mfcc_mean" in z.files and z["mfcc_mean"].size else None,
                     "created_at": datetime.fromisoformat(str(z["created_at"])),
                 }
                 self.profiles.setdefault(prof["user_id"], []).append(prof)

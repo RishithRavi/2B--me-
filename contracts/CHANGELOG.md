@@ -23,3 +23,5 @@ Format: `- YYYY-MM-DD HH:MM ET · <who> · <file/type> · <change>`
 
 ## post-CP0 (additive)
 - 2026-09-26 02:05 ET · Claude · `TickFlags.rtt_ms: float|null` — agent's lowest-RTT clock_ping sample (ms) for the dashboard RTT pill.
+- 2026-09-26 02:15 ET · Claude · `voice_profiles.mfcc_mean vector(20)` (migration 005) + `repo_voice.insert_profile(mfcc_mean=...)`:
+  `spec_sim = cosine([LTAS64 ‖ MFCC-mean20], [profile.spectral_summary ‖ profile.mfcc_mean])`; `spectral_summary` stays the 64-bin LTAS.
