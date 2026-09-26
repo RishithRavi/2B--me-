@@ -11,6 +11,7 @@
 > - Domain: 2bme.tech. Tiger Data, ElevenLabs and Vultr accounts are ready.
 >
 > The source of truth for the product vision is `goal.txt`; §1 restates it and it is paramount.
+> - **PROPOSED 2026-09-26, pending sign-off — not yet pinged to Codex 1/2:** `newGoal.txt` (root) refines the product split and does not replace `goal.txt`. The Electron **overlay** is the product surface for the enrolled individual (pill → voice/MFA step-up → lock/unlock, already A6). The **`.tech` website** is repositioned as the **admin/org control panel**: synthetic, anonymized multi-employee sessions, org-wide anomaly/insider-threat detection, and an audit trail of trust-score changes, alerts, challenges and admin actions — not a second consumer front-end. See §2.4.
 
 ## 0. How to use this document
 - **Everyone** reads §0–§5. Then read only your own workstream: **§6 Claude**, **§7 Codex 1**, **§8 Codex 2**.
@@ -45,6 +46,7 @@
 
 ### 0.2 Pre-cut
 Start these only after CP4 (Sat 19:00) is green:
+- Admin/org roster page (§2.4, PROPOSED): synthetic multi-employee sessions on the `.tech` site
 - B6 browser behavioral scoring (the presence beacon itself is P0)
 - automatic B7 schedule
 - learned C4 team head
@@ -92,6 +94,7 @@ Start these only after CP4 (Sat 19:00) is green:
  │   ← trust / challenge (opens https://2bme.tech/verify?c=…) / lock / unlock / mode
  └─ Browser → https://2bme.tech (Next.js static export, same-origin /api + /ws)
       landing · login · dashboard · enroll · shop · verify · history · lab  (+ presence beacon, P0; SDK blocks, P1)
+      [reframing to admin/org panel in progress — see §2.4; pages above unchanged for now]
  Vultr VM vhp-8c-16gb-amd (ewr) — Docker Compose: Caddy (TLS, static web) → FastAPI (1 worker)
    ├─ DeviceHub (in-memory, persisted to devices.trust_state): TrustEngine, UserModel scorer, challenge/lock state machine
    ├─ voice (hearsay profile="stepup"): Silero VAD → Scribe STT ‖ ECAPA ‖ DF_Arena(1 window) ‖ DSP/FFT → decision
@@ -123,6 +126,34 @@ Start these only after CP4 (Sat 19:00) is green:
 - **Attacker kit:** B's laptop or phone running the attack tool (§8 C2.7), plus a small speaker.
 - **Backup video:** a tablet loops it.
 - **Caddy:** `www.` and `app.` get a 308 redirect to `https://2bme.tech`. Cookies are host-only on 2bme.tech, and every URL uses the apex domain.
+
+### 2.4 Two UIs (PROPOSED 2026-09-26 — draft for review, not yet pinged to Codex 1/2)
+Per `newGoal.txt`: there are two front ends with different jobs, not one consumer app.
+- **The overlay is the product** for the enrolled individual: the always-on trust pill, full-screen voice/MFA
+  step-up, and the lock/unlock screen (already built, A6). This is where an individual consumer's continuous
+  identity check actually happens.
+- **The `.tech` site becomes the admin/org control panel.** Its audience is a cyber admin watching an
+  organization, not the enrolled individual. It should show:
+  - a roster of **synthetic, anonymized employee sessions** (newGoal.txt suggests ~20) — live trust score,
+    last alert, binding state, per employee;
+  - org-wide anomaly / insider-threat surfacing (who's drifting, who's mid-challenge, who got locked);
+  - an audit trail of trust-score changes, alerts, challenges and admin actions.
+- **Reuse, don't rebuild:** `/dashboard` already renders exactly one device's live trust gauge, chart,
+  modality bars, why-chips, event feed and identity card (§6 A3) — that becomes the **per-employee drill-in**
+  view an admin opens from the roster, unchanged in substance. The new work is narrow: one roster page
+  (`web/src/app/admin/` or similar, Claude-owned like the other core pages in §4) that lists N synthetic
+  sessions built from mocked/replayed data — **no real multi-tenant backend is required for this**, per
+  newGoal.txt's own "synthetic sessions... first anonymized" framing. `/history` and `/lab` keep their current
+  jobs (per-device history; the A-vs-B identification evidence for the mission's §1.2 claim) and just become
+  reachable from the roster instead of standalone nav items.
+- **Not affected:** `/shop` and `/verify` stay exactly what they are — the Visa-style demo scenario and the
+  voice/MFA step-up flow — since §1.5/§1.7 and `newGoal.txt` line 105 keep Visa as a labelled demo, not a
+  product surface. `/enroll` (Codex 1) and the voice components (Codex 2) are unaffected; this only touches
+  Workstream A's own pages plus one new page, so it doesn't require a `CONTRACT:` commit — file ownership in
+  §4 doesn't change.
+- **Timeline:** hard stop for code is Sun Sep 27 08:00 ET (~16 h from this note). This is scoped as P1 —
+  attempt it after every §0.1 MVP item is solid, not instead of one. If time runs out, the current single-user
+  `/dashboard` plus the `admin@` observer role already tell a coherent story and are an acceptable fallback.
 
 ## 3. Stack and pins (Sep 2026)
 - **Python 3.12** everywhere, via a `uv` workspace. scipy 1.18 and numpy 2.5 need ≥3.12, and torch has not been tested on the dev Mac's 3.14.
