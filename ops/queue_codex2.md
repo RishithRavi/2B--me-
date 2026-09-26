@@ -29,6 +29,40 @@ If blocked → `contracts/REQUESTS.md` → next item.
 - Test harness: `server/tests/test_flows.py` (uses `X-Fake-Decision`; keep the header working in `ELEVENLABS_MODE=stub`
   or tell Claude so the tests can switch to your stub mode).
 
+Bootstrapped from IMPLEMENTATION.md §8 because no human queue existed at start.
+If blocked, append the dependency to `contracts/REQUESTS.md` and take the next
+independent task. Never claim a submission, model test or merge gate has passed
+without running it.
+
+1. **DONE — C0 local foundations:** package, native audio → mono 16 kHz float32, ffmpeg
+   fallback, CM windows, 300-word list, cryptographic phrases, TSV writer, minDCF
+   and tests. Done when Python 3.12 unit tests, actual Opus fallback and official
+   ASVspoof5 metric parity pass.
+2. **C0 batch smoke:** load DF_Arena, ECAPA, Silero; verify logits and time each
+   on the batch box and VM. Adapters and `voice_model_smoke.py` implemented and
+   tested with fakes. Requires SSH target. Record actual RUNTIME results.
+3. **C1:** official rules/template and corpus → resumable inference, 20+20
+   direction test, safety TSV. Resumable single-process `hearsay predict` now
+   implemented; four-worker tuning pending. Requires official materials and box.
+4. **C2:** after CP0 handoff, implement service and calibrated decision pipeline,
+   audio deletion, challenges and retries through shared ports. Requires frozen
+   DTOs, voice stub and resolution of requested contract ambiguities. Pure
+   decision rules, VAD preparation and required DSP are implemented/tested.
+5. **C3:** native-rate AudioWorklet recording, ChallengeFlow, /verify and /shop.
+   Local implementation complete against CP0 generated API contracts. Includes
+   enrollment, retries, TOTP, stage feedback and server-bound checkout outcomes.
+   Web tests/typecheck/static build passed. Physical microphone/browser and real
+   model integration remain pending; enrolled LTAS display needs the shared DTO.
+6. **C0.5 / C4-lite:** consented teammate mic recordings and spoof calibration.
+7. **C1b / C1c / C5-lite / C6:** harvest, dev evaluation, ranked fusion and offline
+   amd64 packaging when rules, datasets and runtime are available.
+
+No P1/P2 work until the plan's CP4 gate is green.
+
+CP0 was merged locally at `7a80af0`. C2 service ownership is now available;
+calibrated live integration still needs model runtime and spectral-contract
+resolution. The CP0 backend currently remains a stub.
+
 ## Claude notes, 02:40 ET (on main)
 - `/shop` and `/verify` now have WORKING stubs (Claude, A0) — yours to replace in C3: `web/src/app/{shop,verify}/page.tsx`,
   `web/src/components/{shop-stub,verify-stub}/`. They already do the full flow against the voice STUB (verified on a real
@@ -41,3 +75,10 @@ If blocked → `contracts/REQUESTS.md` → next item.
   window on A's Mac. It currently imports `ChallengeFlow` from `web/src/components/verify-stub/`. When your
   `web/src/components/voice/ChallengeFlow` lands, keep it embeddable (no page-level layout, works on a transparent/dim
   background, no autoplay — one "Start voice check" gesture) and tell Claude in STATUS.md so the overlay switches imports.
+- **Merged 2026-09-26, ws-voice → ws-core.** Took your `/shop` and `/verify` wholesale; the old `shop-stub`/`verify-stub`
+  components are now dead except the overlay still imports `verify-stub`'s `ChallengeFlow` — I'm rewiring that to your
+  `voice/challenge-flow.tsx` next, then deleting both stub dirs. **Product direction changed (see `newGoal.txt`, root):**
+  the Electron overlay is now the primary surface for voice/behavioral verification; the `.tech` site is being repositioned
+  as an org/admin control panel. `/shop` and `/verify` stay as the hackathon demo but I won't be investing further in them
+  as customer-facing pages — flagging so C3 effort goes toward the overlay-embeddable pieces (`voice/challenge-flow.tsx`,
+  `voice-recorder.tsx`) rather than page polish. Full IMPLEMENTATION.md update coming.
