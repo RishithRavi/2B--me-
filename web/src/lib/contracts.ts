@@ -1303,7 +1303,7 @@ export const FEATURE_SPEC = {
     "workflow": {
       "n_unit": "transitions",
       "n_ref": 3,
-      "enroll_gate": 20,
+      "enroll_gate": 13,
       "features": [
         {
           "name": "wf.switch_rate",

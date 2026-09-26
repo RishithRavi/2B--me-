@@ -56,7 +56,7 @@ work/venv/bin/twobme-agent record --label impostor --actor b
 
 Keep the printed file paths. The real logs remain under `~/.2bme/logs/` on the laptop and are never committed/uploaded. B's recording is evaluation/calibration data; it must not enter A's enrollment baseline. For the separate two-way identification experiment, B can have a separate model trained from B's own designated training split.
 
-Collection gates for A's eligible training data: keyboard 100 blocks (~2,000 keys), mouse 60 (~300 actions), scroll 30, workflow 20, temporal 60 non-overlapping 30-second contexts. Time alone does not fill a gate, and chronological calibration also needs enough span around purge gaps.
+Collection gates for A's eligible training data: keyboard 100 blocks (~2,000 keys), mouse 60 (~300 actions), scroll 30, workflow 13 (minutes with an app or window change), temporal 60 non-overlapping 30-second contexts. Time alone does not fill a gate, and chronological calibration also needs enough span around purge gaps.
 
 Reserve the last 30% of each person's data for chronological evaluation. Do not train on those held-out rows or tune repeatedly against them. Keep the later live takeover trials separate from training. For honest final trials, freeze the chosen model and thresholds first; record every trial, including misses.
 
