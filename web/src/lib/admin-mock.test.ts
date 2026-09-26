@@ -124,7 +124,7 @@ describe("org simulation: the story", () => {
     expect(firstChallenge * STEP_MS).toBeLessThanOrEqual(38_000);
     expect(at(firstChallenge).flags).toContain("challenge_open");
     expect(firstLock).toBeGreaterThan(firstChallenge);
-    expect(at(firstLock).lock_reason).toBe("blocked_spoof");
+    expect(at(firstLock).lock_reason).toBe("voice_spoof");
     expect(at(firstLock).flags).not.toContain("challenge_open");
     // ~40 s in (the stage screenshot), 07 is suspicious with its voice check open.
     expect(at(16)).toMatchObject({ level: "suspicious" });

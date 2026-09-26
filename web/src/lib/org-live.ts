@@ -160,13 +160,13 @@ export function initialOrgState(): OrgState {
   };
 }
 
+/** Newest first, deduped by id (incoming wins). Rows with the same timestamp keep arrival order: newer arrivals first. */
 export function mergeAudit(existing: readonly AuditRow[], incoming: readonly AuditRow[]): AuditRow[] {
   if (incoming.length === 0) return existing as AuditRow[];
   const byId = new Map<string, AuditRow>();
-  for (const r of existing) byId.set(r.id, r);
   for (const r of incoming) byId.set(r.id, r);
-  return Array.from(byId.values())
-    .sort((a, b) => tms(b.t) - tms(a.t) || (a.id < b.id ? 1 : -1))
+  return [...byId.values(), ...existing.filter((r) => !byId.has(r.id))]
+    .sort((a, b) => tms(b.t) - tms(a.t)) // stable
     .slice(0, AUDIT_MAX);
 }
 
@@ -343,7 +343,7 @@ export function alertRows(audit: readonly AuditRow[], limit = 40): AuditRow[] {
 export function ackedRefs(audit: readonly AuditRow[]): Map<string, AuditRow> {
   const out = new Map<string, AuditRow>();
   for (const r of audit) {
-    if (r.kind === "admin_action" && r.ref_id && /acknowledg/i.test(r.summary) && !out.has(r.ref_id)) out.set(r.ref_id, r);
+    if (r.kind === "admin_action" && r.ref_id && /acknowledg|\back(_alert)?\b/i.test(r.summary) && !out.has(r.ref_id)) out.set(r.ref_id, r);
   }
   return out;
 }
@@ -396,9 +396,9 @@ export function levelDrops(prev: ReadonlyMap<string, Level> | null, rows: readon
   for (const r of rows) {
     const from = prev.get(r.device_id);
     if (!from || from === r.level) continue;
+    // Newly suspicious or newly locked; an unlock that lands in suspicious is not a new drop.
     const bad = r.level === "suspicious" || r.level === "locked";
-    const wasBad = from === "locked" || (from === "suspicious" && r.level === "suspicious");
-    if (bad && !wasBad) out.push({ row: r, from, to: r.level });
+    if (bad && from !== "locked") out.push({ row: r, from, to: r.level });
   }
   return out;
 }

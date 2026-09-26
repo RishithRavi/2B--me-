@@ -47,7 +47,7 @@ function Row({ row, lastAlert, now, selected, onSelect }: { row: RosterRow; last
             <SyntheticTag synthetic={row.synthetic} compact />
           </div>
           <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
-            <span className="truncate">{row.team ?? "—"}</span>
+            <span className="truncate">{row.team ?? (row.synthetic ? "—" : "Enrolled owner")}</span>
             <span className="text-muted-foreground/50">·</span>
             <span className="truncate font-mono text-[10.5px]">{row.device_label}</span>
           </div>

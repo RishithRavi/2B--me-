@@ -120,7 +120,7 @@ export function EmployeeDrawer({
                     {row.handle} <SyntheticTag synthetic={row.synthetic} />
                   </SheetTitle>
                   <SheetDescription className="truncate text-[13px]">
-                    {row.team ?? "—"} · <span className="font-mono text-xs">{row.device_label}</span>
+                    {row.team ?? (row.synthetic ? "—" : "Enrolled owner")} · <span className="font-mono text-xs">{row.device_label}</span>
                   </SheetDescription>
                 </div>
               </div>

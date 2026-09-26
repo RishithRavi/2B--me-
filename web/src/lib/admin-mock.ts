@@ -681,7 +681,7 @@ class Sim implements OrgSim {
     if (e.anomaly) e.anomaly.challenge_id = c.live.challenge_id;
     this.emitAnomaly(out, e, now);
     e.locked = true;
-    e.lockReason = spoof ? "blocked_spoof" : "blocked_impostor";
+    e.lockReason = spoof ? "voice_spoof" : "voice_impostor"; // the hub's own lock reasons (hub._blocked)
     this.setFlag(e, "admin_locked", false);
     out.push({ type: "lock", device_id: e.device_id, t: iso(now), data: { reason: e.lockReason } });
     this.emitAudit(

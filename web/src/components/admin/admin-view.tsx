@@ -36,6 +36,14 @@ import { lockReasonText } from "./org-bits";
 import { RiskMap } from "./risk-map";
 import { Roster } from "./roster";
 
+const FAILED_VERB: Record<AdminActionIn["action"], string> = {
+  lock: "lock the device",
+  unlock: "clear the admin lock",
+  force_reverify: "request a re-verification",
+  ack_alert: "acknowledge the alert",
+  note: "add the note",
+};
+
 function SourceToggle({ source }: { source: "live" | "demo" }) {
   // Full page loads on purpose: ?mock=1 / ?mock=0 set or clear the tab's sticky mock mode (lib/mode.ts).
   return (
@@ -165,10 +173,14 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
       const who = state.rows.find((r) => r.device_id === input.device_id)?.handle ?? "device";
       try {
         await store.act(input);
-        toast.success(`${label} · ${who}`, { description: mock ? "Simulated action, written to the demo audit trail." : "Written to the audit trail." });
+        // Top-center: action results come from the drill-in drawer, which covers the top-right corner.
+        toast.success(`${label} · ${who}`, {
+          position: "top-center",
+          description: mock ? "Simulated action, written to the demo audit trail." : "Written to the audit trail.",
+        });
         return true;
       } catch (e) {
-        toast.error(`${label.split(" ")[0]} failed · ${who}`, { description: errorMessage(e) });
+        toast.error(`Couldn't ${FAILED_VERB[input.action]} · ${who}`, { position: "top-center", description: errorMessage(e) });
         return false;
       }
     },

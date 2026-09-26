@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AuditRow, LiveEvent, RosterRow, TrustLive } from "./contracts";
 import {
@@ -11,6 +11,7 @@ import {
   mergeAudit,
   mergeRoster,
   normalizeRow,
+  OrgStore,
   orgKpis,
   parseOrgEvent,
   rowLevel,
@@ -143,12 +144,12 @@ describe("applyOrg", () => {
     expect(s.rows[0]).toMatchObject({ locked: true, level: "locked", lock_reason: "admin_lock", flags: ["admin_locked"] });
     s = applyOrg(s, unlock);
     expect(s.rows[0]).toMatchObject({ locked: false, level: "normal", lock_reason: null, flags: [] });
-    s = applyOrg(s, lock("blocked_spoof"));
+    s = applyOrg(s, lock("voice_spoof"));
     expect(s.rows[0].flags).toEqual([]);
     expect(s.rows[0].level).toBe("locked");
     // A locked device's ticks keep it locked (the hub pins L).
     s = applyOrg(s, trust(0.2, { locked: true }));
-    expect(s.rows[0]).toMatchObject({ locked: true, level: "locked", lock_reason: "blocked_spoof" });
+    expect(s.rows[0]).toMatchObject({ locked: true, level: "locked", lock_reason: "voice_spoof" });
   });
 
   it("tracks the open challenge and clears the takeover flag on VERIFY", () => {
@@ -284,11 +285,13 @@ describe("derived views", () => {
   it("finds acknowledged alerts and the alerts rail", () => {
     const rows = [
       audit("1", 3, { kind: "admin_action", summary: "Acknowledged alert: trust drop", ref_id: "an1", severity: 1 }),
+      audit("4", 3, { kind: "admin_action", summary: "ack_alert", ref_id: "an2", severity: 1 }),
+      audit("5", 3, { kind: "admin_action", summary: "Locked the device", ref_id: "an3", severity: 4 }),
       audit("2", 2, { ref_id: "an1", severity: 4 }),
       audit("3", 1, { kind: "admin_action", summary: "Note: hi", ref_id: null, severity: 0 }),
     ];
-    expect([...ackedRefs(rows).keys()]).toEqual(["an1"]);
-    expect(alertRows(rows).map((r) => r.id)).toEqual(["2"]);
+    expect([...ackedRefs(rows).keys()].sort()).toEqual(["an1", "an2"]);
+    expect(alertRows(rows).map((r) => r.id)).toEqual(["5", "2"]);
   });
 
   it("exports CSV oldest first with escaping", () => {
@@ -297,5 +300,44 @@ describe("derived views", () => {
     expect(lines[0]).toBe("time,employee,device_id,kind,actor,severity,summary,ref_id");
     expect(lines[1]).toContain("row 1");
     expect(lines[2]).toContain('"said ""hi"", then left"');
+  });
+});
+
+describe("OrgStore (demo)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("streams the seeded org and applies admin actions to it", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const store = new OrgStore("mock");
+    let renders = 0;
+    const unsub = store.subscribe(() => renders++);
+    await vi.dynamicImportSettled();
+    const first = store.getSnapshot();
+    expect(first.loaded).toBe(true);
+    expect(first.connected).toBe(true);
+    expect(first.rows).toHaveLength(20);
+    expect(first.audit.length).toBeGreaterThan(10);
+
+    await vi.advanceTimersByTimeAsync(40_000);
+    const s = store.getSnapshot();
+    const e07 = s.rows.find((r) => r.handle === "Employee 07");
+    expect(e07?.level).toBe("suspicious");
+    expect(e07?.open_challenge).not.toBeNull();
+    expect(s.rows.find((r) => r.handle === "Employee 13")?.flags).toContain("insider_drift");
+    expect(renders).toBeGreaterThan(10);
+
+    const e01 = s.rows.find((r) => r.handle === "Employee 01");
+    const row = await store.act({ device_id: e01!.device_id, action: "lock" });
+    expect(row.actor).toBe("demo admin");
+    const after = store.getSnapshot();
+    expect(after.rows.find((r) => r.handle === "Employee 01")).toMatchObject({ locked: true, flags: ["admin_locked"] });
+    expect(after.audit[0].id).toBe(row.id);
+    await expect(store.act({ device_id: e01!.device_id, action: "lock" })).rejects.toThrow(/already locked/);
+
+    unsub();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(store.getSnapshot().connected).toBe(false);
   });
 });

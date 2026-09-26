@@ -239,10 +239,14 @@ export function lockReasonText(reason: string | null | undefined): string {
   switch (reason) {
     case "admin_lock":
       return "Admin lock";
+    case "voice_spoof":
     case "blocked_spoof":
       return "Synthetic voice blocked (BLOCK_SPOOF)";
+    case "voice_impostor":
     case "blocked_impostor":
       return "Different speaker (BLOCK_IMPOSTOR)";
+    case "lock":
+      return "Failed step-up";
     case null:
     case undefined:
       return "Locked";
