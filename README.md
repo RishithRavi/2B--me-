@@ -2,7 +2,7 @@
 
 > Login proves who you *were*. 2bME keeps checking who you *are*.
 
-Live: **https://2bme.tech** · HackGT 13
+Deployment target: **https://2bme.tech** on Vultr · HackGT 13
 
 <!-- HEARSAY JUDGE BOX (Codex 2 fills in at C6):
 | NSA Hearsay | |
@@ -15,8 +15,8 @@ Live: **https://2bme.tech** · HackGT 13
 
 ## What it does
 A macOS agent turns keyboard, trackpad, scroll and app-switching **timing** into privacy-safe aggregate
-blocks, streams them to a Vultr-hosted scorer, and keeps a **continuous trust score** for the enrolled
-person. When someone else takes over the session, trust falls, and a high-risk action (a $2,000
+blocks, streams them to a FastAPI scorer designed for Vultr Compute, and keeps a **continuous trust
+score** for the enrolled person. When someone else takes over the session, trust falls, and a high-risk action (a $2,000
 checkout) steps up to a **voice challenge**. ElevenLabs speaks a fresh phrase, and FFT/DSP features, a
 speaker embedding and a deepfake detector decide VERIFY / BLOCK_IMPOSTOR / BLOCK_SPOOF. Behavior alone
 never blocks. On the laptop itself, an always-on-top overlay shows live trust and takes over the screen
@@ -28,11 +28,28 @@ and anomaly surfacing across the org, and an audit trail of trust changes, alert
 same continuous-identity signal, aggregated instead of per-person.
 
 ```
-agent (PyObjC tap → key classes → evidence blocks) ──wss──▶ FastAPI hub on Vultr ──▶ TrustEngine ──▶ dashboard
+agent (PyObjC tap → key classes → evidence blocks) ──wss──▶ FastAPI hub (Vultr target) ──▶ TrustEngine ──▶ dashboard
                                                                  │                        │
                                                                  ├─▶ Tiger (hypertables, columnstore, caggs)
                                                                  └─▶ voice step-up (ElevenLabs prompt + STT, ECAPA, DF_Arena, DSP/FFT)
 ```
+
+## Vultr integration
+
+Vultr is a concrete deployment and inference integration in this repository, not a requirement for the
+local demo:
+
+- **Vultr Compute target:** `infra/docker-compose.yml`, `infra/Caddyfile` and `infra/deploy.sh` package
+  the FastAPI hub, static web app and Tiger Data connection for a small Ubuntu VM behind HTTPS.
+- **Vultr Serverless Inference:** `server/app/core/explain.py` uses Vultr's OpenAI-compatible endpoint
+  to turn the trust change and five largest feature deviations into a short anomaly explanation. Raw
+  keystrokes, audio and activity streams are never included in that request.
+- **Graceful local fallback:** without `VULTR_SERVERLESS_INFERENCE_API_KEY` and
+  `VULTR_INFERENCE_MODEL`, the same flow produces a deterministic template explanation. `/api/status`
+  reports the active explanation backend as `vultr` or `template`.
+
+The integration path is implemented and ready to configure; this README does not claim that the public
+domain or the full production stack is currently live.
 
 ## Privacy promise
 We never record typed content, passwords, clipboard, document text, window titles, URLs or key

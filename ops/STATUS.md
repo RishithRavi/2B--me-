@@ -248,3 +248,11 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
 - This is merge-ready for the explicit stub-voice demo. Real voice remains
   fail-closed until the operator installs the image's `voice` extra, pinned model
   weights and measured calibration on Vultr and runs the 20+20 hardware smoke.
+
+## 2026-09-26 — Vultr integration visibility
+
+- Documented the existing Vultr Compute deployment target and Serverless Inference adapter in the root
+  README, and made the integration visible in the landing-page sponsor strip.
+- Kept the claim bounded to what exists in the repository: deploy scripts, Caddy/Compose configuration,
+  privacy-safe anomaly-explanation input and a deterministic no-credential fallback. No live production
+  deployment, DNS change or public-domain availability is claimed.
