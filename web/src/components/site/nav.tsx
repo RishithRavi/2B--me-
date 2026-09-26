@@ -49,6 +49,8 @@ export function Nav() {
     router.push("/login");
   }
 
+  if (pathname === "/overlay") return null; // the Electron overlay has no site chrome
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md supports-backdrop-filter:bg-background/65">
       <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-4 sm:px-6">

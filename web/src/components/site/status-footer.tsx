@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -45,6 +46,7 @@ function Item({ ok, label, hint, className }: { ok: boolean | null; label: strin
 
 /** Thin P0 status strip: Tiger up/down, voice warm, writer queue/drops, devices online. Tolerates API down. */
 export function StatusFooter() {
+  const pathname = usePathname();
   const mock = useMockMode();
   const mounted = useMounted();
   const [status, setStatus] = useState<StatusOut | null>(null);
@@ -81,6 +83,8 @@ export function StatusFooter() {
       clearInterval(id);
     };
   }, [mock, mounted]);
+
+  if (pathname === "/overlay") return null; // the Electron overlay has no site chrome
 
   return (
     <footer className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/85 backdrop-blur-md">

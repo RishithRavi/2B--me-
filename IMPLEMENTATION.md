@@ -165,7 +165,8 @@ server/app/        FastAPI: main, config, auth, db/*, core/{hub,ports,events,pol
 server/app/voice/  router, issuer, service, startup  (Claude commits a STUB at A0; ownership → Codex 2 at CP0) [Codex 2]
 infra/             docker-compose.yml, docker-compose.dev.yml, Caddyfile, Dockerfile.base, Dockerfile.api, deploy.sh, migrations/ [Claude]
 web/               package.json, lockfile, next.config, tsconfig, layout, design system, src/lib/{api.ts,live.ts,contracts.ts(generated)} [Claude]
-web/src/app/{page(landing),login,dashboard,history,lab}                                          [Claude]
+web/src/app/{page(landing),login,dashboard,history,lab,overlay}                                  [Claude]
+overlay/           Electron shell for the on-laptop overlay (loads /overlay; see §6 A6)                   [Claude]
 web/src/app/enroll/  + web/src/sdk/ (presence.ts, sdk blocks)                                    [Codex 1]
 web/src/app/{shop,verify}/ + web/src/components/voice/* + web/public/worklets/*                  [Codex 2]
 hearsay_submission/  README.md, RULES.md, RUNTIME.md, Dockerfile, predictions/, figures/        [Codex 2]
@@ -807,6 +808,16 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
 - `ContextStore` protocol plus `NoopContextStore` (§12).
 - The `drift_30m` panel.
 - `core_e2e_local.sh` (§11.2).
+
+**A6 — On-laptop overlay (P0; added 2026-09-26 by user decision).** An Electron app (`overlay/`) on A's Mac:
+- One transparent, always-on-top window that loads `https://2bme.tech/overlay` (`web/src/components/overlay/`) and resizes per mode.
+- **pill** (normal: trust %, level, sparkline) → **prompt** when a proactive/step-up challenge is armed: full-screen, dimmed voice
+  check that can be snoozed ("Not now") because behavior alone never blocks → **lock** when a voice check fails (BLOCK_*):
+  full-screen, not dismissible, owner signs in again and unlocks with a fresh phrase (§5.4 unlock rules).
+- It captures no input and talks only to the 2bME origin. While it holds `/ws/live`, the agent's `challenge` stays a
+  notification (no `open verify_url`). Operator escape hatch ⌃⌥⌘⇧Q. `--hard-lock` adds macOS kiosk presentation while locked.
+- Demo impact (§13): after "Mark takeover", the overlay takes over A's screen when the challenge arms; the clone beat runs in
+  the overlay's voice check (or via /shop → C as before); BLOCK_SPOOF → lock screen; A unlocks from the lock screen.
 
 ## 7. Workstream B: Codex 1 (signals and models)
 **B0 — Probe (P0, 30 min or less, hour 0).** Write the findings to `agent/PROBE.md`:

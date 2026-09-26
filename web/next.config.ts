@@ -9,6 +9,7 @@ export default function config(phase: string): NextConfig {
     const backend = process.env.BACKEND_ORIGIN ?? "http://localhost:8000";
     return {
       agentRules: false, // don't generate AGENTS.md / CLAUDE.md in web/
+      devIndicators: false, // the dev badge would sit on top of the /overlay pill
       env: {
         NEXT_PUBLIC_WS_ORIGIN: process.env.NEXT_PUBLIC_WS_ORIGIN ?? backend.replace(/^http/, "ws"),
       },
