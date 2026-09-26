@@ -191,10 +191,12 @@ async def response(
     await events.challenge_status(challenge_id, "scoring", attempt)
     t0 = time.perf_counter()
     fail_stage = {"BLOCK_SPOOF": "anti-spoof", "BLOCK_IMPOSTOR": "speaker", "RETRY": "transcribing"}.get(decision)
-    for stage in ("transcribing", "anti-spoof", "speaker", "spectral"):
-        await events.voice_stage(challenge_id, stage, ok=stage != fail_stage)
-    await events.voice_stage(challenge_id, "done")
     result = _canned(decision)
+    values = {"transcribing": result.phrase_wer, "anti-spoof": result.cm_p_spoof, "speaker": result.asv_cos,
+              "spectral": result.spec_sim}
+    for stage in ("transcribing", "anti-spoof", "speaker", "spectral"):
+        await events.voice_stage(challenge_id, stage, ok=stage != fail_stage, value=values[stage])
+    await events.voice_stage(challenge_id, "done")
     result.stage_ms["total"] = int((time.perf_counter() - t0) * 1000)
     status = STATUS[decision]
     await repo_voice.update_challenge(

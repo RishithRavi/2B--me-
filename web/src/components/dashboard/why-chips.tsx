@@ -14,9 +14,14 @@ const RED_Z = 2;
 export interface WhyChip extends DeviationOut {
   modality: Modality;
   at: number;
+  /** the block this deviation came from counted against the owner (ΔL < 0) */
+  against: boolean;
 }
 
-/** Strongest recent deviations across block_scored.top (dedup by feature, max |z|). */
+/**
+ * Strongest recent deviations across block_scored.top (dedup by feature, max |z|). Deviations from blocks
+ * that counted against the owner rank first; the rest are context, not alarms.
+ */
 export function whyChips(blocks: BlockScored[], limit = 8): WhyChip[] {
   if (!blocks.length) return [];
   const latest = Math.max(...blocks.map((b) => Date.parse(b.t_end)));
@@ -24,17 +29,21 @@ export function whyChips(blocks: BlockScored[], limit = 8): WhyChip[] {
   for (const b of blocks) {
     const at = Date.parse(b.t_end);
     if (at < latest - RECENT_MS) continue;
+    const against = (b.delta ?? 0) < 0;
     for (const d of b.top) {
       const prev = best.get(d.feature);
-      if (!prev || Math.abs(d.z) > Math.abs(prev.z)) best.set(d.feature, { ...d, modality: b.modality, at });
+      const better = !prev || (against && !prev.against) || (against === prev.against && Math.abs(d.z) > Math.abs(prev.z));
+      if (better) best.set(d.feature, { ...d, modality: b.modality, at, against });
     }
   }
-  return [...best.values()].sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, limit);
+  return [...best.values()]
+    .sort((a, b) => Number(b.against) - Number(a.against) || Math.abs(b.z) - Math.abs(a.z))
+    .slice(0, limit);
 }
 
 export function WhyChips({ blocks, large = false, limit = 8 }: { blocks: BlockScored[]; large?: boolean; limit?: number }) {
   const chips = useMemo(() => whyChips(blocks, limit), [blocks, limit]);
-  const anyRed = chips.some((c) => Math.abs(c.z) >= RED_Z);
+  const anyRed = chips.some((c) => c.against && Math.abs(c.z) >= RED_Z);
 
   if (!chips.length) {
     return <p className="py-3 text-sm text-muted-foreground">Waiting for scored blocks…</p>;
@@ -45,7 +54,7 @@ export function WhyChips({ blocks, large = false, limit = 8 }: { blocks: BlockSc
       <div className={cn("flex flex-wrap gap-2", large && "gap-2.5")}>
         <AnimatePresence initial={false} mode="popLayout">
           {chips.map((c) => {
-            const red = Math.abs(c.z) >= RED_Z;
+            const red = c.against && Math.abs(c.z) >= RED_Z;
             const Icon = modalityIcon(c.modality);
             const label = c.label || featureMeta(c.feature)?.label || c.feature;
             return (
@@ -73,7 +82,7 @@ export function WhyChips({ blocks, large = false, limit = 8 }: { blocks: BlockSc
       </div>
       {!anyRed && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <CheckCircle2 className="size-3.5 text-trust-normal" /> Every feature within 2σ of the enrolled profile.
+          <CheckCircle2 className="size-3.5 text-trust-normal" /> No recent block counted against the owner; grey chips are normal variation.
         </p>
       )}
     </div>

@@ -621,6 +621,7 @@ export interface Snapshot {
   last_tick_json: Record<string, unknown> | null;
   health: HealthLive | null;
   enrolled_psd: number[] | null;
+  recent_blocks: BlockScored[];
 }
 
 export interface LiveEnvelope {

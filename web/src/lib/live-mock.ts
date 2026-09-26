@@ -202,6 +202,12 @@ function deviations(m: Modality, impostor: boolean): DeviationOut[] {
     .sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
 }
 
+/** A server-style `feed` line for the mock stream (the real feed is server-authored). */
+export function mockFeedEvent(type: string, text: string, severity: number): LiveEvent {
+  const t = iso(Date.now());
+  return { type: "feed", device_id: MOCK_DEVICE_ID, t, data: { t, type, text, severity } };
+}
+
 // ---------------------------------------------------------------------------
 // The stream
 // ---------------------------------------------------------------------------
@@ -241,6 +247,7 @@ export class MockLive implements MockControls {
   private feedItems: FeedItem[] = [];
   private enrolledPsd = psdShape(3.2, 1.1, 0);
   private lastBlockAt: Partial<Record<Modality, number>> = {};
+  private lastLevel: Level = "normal";
 
   constructor(private readonly emit: Emit) {}
 
@@ -283,7 +290,7 @@ export class MockLive implements MockControls {
   private model(status: ModelInfo["status"] = "ready"): ModelInfo {
     const headline: Record<string, number | null> = {};
     for (const ms of Object.values(FEATURE_SPEC.modalities)) {
-      for (const f of ms.features) if (f.headline) headline[f.name] = TYPICAL[f.name] ?? null;
+      for (const f of ms.features) if (f.headline) headline[f.column] = TYPICAL[f.name] ?? null; // keyed by column
     }
     return {
       status,
@@ -316,7 +323,7 @@ export class MockLive implements MockControls {
       voice_warm: true,
       elevenlabs_quota: 0.42,
       activity: Array.from({ length: 5 }, () => Math.round(rand(2, 14))),
-      last_tick_json: null,
+      last_tick_json: this.tickJson(), // per-tick, like the server's health event
     };
   }
 
@@ -388,6 +395,7 @@ export class MockLive implements MockControls {
 
   private snapshot(): Snapshot {
     return {
+      recent_blocks: [],
       device: {
         id: MOCK_DEVICE_ID,
         label: "A's MacBook Pro (simulated)",
@@ -428,6 +436,13 @@ export class MockLive implements MockControls {
     this.send("snapshot", this.snapshot());
   }
 
+  /** Emit a server-style feed line (severity 0 info · 1 notice · 2 warn · 3 alert · 4 high · 5 lock). */
+  private say(type: string, text: string, severity: number) {
+    const ev = mockFeedEvent(type, text, severity);
+    if (ev.type === "feed") this.feedItems = [ev.data, ...this.feedItems].slice(0, 50);
+    this.emit(ev);
+  }
+
   private addMarker(label: MarkerPoint["label"], text: string | null = null) {
     const m: MarkerPoint = { t: iso(Date.now()), label, text };
     this.markers = [...this.markers, m].filter((x) => Date.parse(x.t) > Date.now() - 10 * 60_000);
@@ -440,6 +455,13 @@ export class MockLive implements MockControls {
       (p) => Date.parse(p.t) > Date.now() - 10 * 60_000,
     );
     this.send("trust", tl);
+    // Server-style trust lines: only "→ suspicious" and "recovered".
+    if (tl.level !== this.lastLevel) {
+      if (tl.level === "suspicious") this.say("trust", `Trust → suspicious · ${Math.round(tl.confidence * 100)}%`, 3);
+      else if (tl.level === "normal" && (this.lastLevel === "suspicious" || this.lastLevel === "watch" || this.lastLevel === "locked"))
+        this.say("trust", `Trust recovered · ${Math.round(tl.confidence * 100)}%`, 1);
+      this.lastLevel = tl.level;
+    }
   }
 
   // ---- the 5 s tick ----
@@ -525,7 +547,9 @@ export class MockLive implements MockControls {
     this.phase = "takeover";
     this.attacker = true;
     this.addMarker("takeover_start");
+    this.say("marker", "Operator marked takeover start — ground truth only, never scored", 2);
     this.send("label", { label: "impostor", actor: "b" });
+    this.say("label", "Label → impostor (actor b)", 1);
   }
 
   private arm() {
@@ -557,7 +581,9 @@ export class MockLive implements MockControls {
       explanation: null,
     };
     this.send("anomaly", anomaly);
+    this.say("anomaly", `Anomaly: takeover suspected · ${Math.round(this.conf * 100)}% · flight time +3.1σ`, 4);
     this.send("challenge", this.challenge);
+    this.say("challenge", "Challenge armed — trust below 40% for 2 ticks; voice check requested", 3);
     this.later(7000, () => {
       if (this.anomalyId !== anomaly.id) return;
       this.send("anomaly", {
@@ -585,6 +611,7 @@ export class MockLive implements MockControls {
       action: "purchase",
       amount_cents: 200_000,
     });
+    this.say("decision", `Purchase $2,000.00 → C step-up at ${Math.round(this.conf * 100)}% · R3 · co-present`, 2);
   }
 
   private cloneAttack() {
@@ -593,6 +620,7 @@ export class MockLive implements MockControls {
     const id = ch.challenge_id;
     this.challenge = { ...ch, status: "prompt_ended" };
     this.send("challenge", this.challenge);
+    this.say("challenge", "Voice prompt played (attempt 1)", 1);
     this.later(600, () => this.send("voice_stage", { challenge_id: id, stage: "transcribing", ok: true, value: 0.0 }));
     this.later(1300, () => this.send("voice_stage", { challenge_id: id, stage: "anti-spoof", ok: false, value: 0.93 }));
     this.later(1900, () => this.send("voice_stage", { challenge_id: id, stage: "speaker", ok: true, value: 0.58 }));
@@ -612,6 +640,7 @@ export class MockLive implements MockControls {
         findings: ["High-band energy above 7 kHz is missing (vocoder band-limit)", "Pitch jitter unusually low for live speech"],
         stage_ms: { stt: 640, cm: 410, asv: 220, dsp: 90 },
       });
+      this.say("voice", "Voice result BLOCK_SPOOF · speaker 0.58 · synthetic 0.93", 4);
       this.challenge = null;
       this.send("challenge", { ...ch, status: "blocked_spoof" });
       if (this.decisionId) {
@@ -629,10 +658,12 @@ export class MockLive implements MockControls {
           action: "purchase",
           amount_cents: 200_000,
         });
+        this.say("decision", "Purchase $2,000.00 → N declined — voice spoof, device locked", 4);
       }
       this.phase = "locked";
       this.lockedAt = Date.now();
       this.send("lock", { reason: "voice_spoof" });
+      this.say("lock", "Device locked — synthetic (cloned) voice", 5);
       this.conf = 0.005;
       this.pushTrust({}, 0);
     });
@@ -643,9 +674,14 @@ export class MockLive implements MockControls {
     const id = `mock-ch-${randomId().slice(0, 8)}`;
     const ch: ChallengeLive = { challenge_id: id, trigger: "unlock", status: "issued", attempt: 1, expires_at: iso(Date.now() + 120_000), verify_url: `/verify?c=${id}` };
     this.send("challenge", ch);
-    if (this.attacker) this.addMarker("takeover_end");
+    this.say("challenge", "Unlock challenge issued", 1);
+    if (this.attacker) {
+      this.addMarker("takeover_end");
+      this.say("marker", "Operator marked takeover end", 1);
+    }
     this.attacker = false;
     this.send("label", { label: "genuine", actor: "a" });
+    this.say("label", "Label → genuine (actor a)", 1);
     this.later(2500, () => {
       this.send("voice_result", {
         challenge_id: id,
@@ -660,6 +696,7 @@ export class MockLive implements MockControls {
         findings: [],
         stage_ms: { stt: 610, cm: 400, asv: 210, dsp: 85 },
       });
+      this.say("voice", "Voice result VERIFY · speaker 0.81 · synthetic 0.04", 0);
       this.send("challenge", { ...ch, status: "verified" });
       this.phase = "genuine";
       this.lockedAt = null;
@@ -670,6 +707,7 @@ export class MockLive implements MockControls {
       this.conf = 0.97;
       this.cycleStart = Date.now();
       this.send("unlock", {});
+      this.say("unlock", "Device unlocked — owner verified by voice, trust anchored at 97%", 1);
       this.pushTrust({}, 0);
     });
     return id;
@@ -691,6 +729,7 @@ export class MockLive implements MockControls {
     this.auto = false;
     this.conf = confidence;
     this.addMarker("rearm");
+    this.say("operator", `Operator re-armed trust to ${Math.round(confidence * 100)}%`, 1);
     this.pushTrust({}, 0);
   }
 
@@ -701,22 +740,27 @@ export class MockLive implements MockControls {
       this.attacker = false;
       if (this.phase === "takeover") this.phase = "genuine";
       this.addMarker("takeover_end");
+      this.say("marker", "Operator marked takeover end", 1);
       this.send("label", { label: "genuine", actor: "a" });
+      this.say("label", "Label → genuine (actor a)", 1);
     }
   }
 
   setMode(mode: Mode) {
     this.mode = mode;
     this.send("mode", { mode });
+    this.say("mode", `Mode → ${mode}`, 1);
   }
 
   train() {
     this.send("model", { ...this.model("training") });
+    this.say("model", "Training identity model…", 1);
     this.later(2500, () => {
       this.modelVersion += 1;
       this.learned = 0;
       this.mode = "monitor";
       this.send("model", this.model("ready"));
+      this.say("model", `Identity model v${this.modelVersion} active`, 1);
       this.send("mode", { mode: "monitor" });
     });
   }
@@ -727,7 +771,10 @@ export class MockLive implements MockControls {
 
   private clearAttack() {
     this.attacker = false;
-    if (this.challenge) this.send("challenge", { ...this.challenge, status: "cancelled" });
+    if (this.challenge) {
+      this.send("challenge", { ...this.challenge, status: "cancelled" });
+      this.say("challenge", "Challenge cancelled", 0);
+    }
     if (this.phase === "locked") this.send("unlock", {});
     this.challenge = null;
     this.armedAt = null;

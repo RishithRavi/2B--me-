@@ -28,7 +28,7 @@ import type {
 } from "./contracts";
 import { MockLive, type MockControls } from "./live-mock";
 import { useMockMode } from "./mode";
-import { featureLabel, fmtMoney, fmtPct, fmtZ, levelLabel } from "./ui";
+import { levelFromConfidence } from "./ui";
 
 // ---------------------------------------------------------------------------
 // State
@@ -149,10 +149,6 @@ function pushFeed(recent: FeedItem[], item: FeedItem): FeedItem[] {
   return [item, ...recent].slice(0, FEED_MAX);
 }
 
-function feed(t: string, type: string, text: string, severity: number): FeedItem {
-  return { t, type, text, severity };
-}
-
 /** TrustState.t is epoch seconds of the tick end; fall back to the envelope time. */
 function trustTime(data: TrustLive, envT: string): string {
   if (Number.isFinite(data.t) && data.t > 1e9) return new Date(data.t * 1000).toISOString();
@@ -180,58 +176,14 @@ export function anomalyLabel(kind: AnomalyLive["kind"]): string {
   return ANOMALY_LABEL[kind] ?? kind;
 }
 
-function challengeLine(c: ChallengeLive): { text: string; severity: number } | null {
-  switch (c.status) {
-    case "issued":
-      return c.trigger === "proactive"
-        ? { text: "Challenge armed — trust stayed below 40% for 2 ticks; voice check requested", severity: 2 }
-        : { text: `Voice challenge issued (${c.trigger.replace("_", "-")})`, severity: c.trigger === "step_up" ? 2 : 1 };
-    case "retry":
-      return { text: `Voice retry requested (attempt ${c.attempt})`, severity: 1 };
-    case "fallback_mfa":
-      return { text: "Voice inconclusive — falling back to TOTP", severity: 2 };
-    case "verified":
-      return { text: "Voice verified — owner confirmed", severity: 0 };
-    case "blocked_spoof":
-      return { text: "Blocked — synthetic (cloned) voice detected", severity: 3 };
-    case "blocked_impostor":
-      return { text: "Blocked — a different speaker", severity: 3 };
-    case "expired":
-      return { text: "Voice challenge expired", severity: 1 };
-    case "cancelled":
-      return { text: "Voice challenge cancelled", severity: 0 };
-    default:
-      return null; // prompt_ended / scoring: too chatty for the feed
-  }
-}
-
-const ACTION_LABEL: Record<DecisionLive["action"], string> = {
-  view: "View",
-  export: "Export",
-  add_payee: "Add payee",
-  password_change: "Password change",
-  purchase: "Purchase",
-};
-
-function markerLine(m: MarkerPoint): { text: string; severity: number } {
-  switch (m.label) {
-    case "takeover_start":
-      return { text: "Operator marked takeover start (ground truth only — never scored)", severity: 2 };
-    case "takeover_end":
-      return { text: "Operator marked takeover end", severity: 1 };
-    case "rearm":
-      return { text: "Operator re-armed trust to 31% (demo beat)", severity: 1 };
-    case "reset":
-      return { text: "Operator reset — trust anchored at 97% (operator action, not an authentication)", severity: 1 };
-    default:
-      return { text: m.text ? `Note: ${m.text}` : "Note", severity: 0 };
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Reducer
 // ---------------------------------------------------------------------------
 
+/**
+ * Pure reducer for /ws/live events. The event feed is server-authored only: `snapshot.recent_events`
+ * plus `feed` events (the server emits a FeedItem for every notable thing), so nothing here derives lines.
+ */
 export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = Date.now()): LiveState {
   // Remember every device we hear about (admin sees all devices → device picker).
   let knownDevices = prev.knownDevices;
@@ -273,6 +225,8 @@ export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = D
         health: d.health,
         healthAt: d.health ? receivedAt : null,
         enrolled_psd: d.enrolled_psd,
+        blocks: [...(d.recent_blocks ?? [])].sort((a, b) => tms(a.t_end) - tms(b.t_end)).slice(-BLOCKS_MAX),
+        lastBlocks: Object.fromEntries((d.recent_blocks ?? []).map((b) => [b.modality, b])),
         connected: prev.connected,
         closeCode: prev.closeCode,
         focus: prev.focus ?? d.device?.id ?? ev.device_id ?? null,
@@ -287,18 +241,9 @@ export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = D
       const level = d.locked ? "locked" : d.level;
       const point: TrustPoint = { t, confidence: d.confidence, level };
       const history = trimByTime([...s.trust_history, point], (p) => tms(p.t));
-      let recent = s.recent;
-      const prevLevel = prev.trust ? (prev.trust.locked ? "locked" : prev.trust.level) : null;
-      if (prevLevel && prevLevel !== level) {
-        const sev = level === "suspicious" || level === "locked" ? 3 : level === "watch" ? 2 : level === "learning" ? 1 : 0;
-        recent = pushFeed(
-          recent,
-          feed(t, "trust", `Trust ${levelLabel(prevLevel).toLowerCase()} → ${levelLabel(level).toLowerCase()} · ${fmtPct(d.confidence)}`, sev),
-        );
-      }
       const markers = trimByTime(s.markers, (m) => tms(m.t));
       const device = s.device && s.device.locked !== d.locked ? { ...s.device, locked: d.locked } : s.device;
-      return { ...s, trust: d, trust_history: history, markers, recent, device };
+      return { ...s, trust: d, trust_history: history, markers, device };
     }
 
     case "block_scored": {
@@ -315,17 +260,8 @@ export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = D
       return { ...s, enroll: ev.data, device };
     }
 
-    case "model": {
-      const m = ev.data;
-      const p = prev.model;
-      let recent = s.recent;
-      if (!p || p.status !== m.status || p.version !== m.version) {
-        if (m.status === "ready") recent = pushFeed(recent, feed(ev.t, "model", `Identity model v${m.version ?? "?"} active · +${m.learned_since_enroll} blocks learned`, 1));
-        else if (m.status === "training") recent = pushFeed(recent, feed(ev.t, "model", "Training identity model…", 1));
-        else if (m.status === "failed") recent = pushFeed(recent, feed(ev.t, "model", `Model training failed${m.error ? `: ${m.error}` : ""}`, 3));
-      }
-      return { ...s, model: m, recent };
-    }
+    case "model":
+      return { ...s, model: ev.data };
 
     case "anomaly": {
       const a = ev.data;
@@ -335,24 +271,15 @@ export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = D
         anomalies[idx] = { ...a, t: s.anomalies[idx].t };
         return { ...s, anomalies };
       }
-      const top = a.top_features[0];
-      const why = top ? ` — ${top.label || featureLabel(top.feature)} ${fmtZ(top.z)}` : "";
-      const recent = pushFeed(s.recent, feed(ev.t, "anomaly", `Anomaly: ${anomalyLabel(a.kind)} (severity ${a.severity})${why}`, a.severity >= 4 ? 3 : 2));
-      return { ...s, anomalies: [{ ...a, t: ev.t }, ...s.anomalies].slice(0, FEED_MAX), recent };
+      return { ...s, anomalies: [{ ...a, t: ev.t }, ...s.anomalies].slice(0, FEED_MAX) };
     }
 
     case "challenge": {
       const c = ev.data;
       const prevC = s.open_challenge;
-      const changed = !prevC || prevC.challenge_id !== c.challenge_id || prevC.status !== c.status;
-      let recent = s.recent;
-      if (changed) {
-        const line = challengeLine(c);
-        if (line) recent = pushFeed(recent, feed(ev.t, "challenge", line.text, line.severity));
-      }
       let open_challenge: ChallengeLive | null = c;
       if (TERMINAL.has(c.status)) open_challenge = prevC && prevC.challenge_id !== c.challenge_id ? prevC : null;
-      return { ...s, open_challenge, recent };
+      return { ...s, open_challenge };
     }
 
     case "voice_stage": {
@@ -361,63 +288,46 @@ export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = D
       return { ...s, voiceStages: { ...s.voiceStages, [v.challenge_id]: [...list, v] } };
     }
 
-    case "voice_result": {
-      const r = ev.data;
-      const sev = r.decision === "VERIFY" ? 0 : r.decision === "RETRY" ? 1 : r.decision === "FALLBACK_MFA" ? 2 : 3;
-      const parts = [
-        r.asv_cos !== null ? `speaker ${r.asv_cos.toFixed(2)}` : null,
-        r.cm_p_spoof !== null ? `synthetic ${r.cm_p_spoof.toFixed(2)}` : null,
-      ].filter(Boolean);
-      const recent = pushFeed(s.recent, feed(ev.t, "voice", `Voice result ${r.decision}${parts.length ? ` · ${parts.join(" · ")}` : ""}`, sev));
-      return { ...s, voiceResults: [{ ...r, t: ev.t }, ...s.voiceResults].slice(0, VOICE_RESULTS_MAX), recent };
-    }
+    case "voice_result":
+      return { ...s, voiceResults: [{ ...ev.data, t: ev.t }, ...s.voiceResults].slice(0, VOICE_RESULTS_MAX) };
 
     case "decision": {
       const d = ev.data;
       const idx = s.decisions.findIndex((x) => x.decision_id === d.decision_id);
       const entry: LiveDecision = { ...d, t: idx >= 0 ? s.decisions[idx].t : ev.t };
       const decisions = idx >= 0 ? s.decisions.map((x, i) => (i === idx ? entry : x)) : [entry, ...s.decisions].slice(0, DECISIONS_MAX);
-      const amount = d.amount_cents !== null ? ` ${fmtMoney(d.amount_cents)}` : "";
-      const sev = d.decision === "allow" ? 0 : d.decision === "step_up" ? 2 : 3;
-      const verb = d.decision === "allow" ? "approved" : d.decision === "step_up" ? "step-up" : "declined";
-      const recent = pushFeed(
-        s.recent,
-        feed(ev.t, "decision", `${ACTION_LABEL[d.action] ?? d.action}${amount} → ${d.trans_status} (${verb}) at ${fmtPct(d.confidence)} · ${d.tier} · ${d.binding}`, sev),
-      );
-      return { ...s, decisions, recent };
+      return { ...s, decisions };
     }
 
     case "marker": {
-      const m = ev.data;
-      const markers = trimByTime([...s.markers, m].sort((a, b) => tms(a.t) - tms(b.t)), (x) => tms(x.t));
-      const line = markerLine(m);
-      return { ...s, markers, recent: pushFeed(s.recent, feed(m.t || ev.t, "marker", line.text, line.severity)) };
+      const markers = trimByTime([...s.markers, ev.data].sort((a, b) => tms(a.t) - tms(b.t)), (x) => tms(x.t));
+      return { ...s, markers };
     }
 
     case "mode": {
       const mode = ev.data.mode;
       const device = s.device ? { ...s.device, mode } : s.device;
       const enroll = s.enroll ? { ...s.enroll, mode } : s.enroll;
-      return { ...s, device, enroll, recent: pushFeed(s.recent, feed(ev.t, "mode", `Mode → ${mode}`, 1)) };
+      return { ...s, device, enroll };
     }
 
     case "lock": {
       const device = s.device ? { ...s.device, locked: true, lock_reason: ev.data.reason } : s.device;
       const trust = s.trust ? { ...s.trust, locked: true, level: "locked" as const } : s.trust;
-      return { ...s, device, trust, recent: pushFeed(s.recent, feed(ev.t, "lock", `Device locked — ${ev.data.reason.replaceAll("_", " ")}`, 3)) };
+      return { ...s, device, trust };
     }
 
     case "unlock": {
       const device = s.device ? { ...s.device, locked: false, lock_reason: null } : s.device;
-      const trust = s.trust ? { ...s.trust, locked: false } : s.trust;
-      return { ...s, device, trust, recent: pushFeed(s.recent, feed(ev.t, "unlock", "Device unlocked", 0)) };
+      // Drop the sticky "locked" level right away (the next trust tick carries the real one).
+      const trust = s.trust
+        ? { ...s.trust, locked: false, level: s.trust.level === "locked" ? levelFromConfidence(s.trust.confidence) : s.trust.level }
+        : s.trust;
+      return { ...s, device, trust };
     }
 
-    case "label": {
-      const { label, actor } = ev.data;
-      const text = label === "impostor" ? `Label → impostor (actor ${actor}) — ground truth for eval` : `Label → genuine (actor ${actor})`;
-      return { ...s, label, actor, recent: pushFeed(s.recent, feed(ev.t, "label", text, 1)) };
-    }
+    case "label":
+      return { ...s, label: ev.data.label, actor: ev.data.actor };
 
     case "presence":
       return { ...s, presence: ev.data };

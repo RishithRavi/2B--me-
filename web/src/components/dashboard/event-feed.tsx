@@ -35,6 +35,8 @@ export function EventFeed({ items, large = false, className }: { items: FeedItem
               className={cn(
                 "grid grid-cols-[auto_auto_1fr] items-baseline gap-2.5 rounded-md px-2 py-1.5",
                 tone === "alert" && "bg-trust-suspicious/8",
+                tone === "high" && "bg-trust-suspicious/14 font-medium",
+                tone === "lock" && "bg-trust-locked/14 font-medium",
                 large ? "text-base" : "text-[13px]",
               )}
             >

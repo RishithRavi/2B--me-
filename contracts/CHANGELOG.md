@@ -25,3 +25,8 @@ Format: `- YYYY-MM-DD HH:MM ET · <who> · <file/type> · <change>`
 - 2026-09-26 02:05 ET · Claude · `TickFlags.rtt_ms: float|null` — agent's lowest-RTT clock_ping sample (ms) for the dashboard RTT pill.
 - 2026-09-26 02:15 ET · Claude · `voice_profiles.mfcc_mean vector(20)` (migration 005) + `repo_voice.insert_profile(mfcc_mean=...)`:
   `spec_sim = cosine([LTAS64 ‖ MFCC-mean20], [profile.spectral_summary ‖ profile.mfcc_mean])`; `spectral_summary` stays the 64-bin LTAS.
+- 2026-09-26 02:35 ET · Claude · `Snapshot.recent_blocks: BlockScored[]` (last 2 min) so TTD counts / why-chips survive a reload.
+- 2026-09-26 02:35 ET · Claude · clarification: temporal `psd` is **log10** Welch power per bin (32 bins, 0–25 Hz evenly spaced).
+- 2026-09-26 02:35 ET · Claude · clarification: `client_prompt_end_ms` (voice response) = ms from recorder start (mic open) to the
+  prompt's `ended` event. The uploaded WAV already starts at prompt end — the server must NOT trim by this value; use it only
+  for latency/onset diagnostics.

@@ -15,12 +15,16 @@ interface Row {
   enrolled: number | null;
 }
 
-/** Normalize to a share of total power so the two spectra compare by shape, not by activity level. */
+/**
+ * `psd` is log10 Welch power per bin (contract), so values are usually negative. Convert to linear power,
+ * then normalize to a share of total power so the two spectra compare by shape, not by activity level.
+ */
 function share(psd: number[] | null | undefined): number[] | null {
   if (!psd || psd.length === 0) return null;
-  const sum = psd.reduce((a, b) => a + Math.max(0, b), 0);
-  if (sum <= 0) return null;
-  return psd.map((v) => (Math.max(0, v) / sum) * 100);
+  const lin = psd.map((v) => (Number.isFinite(v) ? Math.pow(10, v) : 0));
+  const sum = lin.reduce((a, b) => a + b, 0);
+  if (!(sum > 0)) return null;
+  return lin.map((v) => (v / sum) * 100);
 }
 
 function SpecTip({ active, payload }: TipProps) {

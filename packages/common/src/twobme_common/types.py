@@ -759,6 +759,8 @@ class Snapshot(_Dto):
     last_tick_json: dict[str, Any] | None = None  # "What left this laptop"
     health: HealthLive | None = None
     enrolled_psd: list[float] | None = None
+    # block_scored events of the last 2 min (TTD block counts + why-chips survive a reload; post-CP0 additive)
+    recent_blocks: list[BlockScored] = Field(default_factory=list)
 
 
 LiveType = Literal[

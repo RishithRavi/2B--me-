@@ -14,6 +14,7 @@ function ev<T extends LiveEvent["type"]>(type: T, data: Extract<LiveEvent, { typ
 
 function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
+    recent_blocks: [],
     device: { id: DEV, label: "A's MacBook", pointer: "trackpad", mode: "monitor", locked: false, lock_reason: null, last_seen: iso(T0) },
     session_id: "sess-1",
     label: "genuine",
@@ -128,13 +129,24 @@ describe("applyLive — trust", () => {
     expect(last - first).toBe(10 * 60 * 1000);
   });
 
-  it("derives a feed line on level change, not on every tick", () => {
+  it("never derives feed lines (the feed is server-authored)", () => {
     let s = applyLive(initialLiveState(), ev("snapshot", snapshot({ recent_events: [] })));
     s = applyLive(s, ev("trust", trust(0.96, T0 + 5000, "normal")));
+    s = applyLive(s, ev("trust", trust(0.3, T0 + 10_000, "suspicious")));
+    s = applyLive(s, ev("marker", { t: iso(T0 + 11_000), label: "takeover_start", text: null }));
+    s = applyLive(s, ev("label", { label: "impostor", actor: "b" }));
+    s = applyLive(s, ev("mode", { mode: "monitor" }));
+    s = applyLive(s, ev("lock", { reason: "voice_spoof" }));
+    s = applyLive(s, ev("unlock", {}));
+    s = applyLive(s, ev("anomaly", anomaly("a1")));
+    s = applyLive(s, ev("challenge", { challenge_id: "ch-1", trigger: "proactive", status: "issued", attempt: 1, expires_at: null, verify_url: null }));
     expect(s.recent).toHaveLength(0);
-    s = applyLive(s, ev("trust", trust(0.6, T0 + 10_000, "watch")));
-    expect(s.recent).toHaveLength(1);
-    expect(s.recent[0].text).toContain("normal → watch");
+    // …but every state update still lands
+    expect(s.trust?.level).toBe("suspicious");
+    expect(s.markers).toHaveLength(1);
+    expect(s.label).toBe("impostor");
+    expect(s.anomalies).toHaveLength(1);
+    expect(s.open_challenge?.challenge_id).toBe("ch-1");
   });
 
   it("locked trust is recorded with level 'locked'", () => {

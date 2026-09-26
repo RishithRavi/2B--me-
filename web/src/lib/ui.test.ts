@@ -2,6 +2,7 @@ import { Activity, AppWindow, Keyboard, MousePointer2, ScrollText } from "lucide
 import { describe, expect, it } from "vitest";
 
 import {
+  feedTone,
   featureLabel,
   featureMeta,
   fmtAgo,
@@ -66,6 +67,12 @@ describe("formatters", () => {
     expect(fmtDuration(4.25)).toBe("4.3s");
     expect(fmtDuration(185)).toBe("3m 05s");
     expect(fmtMoney(200000)).toBe("$2,000.00");
+  });
+});
+
+describe("feed severity", () => {
+  it("maps 0..5 to tones", () => {
+    expect([0, 1, 2, 3, 4, 5, 9].map(feedTone)).toEqual(["info", "notice", "warn", "alert", "high", "lock", "lock"]);
   });
 });
 

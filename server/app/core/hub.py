@@ -265,6 +265,7 @@ class DeviceRuntime:
     enroll_counts: dict[str, int] = field(default_factory=lambda: {m: 0 for m in MODALITIES})
     enroll_loaded: bool = False
     last_top: list[DeviationOut] = field(default_factory=list)
+    recent_blocks: deque = field(default_factory=lambda: deque(maxlen=200))  # BlockScored
     totp_failures: dict[UUID, int] = field(default_factory=dict)
 
     @property
@@ -641,9 +642,10 @@ class DeviceHub:
             top = [DeviationOut(feature=dv.feature, label=self.spec.label(dv.feature), unit=self.spec.unit(dv.feature),
                                 z=dv.z) for dv in (s.top if s else []) if dv.feature in self.spec._idx]
             top_all.extend(top)
-            self.publish(drt, "block_scored", BlockScored(
-                modality=b.modality, t_start=b.t_start, t_end=b.t_end, n=b.n,
-                typicality=s.typicality if s else None, llr=llr, q=q, delta=d, top=top))
+            bs = BlockScored(modality=b.modality, t_start=b.t_start, t_end=b.t_end, n=b.n,
+                             typicality=s.typicality if s else None, llr=llr, q=q, delta=d, top=top)
+            drt.recent_blocks.append(bs)
+            self.publish(drt, "block_scored", bs)
             if is_ctx:
                 self.publish(drt, "context", ContextLive(psd=b.psd, features=b.features,
                                                          enrolled_psd=self.models.enrolled_psd.get(drt.dev.user_id)))
@@ -1235,6 +1237,7 @@ class DeviceHub:
             model=self.models.model_info(d.user_id), enroll=self.enroll_progress(drt), open_challenge=oc,
             recent_events=list(reversed(drt.feed)), last_tick_json=drt.last_tick_json, health=self.health(drt),
             enrolled_psd=self.models.enrolled_psd.get(d.user_id),
+            recent_blocks=[b for b in drt.recent_blocks if (now - b.t_end).total_seconds() <= 120],
         )
 
     def health(self, drt: DeviceRuntime) -> HealthLive:

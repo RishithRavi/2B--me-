@@ -188,10 +188,12 @@ export function featureLabel(key: string): string {
   return FEATURE_BY_KEY[key]?.label ?? key;
 }
 
-/** Severity (FeedItem 0..3+, anomaly 1..5) → tone. */
-export type Tone = "info" | "notice" | "warn" | "alert";
+/** FeedItem severity (server-authored): 0 info · 1 notice · 2 warn · 3 alert · 4 high · 5 lock. */
+export type Tone = "info" | "notice" | "warn" | "alert" | "high" | "lock";
 export function feedTone(severity: number): Tone {
-  if (severity >= 3) return "alert";
+  if (severity >= 5) return "lock";
+  if (severity === 4) return "high";
+  if (severity === 3) return "alert";
   if (severity === 2) return "warn";
   if (severity === 1) return "notice";
   return "info";
@@ -199,6 +201,9 @@ export function feedTone(severity: number): Tone {
 
 export function toneColor(t: Tone): string {
   switch (t) {
+    case "lock":
+      return "var(--trust-locked)";
+    case "high":
     case "alert":
       return "var(--trust-suspicious)";
     case "warn":
