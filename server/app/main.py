@@ -88,6 +88,11 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     r.db.start()
     r.writer.start()
     r.hub.start()
+    quota_task = None
+    if s.elevenlabs_api_key:
+        from app.core.quota import poll_forever
+
+        quota_task = asyncio.create_task(poll_forever(s.elevenlabs_api_key, r.extras), name="elevenlabs-quota")
     from app import voice
 
     try:
@@ -100,6 +105,8 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     try:
         yield
     finally:
+        if quota_task is not None:
+            quota_task.cancel()
         await r.hub.stop()
         await r.writer.stop()
         await r.db.close()
