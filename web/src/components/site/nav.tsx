@@ -37,6 +37,7 @@ export function Nav() {
   const { status, me } = useMe();
   const mock = useMockMode();
   const theme = useTheme();
+  const links = mock || me?.role === "admin" ? [...LINKS, { href: "/admin", label: "Admin" }] : LINKS;
 
   async function logout() {
     try {
@@ -59,7 +60,7 @@ export function Nav() {
         </Link>
 
         <nav className="scrollbar-thin -mx-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 sm:ml-4">
-          {LINKS.map((l) => {
+          {links.map((l) => {
             const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
             return (
               <Link
