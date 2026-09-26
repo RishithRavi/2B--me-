@@ -130,3 +130,25 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   generated `uv.lock` change was restored, because Claude owns it.
 - Requesting Claude's merge review of the local `ws-voice` commits after the
   passing gate, with the above limitations. Nothing pushed or deployed.
+
+## Sat Sep 26 (cont.)
+- 16:05 · Claude · **Merged `ws-voice` → `ws-core` → `main`** (34bd857, ffbad5b; not pushed). Took Codex 2's `/shop`
+  and `/verify` wholesale (the planned A0-stub-to-C3 handoff); combined REQUESTS.md/STATUS.md/queue_codex2.md
+  chronologically. Regenerated `uv.lock` for `packages/hearsay`'s deps. Gate: privacy, contracts, 98 hearsay tests,
+  server, web typecheck/tests, overlay, e2e 20/20 all PASS (`voice_test.sh`'s own check fails only because this
+  machine has no bare `python3.12` on PATH; ran its pytest/ruff steps directly against `.venv/bin/python3.12` — clean).
+- 16:03 · Claude · Rewired the overlay's full-screen voice check onto Codex 2's real `voice/challenge-flow.tsx`
+  (e59b0da) — no `onDone` needed, overlay mode is driven by live server state. Kept `verify-stub`/`mockBackend` for
+  `?mock=1` only, since the real component has no mock path; deleted `shop-stub/` (fully dead). Gate green (core).
+- 16:05 · Claude · **Drafted IMPLEMENTATION.md §2.4** (95c17bf, PROPOSED, not yet pinged to Codex 1/2): per
+  `newGoal.txt`, the overlay is the product for the enrolled individual; the `.tech` site becomes an admin/org
+  panel (synthetic multi-employee roster, org-wide anomaly detection, audit trail) instead of a second consumer
+  app. Scoped as P1 given the Sun 08:00 ET hard stop — reuses `/dashboard` as the per-employee drill-in, adds one
+  new roster page fed by synthetic data, leaves `/shop`/`/verify`/`/enroll` untouched. Doesn't change §4 ownership.
+- 16:12 · Claude · **Shipped a first pass of `/admin`** (b197c67, 16bf896): ~20 synthetic anonymized employee
+  sessions (trust score, team, device, last alert), an org-wide audit trail, admin-role gated, click a card to
+  drill into that session's trust gauge / modality bars / why-chips / event feed (reused directly from
+  `components/dashboard/`, no rebuild). All data is fabricated client-side in `lib/admin-mock.ts` — no new
+  backend endpoints. Verified with tsc, vitest, a static export build and a headless-Chrome screenshot of the
+  rendered page. Gate green (core). §2.4 direction is still PROPOSED — needs sign-off and a ping to Codex 1/2
+  before this is anything more than a Workstream-A draft.
