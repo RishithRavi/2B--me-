@@ -5,6 +5,11 @@ description = "2bME FastAPI backend (owner: Claude; server/app/voice owned by Co
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "twobme-common",
+  "twobme-features",
+  "twobme-ml",
+  # base hearsay only (numpy, soundfile, soxr, pyyaml): the voice routes import hearsay.phrases/audio/dsp.
+  # The torch/model stack is the optional `voice` extra below, never the default install.
+  "hearsay",
   "fastapi==0.141.*",
   "uvicorn[standard]==0.54.*",
   "pydantic>=2.9",
@@ -27,11 +32,17 @@ dependencies = [
   "pyyaml",
 ]
 
-# After the ws-signals / ws-voice merges Claude adds (workspace sources):
-#   "twobme-features", "twobme-ml", "hearsay[server]"
+[project.optional-dependencies]
+# Real voice (VOICE_MODE=real): torch, transformers, speechbrain, silero-vad, faster-whisper, elevenlabs.
+# Opt-in only (`uv sync --package twobme-server --extra voice`, or the images' UV_EXTRAS build arg), because
+# it pulls CPU torch + model code into the image; weights are fetched separately (§6 A4).
+voice = ["hearsay[server]"]
 
 [tool.uv.sources]
 twobme-common = { workspace = true }
+twobme-features = { workspace = true }
+twobme-ml = { workspace = true }
+hearsay = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

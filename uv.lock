@@ -1873,6 +1873,7 @@ dependencies = [
     { name = "asyncpg" },
     { name = "cryptography" },
     { name = "fastapi" },
+    { name = "hearsay" },
     { name = "httpx" },
     { name = "itsdangerous" },
     { name = "joblib" },
@@ -1889,7 +1890,14 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "twobme-common" },
+    { name = "twobme-features" },
+    { name = "twobme-ml" },
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+voice = [
+    { name = "hearsay", extra = ["server"] },
 ]
 
 [package.metadata]
@@ -1898,6 +1906,8 @@ requires-dist = [
     { name = "asyncpg", specifier = "==0.31.0" },
     { name = "cryptography" },
     { name = "fastapi", specifier = "==0.141.*" },
+    { name = "hearsay", editable = "packages/hearsay" },
+    { name = "hearsay", extras = ["server"], marker = "extra == 'voice'", editable = "packages/hearsay" },
     { name = "httpx" },
     { name = "itsdangerous" },
     { name = "joblib" },
@@ -1914,8 +1924,11 @@ requires-dist = [
     { name = "scikit-learn", specifier = "==1.9.1" },
     { name = "scipy", specifier = "==1.18.1" },
     { name = "twobme-common", editable = "packages/common" },
+    { name = "twobme-features", editable = "packages/features" },
+    { name = "twobme-ml", editable = "packages/ml" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.54.*" },
 ]
+provides-extras = ["voice"]
 
 [[package]]
 name = "twobme-workspace"
