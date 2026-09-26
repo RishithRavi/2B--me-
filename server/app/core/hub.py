@@ -83,6 +83,9 @@ from twobme_common.types import (
 log = logging.getLogger("twobme.hub")
 
 HISTORY_S = 600
+REVOKE_UPDATE_S = 120      # update_candidate revoked for blocks this long before arming / BLOCK_* (§5.3)
+FACTOR_REENROLL_S = 300    # replacing a factor needs a voice/TOTP VERIFY on the bound device this recently
+MARKER_TEXT_MAX = 80       # marker text is truncated server-side (§2.2)
 # server-side feed lines for challenge status changes (armed/verified/blocked are fed elsewhere)
 CHALLENGE_FEED = {
     "prompt_ended": ("Voice prompt played ({trigger}) — recording reply", 1),
@@ -105,6 +108,7 @@ class EngineAdapter:
         self._calc = FallbackEngine(cfg)  # formula helper for per-block display values
         self.state: TrustState | None = None
         self.L: float = logit(0.97)
+        self.last_t: float | None = _engine_t(engine)
 
     @classmethod
     def new(cls, cfg: TrustConfig, p0: float) -> EngineAdapter:
@@ -143,10 +147,25 @@ class EngineAdapter:
     def confidence(self) -> float:
         return sigmoid(self.L)
 
+    def in_order(self, t_end: float) -> bool:
+        """False for a tick at or before the engine's last tick (it must not be scored)."""
+        return self.last_t is None or t_end > self.last_t
+
     def on_tick(self, t_end: float, idle_s: float, scores: list[BlockScore]) -> TrustState:
-        st = self.engine.on_tick(t_end, idle_s, scores)
+        """Never raises: an engine error degrades to "no evidence this tick" (then to "no change")."""
+        try:
+            st = self.engine.on_tick(t_end, idle_s, scores)
+        except Exception as e:
+            log.warning("trust engine rejected a tick (%s: %s); applying it without evidence",
+                        type(e).__name__, str(e)[:120])
+            try:
+                st = self.engine.on_tick(t_end, max(0.0, idle_s), [])
+            except Exception as e2:
+                log.warning("trust engine rejected an empty tick (%s); trust unchanged", type(e2).__name__)
+                st = self.snapshot_state(t_end, ["engine_error"])
         self.state = st
         self.L = st.logit
+        self.last_t = t_end if self.last_t is None else max(self.last_t, t_end)
         return st
 
     def anchor(self, p: float) -> None:
@@ -170,6 +189,38 @@ class EngineAdapter:
         q = min(1.0, s.n / self.cfg.n_ref[s.modality])
         d = self.cfg.kappa * self.cfg.weights.get(s.modality, 0.0) * q * self._calc.f(llr)
         return llr, q, d
+
+
+def _engine_t(engine: Any) -> float | None:
+    """The engine's last tick time (twobme_ml: `t`, fallback: `t_prev`), if it tracks one."""
+    for attr in ("t", "t_prev"):
+        v = getattr(engine, attr, None)
+        if isinstance(v, int | float) and math.isfinite(v):
+            return float(v)
+    return None
+
+
+def _usable_score(s: BlockScore) -> bool:
+    """Drop scores the engine would reject (non-finite / out-of-range typicality or LLR)."""
+    if s.n <= 0:
+        return False
+    if s.typicality is not None and not (math.isfinite(s.typicality) and 0.0 <= s.typicality <= 1.0):
+        return False
+    return s.llr_direct is None or math.isfinite(s.llr_direct)
+
+
+def _app_categories() -> frozenset[str]:
+    """On-device app categories (contracts/app_categories.json, §2.2)."""
+    try:
+        import json
+
+        from twobme_common.paths import contracts_dir
+
+        cats = json.loads((contracts_dir() / "app_categories.json").read_text())["categories"]
+        return frozenset(str(c) for c in cats)
+    except Exception as e:
+        log.warning("app_categories.json unreadable (%s); using the built-in category list", e)
+        return frozenset({"browser", "ide", "terminal", "chat", "docs", "media", "system", "other"})
 
 
 def _construct(ecls: type, cfg: TrustConfig) -> Any:
@@ -316,6 +367,8 @@ class DeviceHub:
         self.presence: dict[str, PresenceTracker] = {}
         self._loop_task: asyncio.Task | None = None
         self._last_health: float = 0.0
+        self.app_categories = _app_categories()
+        self.privacy_drops = 0  # transition keys dropped by the §2.2 server-side check (count only)
         self.models.on_activated = self._on_model_activated
         self.models.on_status = self._on_model_status
 
@@ -478,7 +531,11 @@ class DeviceHub:
         prev_seen = dev.last_seen
         dev.last_seen = utcnow()
         if hello.requested_mode and hello.requested_mode != dev.mode:
-            await self.set_mode(drt, hello.requested_mode, source="agent hello")
+            if hello.requested_mode == "enroll" and self.models.scorer(dev.user_id) is not None:
+                # §5.3: once a user has an active model, only an admin may put a device back in enroll mode
+                self.feed(drt, "mode", "Agent asked for enroll mode — ignored (identity model active; admin only)", 2)
+            else:
+                await self.set_mode(drt, hello.requested_mode, source="agent hello")
         resume_ok = (
             hello.resume_session_id is not None and hello.resume_session_id == drt.session_id and prev_seen is not None
             and (utcnow() - prev_seen).total_seconds() < self.cfg.session.resume_max_s
@@ -530,8 +587,70 @@ class DeviceHub:
 
     # --- ticks ------------------------------------------------------------------------------------
     async def ingest_tick(self, drt: DeviceRuntime, tick: Tick) -> str:
+        """Never raises. Every tick the hub accepts is acked to the agent (`trust` with its seq) — scored,
+        late, out-of-order, duplicate or failed — so the agent's outbox always drains."""
         if drt.is_dup(tick.run_id, tick.seq):
+            await self._ack_unscored(drt, tick)
             return "duplicate"
+        try:
+            return await self._ingest_tick(drt, tick)
+        except Exception:
+            log.exception("tick ingest failed (device %s, seq %s); acked without evidence", drt.device_id, tick.seq)
+            await self._ack_unscored(drt, tick)
+            return "error"
+
+    async def _ack_unscored(self, drt: DeviceRuntime, tick: Tick) -> None:
+        """Ack a tick that was not scored with the current trust. The agent acks by (its current run_id,
+        seq), so a tick of another run (HTTPS fallback of an old run) is never acked over the WS."""
+        if drt.agent_ws is None or tick.run_id != drt.run_id:
+            return
+        tl = drt.trust or self._trust_live(drt, drt.engine.snapshot_state(time.time()), None)
+        await self._agent_trust(drt, tl.model_copy(update={"seq": tick.seq}))
+
+    def _clean_transitions(self, b: Block) -> Block:
+        """§2.2 defense in depth: workflow `transitions` keys must be "from>to" pairs of the categories in
+        contracts/app_categories.json. Anything else (a bundle id, a title) is dropped and only counted."""
+        if not b.transitions:
+            return b
+        cats = self.app_categories
+        ok: dict[str, int] = {}
+        for k, v in b.transitions.items():
+            a, sep, c = k.partition(">")
+            if sep and a in cats and c in cats and isinstance(v, int) and 0 <= v <= 100_000:
+                ok[k] = v
+        dropped = len(b.transitions) - len(ok)
+        if not dropped:
+            return b
+        self.privacy_drops += dropped
+        log.warning("dropped %d workflow transition key(s) that are not category pairs (total %d)",
+                    dropped, self.privacy_drops)
+        return b.model_copy(update={"transitions": ok or None})
+
+    async def _valid_blocks(self, drt: DeviceRuntime, tick: Tick) -> list[tuple[Block, bool]]:
+        """Blocks (+ temporal context) that match the spec exactly (privacy + contract), transitions cleaned."""
+        blocks: list[tuple[Block, bool]] = [(b, False) for b in tick.blocks]
+        if tick.context is not None:
+            blocks.append((tick.context, True))
+        valid: list[tuple[Block, bool]] = []
+        for b, is_ctx in blocks:
+            try:
+                self.spec.check_features(b.modality, b.features)
+            except ValueError as e:
+                await self.send_agent(drt, AgentError(code="bad_block", detail=str(e)[:300]))
+                continue
+            valid.append((self._clean_transitions(b), is_ctx))
+        return valid
+
+    @staticmethod
+    def _tick_json(tick: Tick, valid: list[tuple[Block, bool]]) -> dict:
+        """The literal payload for "What left this laptop", rebuilt from validated blocks only."""
+        d = tick.model_dump(mode="json")
+        d["blocks"] = [b.model_dump(mode="json") for b, is_ctx in valid if not is_ctx]
+        ctx = next((b for b, is_ctx in valid if is_ctx), None)
+        d["context"] = ctx.model_dump(mode="json") if ctx is not None else None
+        return d
+
+    async def _ingest_tick(self, drt: DeviceRuntime, tick: Tick) -> str:
         now = utcnow()
         drt.dev.last_seen = now
         flags = tick.flags.model_copy()
@@ -541,25 +660,16 @@ class DeviceHub:
         if not late and abs((t_end - now).total_seconds()) >= self.cfg.hub.clock_skew_s:
             t_end = now
             flags.clock_skew = True
+        # at or before the engine's last tick: stored like a late tick, never scored (the engine refuses it)
+        out_of_order = not late and not drt.engine.in_order(t_end.timestamp())
         if drt.session_id is None and not late:
             self._new_session(drt, tick.run_id)
         session_id = tick.session_id if late and tick.session_id else drt.session_id
 
         # validate blocks against the spec (exact feature names = privacy + contract)
-        blocks: list[tuple[Block, bool]] = []
-        for b in tick.blocks:
-            blocks.append((b, False))
-        if tick.context is not None:
-            blocks.append((tick.context, True))
-        valid: list[tuple[Block, bool]] = []
-        for b, is_ctx in blocks:
-            try:
-                self.spec.check_features(b.modality, b.features)
-                valid.append((b, is_ctx))
-            except ValueError as e:
-                await self.send_agent(drt, AgentError(code="bad_block", detail=str(e)[:300]))
+        valid = await self._valid_blocks(drt, tick)
 
-        if not late:
+        if not late:  # fresh input (out-of-order included): co-presence activity + health, never scoring
             base = int(t_end.timestamp()) - len(tick.activity)
             for i, n in enumerate(tick.activity):
                 drt.activity[base + i + 1] = int(n)
@@ -572,7 +682,7 @@ class DeviceHub:
             drt.idle_s = flags.idle_s
             if flags.rtt_ms is not None:
                 drt.rtt_ms = flags.rtt_ms
-            drt.last_tick_json = tick.model_dump(mode="json")
+            drt.last_tick_json = self._tick_json(tick, valid)
 
         scorer = self.models.scorer(drt.dev.user_id)
         learning = self.learning(drt)
@@ -581,15 +691,20 @@ class DeviceHub:
         scored: list[tuple[Block, bool, BlockScore | None]] = []
         for b, is_ctx in valid:
             s = None
-            if scorer is not None and drt.dev.mode == "monitor" and b.t_end >= stale_cut and not late:
+            if (scorer is not None and drt.dev.mode == "monitor" and b.t_end >= stale_cut and not late
+                    and not out_of_order):
                 try:
                     s = await asyncio.to_thread(scorer.score_block, b)
-                except Exception as e:
-                    log.warning("score_block failed (%s): %s", b.modality, e)
+                except Exception as e:  # a scorer error = no evidence from this block
+                    log.warning("score_block failed (%s): %s", b.modality, type(e).__name__)
+                if s is not None and not _usable_score(s):
+                    log.warning("score_block returned an unusable score (%s); ignored", b.modality)
+                    s = None
             scored.append((b, is_ctx, s))
 
-        if late:
+        if late or out_of_order:
             self._queue_block_rows(drt, scored, session_id, model_version, flags, {}, late=True)
+            await self._ack_unscored(drt, tick)
             return "late"
 
         prev_conf = drt.engine.confidence
@@ -619,6 +734,8 @@ class DeviceHub:
 
         # arming state machine (§5.4) — behavior alone never blocks
         armed_now = self._arming_step(drt, tl.confidence, learning)
+        if armed_now:
+            self._revoke_update_candidates(drt, t_end, "proactive arming")
 
         # trust_ticks row
         mod_llr = {m: c.llr for m, c in st.per_modality.items()}
@@ -634,7 +751,7 @@ class DeviceHub:
 
         # broadcasts
         self.publish(drt, "trust", tl)
-        await self._agent_trust(drt, tl)
+        await self._agent_trust(drt, tl if tick.run_id == drt.run_id else tl.model_copy(update={"seq": None}))
         top_all: list[DeviationOut] = []
         for i, (b, is_ctx, s) in enumerate(scored):
             drt.last_block_at[b.modality] = b.t_end
@@ -681,6 +798,16 @@ class DeviceHub:
             return False
         window = [p for p in drt.history if 0 < (b.t_end - p.t).total_seconds() <= uc.window_s]
         return len(window) >= 6 and min(p.confidence for p in window) >= uc.min_conf
+
+    def _revoke_update_candidates(self, drt: DeviceRuntime, t_ref: datetime, why: str) -> None:
+        """§5.3: blocks in the REVOKE_S before a proactive arming or a BLOCK_* never feed the safe update loop
+        (the impostor may have been at the keyboard before trust fell)."""
+        self.writer.execute(
+            "UPDATE feature_blocks SET update_candidate = false "
+            "WHERE device_id = $1 AND time >= $2 AND update_candidate",
+            drt.device_id, t_ref - timedelta(seconds=REVOKE_UPDATE_S),
+        )
+        log.info("update candidates revoked for %s (%s)", drt.device_id, why)
 
     def _queue_block_rows(self, drt: DeviceRuntime, scored: list, session_id: UUID | None, model_version: Any,
                           flags: Any, contrib: dict, cand: dict | None = None, late: bool = False) -> None:
@@ -797,6 +924,7 @@ class DeviceHub:
     async def add_marker(self, drt: DeviceRuntime, label: str, t: datetime | None, text: str | None,
                          source: str) -> MarkerPoint:
         t = t or utcnow()
+        text = text[:MARKER_TEXT_MAX] if text else text  # §2.2: capped server-side, whatever the source
         mp = MarkerPoint(t=t, label=label, text=text)
         drt.markers.append(mp)
         self.writer.insert("markers", {"time": t, "device_id": drt.device_id, "session_id": drt.session_id,
@@ -811,7 +939,8 @@ class DeviceHub:
             await self.set_label(drt, "genuine", "a", announce=False)
             self.feed(drt, "marker", f"Takeover ended ({source})", 1)
         elif label == "note":
-            self.feed(drt, "marker", f"Note: {text or ''}")
+            # agent (hotkey) marker text is never echoed; operator notes typed on the dashboard are
+            self.feed(drt, "marker", f"Note: {text or ''}" if source != "hotkey" else "Note (hotkey)")
         self._persist(drt)
         return mp
 
@@ -901,8 +1030,11 @@ class DeviceHub:
     # --- models -----------------------------------------------------------------------------------------
     async def _on_model_activated(self, user_id: UUID, info: ModelInfo) -> None:
         for drt in [d for d in self.devices.values() if d.dev.user_id == user_id]:
+            # §5.4: activation anchors 0.97 only on a device that was enrolling; a device already in monitor
+            # (e.g. a new device of an enrolled user, at 0.30) needs a strong factor instead
+            was_enrolling = drt.dev.mode == "enroll"
             await self.set_mode(drt, "monitor", source=f"model v{info.version}")
-            if drt.label != "impostor" and not drt.dev.locked:
+            if was_enrolling and drt.label != "impostor" and not drt.dev.locked:
                 drt.engine.anchor(self.cfg.anchors.model_activate)
                 tl = self._push_trust(drt, ["model_activated"])
                 await self._agent_trust(drt, tl)
@@ -916,10 +1048,20 @@ class DeviceHub:
     async def _on_model_status(self, user_id: UUID, info: ModelInfo) -> None:
         for drt in [d for d in self.devices.values() if d.dev.user_id == user_id]:
             self.publish(drt, "model", info)
-            if info.status == "failed" or info.error:
+            if info.status == "ready" and info.error:
+                self.feed(drt, "model", f"Retrain refused — v{info.version} kept: {info.error}", 2)
+            elif info.status == "failed" or info.error:
                 self.feed(drt, "model", f"Training failed: {info.error}", 3)
             elif info.status == "training":
                 self.feed(drt, "model", "Training identity model…")
+
+    def recent_strong_verify(self, user_id: UUID, within_s: float = FACTOR_REENROLL_S) -> bool:
+        """A voice VERIFY or TOTP pass on the user's bound device within `within_s` (§5.3 factor rule)."""
+        dev = self.registry.bound_device(user_id)
+        drt = self.rt(dev) if dev is not None else None
+        if drt is None or drt.last_verify_at is None:
+            return False
+        return 0 <= (utcnow() - drt.last_verify_at).total_seconds() <= within_s
 
     def any_open_challenge(self, user_id: UUID) -> bool:
         return any(self.repo_voice.open_for_device(d.device_id) for d in self.devices.values()
@@ -1190,6 +1332,7 @@ class DeviceHub:
             before = drt.engine.confidence
             drt.last_block_event_at = utcnow()
             drt.failed_challenge = True
+            self._revoke_update_candidates(drt, drt.last_block_event_at, decision)
             if row["trigger"] in ("proactive", "step_up") or decision == "TOTP_FAILED":
                 drt.dev.locked, drt.dev.locked_at, drt.dev.lock_reason = True, utcnow(), kind
                 self.registry.save_device(drt.dev)

@@ -31,7 +31,10 @@ def _check_can_train(user_id: UUID) -> None:
 @router.post("/enroll/mode", response_model=OkOut)
 async def enroll_mode(body: EnrollModeIn, p: CurrentPrincipal) -> OkOut:
     dev = _device(p, body.device_id)
-    await rt().hub.set_mode(rt().hub.rt(dev), body.mode, source="dashboard")
+    if body.mode == "enroll" and not p.is_admin and rt().models.scorer(dev.user_id) is not None:
+        # §5.3: enroll-mode blocks become baseline; once a model is active only an admin may reopen enrollment
+        raise HTTPException(403, "an identity model is active: only an admin can switch this device to enroll")
+    await rt().hub.set_mode(rt().hub.rt(dev), body.mode, source="dashboard" if not p.is_admin else "admin")
     return OkOut()
 
 
