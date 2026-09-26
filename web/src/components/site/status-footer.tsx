@@ -25,6 +25,8 @@ const MOCK_STATUS: StatusOut = {
   devices_online: 1,
   elevenlabs: { used_frac: 0.42 },
   inference: null,
+  voice_mode: "stub",
+  model_backend: "twobme_ml",
 };
 
 function Item({ ok, label, hint, className }: { ok: boolean | null; label: string; hint?: string; className?: string }) {

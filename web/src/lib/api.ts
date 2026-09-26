@@ -1,7 +1,9 @@
 // Typed client for the REST API in contracts/api.md. Same-origin (/api), cookie auth, JSON in/out.
 // Every function maps 1:1 to an endpoint; shapes come from the generated contracts.ts.
 import type {
+  AdminActionIn,
   AnomalyRow,
+  AuditRow,
   BaselineOut,
   ChallengeCreateIn,
   ChallengeOut,
@@ -25,10 +27,12 @@ import type {
   Mode,
   ModelInfo,
   OkOut,
+  OrgSeedOut,
   PresenceIn,
   PresenceOut,
   RedteamActiveOut,
   RedteamReport,
+  RosterRow,
   SessionRow,
   StatusOut,
   TigerStats,
@@ -36,6 +40,7 @@ import type {
   TotpVerifyOut,
   TrustSeries,
   VoiceEnrollOut,
+  VoiceDecision,
   VoiceEnrollStartOut,
 } from "./contracts";
 
@@ -210,6 +215,16 @@ export const api = {
   purgeSession: (session_id: string) => post<OkOut>("/demo/purge-session", { session_id }),
   redteamActive: (device_id: string) =>
     get<RedteamActiveOut | null>("/demo/redteam/active-challenge", { device_id }),
+  /** Stub voice only: pick the next outcome for this device's challenges (null clears). Results are flagged simulated. */
+  demoVoiceOutcome: (device_id: string, decision: VoiceDecision | null) =>
+    post<OkOut>("/demo/voice-outcome", { device_id, decision }),
+  demoOrgSeed: (n = 19) => post<OrgSeedOut>("/demo/org/seed", { n }),
+
+  // ---- admin / org panel (§2.4) ----
+  adminRoster: (signal?: AbortSignal) => get<RosterRow[]>("/admin/roster", undefined, signal),
+  adminAudit: (limit = 100, device_id?: string | null, signal?: AbortSignal) =>
+    get<AuditRow[]>("/admin/audit", { limit, device_id }, signal),
+  adminAction: (body: AdminActionIn) => post<AuditRow>("/admin/actions", body),
 
   // ---- health ----
   status: (signal?: AbortSignal) => get<StatusOut>("/status", undefined, signal),

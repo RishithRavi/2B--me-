@@ -22,7 +22,9 @@ export type TransStatus = "Y" | "C" | "N";
 export type Tier = "R0" | "R1" | "R2" | "R3";
 export type AnomalyKind = "trust_drop" | "takeover_suspected" | "voice_spoof" | "voice_impostor" | "lock" | "redteam_tool";
 export type ModelStatus = "none" | "training" | "ready" | "failed";
-export type LiveType = "snapshot" | "trust" | "block_scored" | "context" | "enroll_progress" | "model" | "anomaly" | "challenge" | "voice_stage" | "voice_result" | "decision" | "marker" | "mode" | "lock" | "unlock" | "label" | "presence" | "health" | "feed";
+export type AuditKind = "trust_change" | "alert" | "challenge" | "decision" | "lock" | "admin_action" | "marker" | "model";
+export type AdminActionKind = "lock" | "unlock" | "force_reverify" | "ack_alert" | "note";
+export type LiveType = "snapshot" | "trust" | "block_scored" | "context" | "enroll_progress" | "model" | "anomaly" | "challenge" | "voice_stage" | "voice_result" | "decision" | "marker" | "mode" | "lock" | "unlock" | "label" | "presence" | "health" | "feed" | "audit";
 
 export interface Display {
   w_pt: number;
@@ -404,6 +406,7 @@ export interface ModelInfo {
   learned_since_enroll: number;
   parent_version: number | null;
   error: string | null;
+  backend: string | null;
 }
 
 export interface DecisionIn {
@@ -553,6 +556,7 @@ export interface VoiceResultLive {
   dsp: Record<string, number>;
   findings: string[];
   stage_ms: Record<string, number>;
+  simulated: boolean;
 }
 
 /** Streaming step-up stage (transcribing -> anti-spoof -> speaker -> spectral). */
@@ -622,6 +626,74 @@ export interface Snapshot {
   health: HealthLive | null;
   enrolled_psd: number[] | null;
   recent_blocks: BlockScored[];
+}
+
+/** One device on the admin roster. Org-demo employees (seeded by /demo/org/seed) carry synthetic=True. */
+export interface RosterRow {
+  device_id: string;
+  user_id: string;
+  handle: string;
+  team: string | null;
+  synthetic: boolean;
+  device_label: string;
+  online: boolean;
+  last_seen: string | null;
+  mode: Mode;
+  level: Level;
+  confidence: number | null;
+  display: number | null;
+  locked: boolean;
+  lock_reason: string | null;
+  open_challenge: ChallengeLive | null;
+  model_version: number | null;
+  model_backend: string | null;
+  last_anomaly: AnomalyLive | null;
+  last_anomaly_at: string | null;
+  sparkline: number[];
+  flags: string[];
+}
+
+/** Org audit trail: trust-score changes, alerts, challenges, decisions and admin actions (newGoal). */
+export interface AuditRow {
+  id: string;
+  t: string;
+  kind: AuditKind;
+  device_id: string | null;
+  user_id: string | null;
+  handle: string | null;
+  actor: string;
+  summary: string;
+  severity: number;
+  ref_id: string | null;
+}
+
+export interface AdminActionIn {
+  device_id: string;
+  action: AdminActionKind;
+  anomaly_id?: string | null;
+  text?: string | null;
+}
+
+export interface OrgSeedIn {
+  n?: number;
+}
+
+export interface OrgEmployee {
+  user_id: string;
+  handle: string;
+  team: string;
+  device_id: string;
+  device_token: string;
+}
+
+export interface OrgSeedOut {
+  employees: OrgEmployee[];
+}
+
+/** Stub voice only: the operator picks the next outcome for this device's challenges (None clears). */
+export interface DemoVoiceOutcomeIn {
+  device_id: string;
+  decision?: VoiceDecision | null;
 }
 
 export interface LiveEnvelope {
@@ -750,6 +822,8 @@ export interface StatusOut {
   devices_online: number;
   elevenlabs: Record<string, unknown> | null;
   inference: Record<string, unknown> | null;
+  voice_mode: "stub" | "real" | null;
+  model_backend: string | null;
 }
 
 export interface EvalModality {
@@ -894,7 +968,8 @@ export type LiveEvent =
   | { type: "label"; device_id: string | null; t: string; data: LabelLive }
   | { type: "presence"; device_id: string | null; t: string; data: PresenceLive }
   | { type: "health"; device_id: string | null; t: string; data: HealthLive }
-  | { type: "feed"; device_id: string | null; t: string; data: FeedItem };
+  | { type: "feed"; device_id: string | null; t: string; data: FeedItem }
+  | { type: "audit"; device_id: string | null; t: string; data: AuditRow };
 
 export const SCHEMA_VERSION = 1 as const;
 

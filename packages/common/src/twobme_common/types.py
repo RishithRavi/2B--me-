@@ -522,6 +522,8 @@ class ModelInfo(_Dto):
     learned_since_enroll: int = 0
     parent_version: int | None = None
     error: str | None = None
+    # which scorer trained this version: "twobme_ml" | "fallback" (Sat 18:00, additive)
+    backend: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -688,6 +690,8 @@ class VoiceResultLive(_Dto):
     dsp: dict[str, float] = Field(default_factory=dict)
     findings: list[str] = Field(default_factory=list)
     stage_ms: dict[str, int] = Field(default_factory=dict)
+    # stub voice (VOICE_MODE=stub): a canned or operator-chosen result; the UI must badge it "simulated"
+    simulated: bool = False
 
 
 class VoiceStageLive(_Dto):
@@ -763,10 +767,92 @@ class Snapshot(_Dto):
     recent_blocks: list[BlockScored] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Admin / org panel (§2.4; Sat 18:00, additive)
+# ---------------------------------------------------------------------------
+
+AuditKind = Literal["trust_change", "alert", "challenge", "decision", "lock", "admin_action", "marker", "model"]
+AdminActionKind = Literal["lock", "unlock", "force_reverify", "ack_alert", "note"]
+
+
+class RosterRow(_Dto):
+    """One device on the admin roster. Org-demo employees (seeded by /demo/org/seed) carry synthetic=True."""
+
+    device_id: UUID
+    user_id: UUID
+    handle: str
+    team: str | None = None
+    synthetic: bool = False
+    device_label: str
+    online: bool
+    last_seen: UtcDatetime | None
+    mode: Mode
+    level: Level
+    confidence: float | None
+    display: int | None
+    locked: bool
+    lock_reason: str | None = None
+    open_challenge: ChallengeLive | None = None
+    model_version: int | None = None
+    model_backend: str | None = None
+    last_anomaly: AnomalyLive | None = None
+    last_anomaly_at: UtcDatetime | None = None
+    # last <= 60 tick confidences (5 min at 5 s ticks), oldest first
+    sparkline: list[float] = Field(default_factory=list)
+    # e.g. "takeover_suspected", "insider_drift", "remote_session", "admin_locked", "challenge_open"
+    flags: list[str] = Field(default_factory=list)
+
+
+class AuditRow(_Dto):
+    """Org audit trail: trust-score changes, alerts, challenges, decisions and admin actions (newGoal)."""
+
+    id: UUID
+    t: UtcDatetime
+    kind: AuditKind
+    device_id: UUID | None = None
+    user_id: UUID | None = None
+    handle: str | None = None
+    actor: str  # "system", or the acting admin's handle
+    summary: str
+    severity: int = Field(default=0, ge=0, le=5)
+    ref_id: UUID | None = None  # anomaly / challenge / decision id
+
+
+class AdminActionIn(_Dto):
+    device_id: UUID
+    action: AdminActionKind
+    anomaly_id: UUID | None = None  # ack_alert
+    text: str | None = Field(default=None, max_length=80)  # note
+
+
+class OrgSeedIn(_Dto):
+    n: int = Field(default=19, ge=1, le=40)
+
+
+class OrgEmployee(_Dto):
+    user_id: UUID
+    handle: str
+    team: str
+    device_id: UUID
+    device_token: str
+
+
+class OrgSeedOut(_Dto):
+    employees: list[OrgEmployee]
+
+
+class DemoVoiceOutcomeIn(_Dto):
+    """Stub voice only: the operator picks the next outcome for this device's challenges (None clears).
+    Every result produced this way is flagged simulated=True."""
+
+    device_id: UUID
+    decision: VoiceDecision | None = None
+
+
 LiveType = Literal[
     "snapshot", "trust", "block_scored", "context", "enroll_progress", "model", "anomaly",
     "challenge", "voice_stage", "voice_result", "decision", "marker", "mode", "lock", "unlock",
-    "label", "presence", "health", "feed",
+    "label", "presence", "health", "feed", "audit",
 ]
 
 
@@ -798,6 +884,7 @@ LIVE_PAYLOADS: dict[str, type[BaseModel] | None] = {
     "presence": PresenceLive,
     "health": HealthLive,
     "feed": FeedItem,
+    "audit": AuditRow,
 }
 
 # ---------------------------------------------------------------------------
@@ -924,6 +1011,9 @@ class StatusOut(_Dto):
     devices_online: int
     elevenlabs: dict[str, Any] | None = None
     inference: dict[str, Any] | None = None
+    # Sat 18:00, additive: what is actually running (the UI badges stub voice as simulated)
+    voice_mode: Literal["stub", "real"] | None = None
+    model_backend: str | None = None
 
 
 # ---------------------------------------------------------------------------
