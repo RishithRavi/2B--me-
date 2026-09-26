@@ -7,7 +7,8 @@
 # When Codex 1's fixtures + `twobme-agent replay` land, step 3 also replays genuine_A then impostor_B.
 # MODEL_BACKEND defaults to `fallback` here: the fast synthetic run enrolls 40 ticks, below twobme_ml's gates.
 # `MODEL_BACKEND=auto scripts/core_e2e_local.sh` must pass too (twobme_ml refuses → that job trains the
-# fallback model and the identity card says so).
+# fallback model and the identity card says so). Paced twobme_ml variant (~6 min, real model):
+#   MODEL_BACKEND=twobme_ml E2E_ENROLL_TICKS=110 E2E_ENROLL_INTERVAL=3 scripts/core_e2e_local.sh
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -46,7 +47,8 @@ fi
 
 set +e
 uv run python scripts/core_replay_ticks.py --e2e --api "http://localhost:$PORT" \
-  --password "e2e-a" --admin-token "e2e-admin"
+  --password "e2e-a" --admin-token "e2e-admin" \
+  --enroll-ticks "${E2E_ENROLL_TICKS:-40}" --enroll-interval "${E2E_ENROLL_INTERVAL:-0}"
 rc=$?
 set -e
 if [ "$rc" -ne 0 ]; then echo "--- api log (tail) ---"; tail -60 "$LOG"; fi
