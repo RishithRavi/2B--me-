@@ -19,7 +19,9 @@ blocks, streams them to a Vultr-hosted scorer, and keeps a **continuous trust sc
 person. When someone else takes over the session, trust falls, and a high-risk action (a $2,000
 checkout) steps up to a **voice challenge**. ElevenLabs speaks a fresh phrase, and FFT/DSP features, a
 speaker embedding and a deepfake detector decide VERIFY / BLOCK_IMPOSTOR / BLOCK_SPOOF. Behavior alone
-never blocks. Tiger Data stores the behavior history, baselines and anomalies.
+never blocks. On the laptop itself, an always-on-top overlay shows live trust and takes over the screen
+with the voice check when someone else seems to be at the keyboard; a failed check locks the Mac.
+Tiger Data stores the behavior history, baselines and anomalies.
 
 ```
 agent (PyObjC tap → key classes → evidence blocks) ──wss──▶ FastAPI hub on Vultr ──▶ TrustEngine ──▶ dashboard
@@ -42,7 +44,8 @@ retains it in account history (Zero Retention is enterprise-only). `STT_BACKEND=
 | `contracts/` | frozen contracts: feature spec, trust config, WS/REST docs, schemas, fixtures | Claude |
 | `packages/common` | `twobme_common`: shared pydantic DTOs, spec loader, config | Claude |
 | `server/` | FastAPI hub, policy, Tiger writer/history, auth | Claude (`server/app/voice`: Codex 2) |
-| `web/` | Next.js static site (landing, dashboard, history, lab, shop, verify, enroll) | Claude / Codex 1 / Codex 2 |
+| `web/` | Next.js static site (landing, dashboard, history, lab, shop, verify, enroll, overlay) | Claude / Codex 1 / Codex 2 |
+| `overlay/` | Electron on-laptop overlay: trust pill → full-screen voice check on a suspected takeover → lock screen | Claude |
 | `infra/` | Docker Compose, Caddy, migrations, deploy | Claude |
 | `agent/`, `packages/features`, `packages/ml` | macOS agent, feature extraction, models, TrustEngine | Codex 1 |
 | `packages/hearsay`, `hearsay_submission/` | voice anti-spoof + NSA Hearsay submission | Codex 2 |

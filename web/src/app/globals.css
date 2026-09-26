@@ -276,3 +276,20 @@
     scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent;
   }
 }
+
+/* ---- /overlay (Electron shell): transparent page, no site chrome ---- */
+html.overlay-mode,
+html.overlay-mode body {
+  background: transparent !important;
+  overflow: hidden;
+}
+html.overlay-mode main {
+  padding-bottom: 0 !important;
+}
+.overlay-drag {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.overlay-no-drag {
+  -webkit-app-region: no-drag;
+}

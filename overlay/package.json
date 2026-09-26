@@ -1,0 +1,20 @@
+{
+  "name": "twobme-overlay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "2bME on-laptop overlay: always-on-top trust pill, full-screen voice check on a suspected takeover, lock screen",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "start": "tsc -p . && env -u ELECTRON_RUN_AS_NODE electron .",
+    "dev": "tsc -p . && env -u ELECTRON_RUN_AS_NODE electron . --dev --url=http://localhost:3000",
+    "test": "tsc -p . && node --test dist/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "electron": "44.4.5",
+    "typescript": "^5"
+  },
+  "packageManager": "pnpm@12.6.0"
+}

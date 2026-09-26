@@ -27,3 +27,11 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   15 min, history endpoints round-trip, `/enroll/train?source=tiger` reaches `ready`. Queue A2 checked off. Next: item 4
   (walking skeleton deploy) still needs VM/DNS/Caddy step 0 + real `TIGER_DATABASE_URL`/secrets in the VM `.env` (never
   committed) before `infra/deploy.sh`.
+- 14:35 · Claude · **User decision: Electron on-laptop overlay** (kept the site). `overlay/` (Electron 44 shell) + `/overlay` page:
+  pill (live trust) → full-screen voice check when a challenge arms (snoozable; behavior alone never blocks) → lock screen on
+  BLOCK_* → owner signs in + voice unlock → pill. Verified against the real backend (headless for full-screen modes; the
+  Electron pill ran on the dev Mac). BLOCK_* now also closes the revoked user's /ws/live sockets. IMPLEMENTATION.md §6 A6 added.
+- 14:42 · Claude (main checkout) · merged `ws-core` → `main` (cfdb2e8): re-ran the merge gate myself (not just taking the
+  ws-core session's word) — `check_privacy.sh` ok, `gate.sh core` all green (contracts/server/web/overlay), then
+  `core_e2e_local.sh` 20/20. Reviewed `overlay/src/main.ts`/`preload.ts` for the privacy boundary: sandboxed, no Node
+  integration, no input capture, mic permission scoped to same-origin only — clean. Not pushed to origin yet.

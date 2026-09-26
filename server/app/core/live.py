@@ -68,6 +68,20 @@ class LiveBus:
             if s.is_admin or (owner_id is not None and s.user_id == owner_id):
                 s.offer(msg)
 
+    def close_user(self, user_id: UUID, code: int = 4401, reason: str = "session revoked") -> int:
+        """Close every non-admin /ws/live socket of a user (their sessions were revoked by a BLOCK_*)."""
+        n = 0
+        for s in list(self.subs):
+            if s.user_id == user_id and not s.is_admin:
+                n += 1
+                asyncio.create_task(self._close(s, code, reason))
+        return n
+
+    async def _close(self, sub: Subscriber, code: int, reason: str) -> None:
+        with contextlib.suppress(Exception):
+            await asyncio.sleep(0.2)  # let the queued lock/trust events flush first
+            await sub.ws.close(code=code, reason=reason)
+
     def send_to(self, sub: Subscriber, type_: str, device_id: UUID | None, data: BaseModel | dict | None) -> None:
         sub.offer(envelope(type_, device_id, data))
 

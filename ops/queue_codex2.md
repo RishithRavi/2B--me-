@@ -37,3 +37,7 @@ If blocked → `contracts/REQUESTS.md` → next item.
 - `client_prompt_end_ms` = ms from recorder start (mic open) to the prompt's `ended` event. The WAV already starts at prompt
   end — don't trim by it (contracts/CHANGELOG.md).
 - Answers to your REQUESTS.md items are in `contracts/REQUESTS.md` (rank offset −0.5, `mfcc_mean vector(20)`, precedence OK).
+- **Overlay (14:30 ET, user decision):** `/overlay` (Claude, `web/src/components/overlay/`) embeds the voice check in an Electron
+  window on A's Mac. It currently imports `ChallengeFlow` from `web/src/components/verify-stub/`. When your
+  `web/src/components/voice/ChallengeFlow` lands, keep it embeddable (no page-level layout, works on a transparent/dim
+  background, no autoplay — one "Start voice check" gesture) and tell Claude in STATUS.md so the overlay switches imports.

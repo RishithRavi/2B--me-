@@ -57,6 +57,12 @@ else
   skip "web" "web/node_modules missing (cd web && corepack pnpm i)"
 fi
 
+if [ -d overlay/node_modules ]; then
+  step "overlay typecheck + tests" bash -c "cd overlay && corepack pnpm run test"
+else
+  skip "overlay" "overlay/node_modules missing (cd overlay && corepack pnpm i)"
+fi
+
 if [ "${GATE_SKIP_E2E:-0}" = "1" ]; then
   skip "e2e" "GATE_SKIP_E2E=1"
 elif ! docker info >/dev/null 2>&1; then

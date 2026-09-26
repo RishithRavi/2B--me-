@@ -33,3 +33,7 @@ If blocked → `contracts/REQUESTS.md` → next item.
 - Presence: `POST /api/web/presence {buckets, client_now_ms: Date.now()}` (the server corrects browser clock offset).
 - Test harness showing the exact flows: `server/tests/test_flows.py`.
 - Post-CP0 additive: `TickFlags.rtt_ms` (optional) — put the lowest-RTT `clock_ping` sample (ms) of the last 8 in every tick.
+- **Overlay (14:30 ET, user decision):** an Electron overlay (`overlay/`, Claude) now shows trust on A's Mac and takes over the
+  screen with the voice check when a challenge arms; a failed check shows a lock screen. It holds `/ws/live`, so
+  `AgentChallenge.open_browser` will be false while it runs — keep the `challenge`/`lock`/`unlock` handling as notifications only.
+  Don't bind the agent's hotkeys to ⌃⌥⌘⇧Q (overlay escape hatch).
