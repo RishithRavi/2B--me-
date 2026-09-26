@@ -108,6 +108,20 @@ export function isTerminal(status: ChallengeStatus): boolean {
   return TERMINAL.has(status);
 }
 
+/**
+ * Lock reasons as the hub writes them: LockLive.reason, and the `reasons` of the trust event it pushes right BEFORE
+ * the `lock` event (hub._blocked, admin_lock). Reading them off that trust event keeps the row from rendering as an
+ * unexplained lock between the two frames.
+ */
+export const LOCK_REASONS: readonly string[] = ["admin_lock", "voice_spoof", "voice_impostor", "lock"];
+
+/** Trust pushes that server-side actions cause; they say nothing about whether the agent is online. */
+const NON_PRESENCE_REASONS: readonly string[] = ["admin_lock", "admin_unlock"];
+
+export function lockReasonFrom(reasons: readonly string[] | null | undefined): string | null {
+  return reasons?.find((r) => LOCK_REASONS.includes(r)) ?? null;
+}
+
 /** TrustState.t is epoch seconds of the tick end; fall back to the envelope time. */
 function trustTime(data: TrustLive, envT: string): string {
   if (Number.isFinite(data.t) && data.t > 1e9) return new Date(data.t * 1000).toISOString();
@@ -202,15 +216,24 @@ export function applyOrg(prev: OrgState, ev: LiveEvent, receivedAt: number = Dat
       return patchRow(prev, ev.device_id, receivedAt, (row) => {
         const confidence = d.confidence;
         const locked = Boolean(d.locked);
-        const flags = locked ? row.flags : setFlag(row.flags, "admin_locked", false);
+        // The hub pushes trust(locked, reasons=[kind]) before the `lock` event: take the reason from it, so an admin's
+        // own lock never renders (or toasts) as an unexplained lock in between. A reason already on a locked row wins.
+        const inferred = lockReasonFrom(d.reasons);
+        const lockReason = !locked ? null : row.locked && row.lock_reason ? row.lock_reason : (inferred ?? row.lock_reason);
+        const flags = !locked
+          ? setFlag(row.flags, "admin_locked", false)
+          : lockReason === "admin_lock"
+            ? setFlag(row.flags, "admin_locked", true)
+            : row.flags;
+        const presence = !d.reasons?.some((r) => NON_PRESENCE_REASONS.includes(r));
         return {
           ...row,
-          online: true,
-          last_seen: trustTime(d, ev.t),
+          online: presence ? true : row.online,
+          last_seen: presence ? trustTime(d, ev.t) : row.last_seen,
           confidence,
           display: trustDisplay(confidence),
           locked,
-          lock_reason: locked ? row.lock_reason : null,
+          lock_reason: lockReason,
           level: rowLevel({ locked, mode: row.mode, confidence, level: d.level }),
           sparkline: [...row.sparkline, confidence].slice(-SPARK_MAX),
           flags,
@@ -401,6 +424,14 @@ export function levelDrops(prev: ReadonlyMap<string, Level> | null, rows: readon
     if (bad && from !== "locked") out.push({ row: r, from, to: r.level });
   }
   return out;
+}
+
+/**
+ * The drops that raise an alert toast. An admin lock is the admin's own action (it gets a success toast and an audit
+ * row), not an alert.
+ */
+export function alertingDrops(drops: readonly LevelDrop[]): LevelDrop[] {
+  return drops.filter((d) => !(d.to === "locked" && d.row.lock_reason === "admin_lock"));
 }
 
 export const AUDIT_KINDS: readonly AuditKind[] = [

@@ -18,6 +18,7 @@ import type { AdminActionIn, Level } from "@/lib/contracts";
 import { useNow } from "@/lib/hooks";
 import {
   ackedRefs,
+  alertingDrops,
   alertRows,
   levelDrops,
   orgKpis,
@@ -147,8 +148,7 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
     if (preview || !state.loaded || state.rows.length === 0) return;
     const drops = levelDrops(prevLevels.current, state.rows);
     prevLevels.current = new Map(state.rows.map((r) => [r.device_id, r.level]));
-    // An admin lock is the admin's own action (it gets a success toast and an audit row), not an alert.
-    const alerting = drops.filter((d) => !(d.to === "locked" && d.row.lock_reason === "admin_lock"));
+    const alerting = alertingDrops(drops);
     for (const d of alerting.slice(0, 3)) {
       const r = d.row;
       const title = d.to === "locked" ? `${r.handle} locked` : `${r.handle} dropped to ${r.display ?? "—"}% · ${levelLabel(r.level)}`;

@@ -95,11 +95,15 @@ const TAKEOVER_SIGNATURE: [string, number][] = [
   ["ms.curv_p50", 2.6],
   ["kb.hold_p50", -2.2],
 ];
+// Identity models score keyboard, mouse and scroll only (twobme_ml ACTIVE_MODALITIES; workflow and temporal were
+// retired), so the drift is told in those signals too: more hesitation, not a different pair of hands.
 const INSIDER_SIGNATURE: [string, number][] = [
-  ["wf.switch_rate", 2.3],
-  ["wf.app_dwell_p50", -1.9],
-  ["tp.idle_frac", -1.6],
+  ["kb.pause_rate", 2.3],
+  ["ms.pre_click_pause_p50", 1.9],
+  ["kb.bksp_rate", 1.6],
 ];
+/** The modalities a live identity model scores (twobme_ml ACTIVE_MODALITIES). */
+export const ACTIVE_MODALITIES = ["keyboard", "mouse", "scroll"] as const;
 
 function fmtDevs(devs: DeviationOut[]): string {
   return devs.map((d) => `${d.label} ${d.z >= 0 ? "+" : "−"}${Math.abs(d.z).toFixed(1)}σ`).join(", ");
@@ -441,7 +445,11 @@ class Sim implements OrgSim {
     return row;
   }
 
-  private emitTrust(out: LiveEvent[], e: Emp, now: number, deltaL: number) {
+  /**
+   * A trust push. `reasons` given = a push the hub makes for a server-side action (hub._push_trust with [kind] right
+   * before `lock`, or ["admin_unlock"] right after `unlock`); only agent ticks and in-session pushes prove presence.
+   */
+  private emitTrust(out: LiveEvent[], e: Emp, now: number, deltaL: number, reasons?: string[]) {
     const confidence = sigmoid(e.L);
     const data: TrustLive = {
       t: now / 1000,
@@ -451,13 +459,15 @@ class Sim implements OrgSim {
       display: trustDisplay(confidence),
       level: rowLevel({ locked: e.locked, mode: e.mode, confidence }),
       per_modality: {},
-      reasons: e.compromised ? ["behavior_drift"] : [],
+      reasons: reasons ?? (e.compromised ? ["behavior_drift"] : []),
       seq: ++e.seq,
       locked: e.locked,
     };
     e.spark = [...e.spark, confidence].slice(-SPARK_MAX);
-    e.online = true;
-    e.lastSeen = now;
+    if (!reasons?.some((r) => r === "admin_lock" || r === "admin_unlock")) {
+      e.online = true;
+      e.lastSeen = now;
+    }
     out.push({ type: "trust", device_id: e.device_id, t: iso(now), data });
   }
 
@@ -594,8 +604,8 @@ class Sim implements OrgSim {
             job_id: null,
             version: 1,
             trained_at: iso(now),
-            n_blocks: { keyboard: 184, mouse: 142, scroll: 38, workflow: 31, temporal: 24 },
-            enabled_modalities: ["keyboard", "mouse", "scroll", "workflow", "temporal"],
+            n_blocks: { keyboard: 184, mouse: 142, scroll: 38 },
+            enabled_modalities: [...ACTIVE_MODALITIES],
             metrics: {},
             headline_medians: {},
             learned_since_enroll: 0,
@@ -604,7 +614,7 @@ class Sim implements OrgSim {
             backend: "twobme_ml",
           };
           out.push({ type: "model", device_id: e.device_id, t: iso(now), data: model });
-          this.emitAudit(out, e, now, "model", "Enrollment complete → identity model v1 trained on 419 blocks · monitoring at 97%", 1);
+          this.emitAudit(out, e, now, "model", "Enrollment complete → identity model v1 trained on 364 blocks · monitoring at 97%", 1);
           this.emitTrust(out, e, now, 0);
         }
         break;
@@ -683,6 +693,8 @@ class Sim implements OrgSim {
     e.locked = true;
     e.lockReason = spoof ? "voice_spoof" : "voice_impostor"; // the hub's own lock reasons (hub._blocked)
     this.setFlag(e, "admin_locked", false);
+    // Hub order (hub._blocked): trust(locked, reasons=[kind]) first, then the lock event.
+    this.emitTrust(out, e, now, 0, [e.lockReason]);
     out.push({ type: "lock", device_id: e.device_id, t: iso(now), data: { reason: e.lockReason } });
     this.emitAudit(
       out,
@@ -735,7 +747,7 @@ class Sim implements OrgSim {
         0.93,
         conf,
         devs,
-        "Slow, sustained drift over 25 minutes in workflow rhythm rather than a sudden change of hands: the insider-threat pattern.",
+        "Slow, sustained drift over 25 minutes in typing and pointer rhythm (more pauses, more hesitation before clicks) rather than a sudden change of hands: the insider-threat pattern.",
       );
       this.emitAnomaly(out, e, now);
       this.emitAudit(out, e, now, "alert", `Insider drift: 25 min of sustained deviation · ${fmtDevs(devs)} — no takeover signature, review activity`, 3, "system", e.anomaly?.id ?? null);
@@ -792,6 +804,8 @@ class Sim implements OrgSim {
         e.locked = true;
         e.lockReason = "admin_lock";
         this.setFlag(e, "admin_locked", true);
+        // Hub order (routers/admin.py admin_lock): trust(locked, reasons=["admin_lock"]) first, then the lock event.
+        this.emitTrust(out, e, now, 0, ["admin_lock"]);
         out.push({ type: "lock", device_id: e.device_id, t: iso(now), data: { reason: "admin_lock" } });
         row = this.emitAudit(out, e, now, "admin_action", "Admin lock: device locked pending review (trust pinned)", 4, actor);
         break;
@@ -803,6 +817,7 @@ class Sim implements OrgSim {
         e.lockReason = null;
         this.setFlag(e, "admin_locked", false);
         out.push({ type: "unlock", device_id: e.device_id, t: iso(now), data: {} });
+        this.emitTrust(out, e, now, 0, ["admin_unlock"]); // hub order: unlock, then trust(["admin_unlock"])
         row = this.emitAudit(out, e, now, "admin_action", "Cleared the admin lock", 1, actor);
         break;
       }

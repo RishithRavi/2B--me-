@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { createOrgSim, ORG_SIZE, STEP_MS } from "./admin-mock";
-import { FEATURE_SPEC, type LiveEvent, type RosterRow } from "./contracts";
-import { AUDIT_KINDS, applyOrg, initialOrgState, mergeAudit, mergeRoster, rowLevel, trustDisplay, type OrgState } from "./org-live";
+import { ACTIVE_MODALITIES, createOrgSim, ORG_SIZE, STEP_MS } from "./admin-mock";
+import { FEATURE_SPEC, type Level, type LiveEvent, type RosterRow } from "./contracts";
+import {
+  AUDIT_KINDS,
+  alertingDrops,
+  applyOrg,
+  initialOrgState,
+  levelDrops,
+  mergeAudit,
+  mergeRoster,
+  rowLevel,
+  trustDisplay,
+  type LevelDrop,
+  type OrgState,
+} from "./org-live";
 
 const T0 = Date.UTC(2026, 8, 27, 14, 0, 0);
 
@@ -90,6 +102,26 @@ describe("org simulation: consistency", () => {
     }
   });
 
+  it("only tells stories the live identity model can produce (keyboard, mouse and scroll)", () => {
+    const { events, sim } = run(3, 200);
+    const devs = [
+      ...events.flatMap((e) => (e.type === "anomaly" ? e.data.top_features : [])),
+      ...sim.roster().flatMap((r) => r.last_anomaly?.top_features ?? []),
+      ...createOrgSim({ now: T0 }).roster().flatMap((r) => r.last_anomaly?.top_features ?? []),
+    ];
+    const insider = byHandle(sim.roster(), "Employee 13").last_anomaly;
+    expect(insider?.top_features.length).toBeGreaterThan(0);
+    for (const d of devs) expect(d.feature, d.feature).toMatch(/^(kb|ms|sc)\./);
+    const text = [...events.flatMap((e) => (e.type === "anomaly" ? [e.data.explanation ?? ""] : [])), ...sim.audit().map((r) => r.summary)].join("\n");
+    expect(text).not.toMatch(/workflow|temporal|app switch|idle/i);
+    const models = events.flatMap((e) => (e.type === "model" ? [e.data] : []));
+    expect(models.length).toBeGreaterThan(0);
+    for (const m of models) {
+      expect(m.enabled_modalities).toEqual([...ACTIVE_MODALITIES]);
+      expect(Object.keys(m.n_blocks).sort()).toEqual([...ACTIVE_MODALITIES].sort());
+    }
+  });
+
   it("starts with a varied, ordered audit trail", () => {
     const audit = createOrgSim({ now: T0 }).audit();
     const kinds = new Set(audit.map((r) => r.kind));
@@ -174,9 +206,13 @@ describe("org simulation: admin actions", () => {
     const e01 = byHandle(sim.roster(), "Employee 01");
     const { row, events } = sim.act({ device_id: e01.device_id, action: "lock" }, T0 + 1000, "tester");
     expect(row).toMatchObject({ kind: "admin_action", actor: "tester", handle: "Employee 01", severity: 4 });
-    expect(events.map((e) => e.type)).toEqual(["lock", "audit"]);
+    // Hub order (routers/admin.py): trust(locked, ["admin_lock"]) before the lock event.
+    expect(events.map((e) => e.type)).toEqual(["trust", "lock", "audit"]);
+    const push = events[0];
+    expect(push.type === "trust" && push.data).toMatchObject({ locked: true, reasons: ["admin_lock"] });
     expect(byHandle(sim.roster(), "Employee 01")).toMatchObject({ locked: true, level: "locked", flags: ["admin_locked"] });
-    sim.act({ device_id: e01.device_id, action: "unlock" }, T0 + 2000, "tester");
+    const cleared = sim.act({ device_id: e01.device_id, action: "unlock" }, T0 + 2000, "tester");
+    expect(cleared.events.map((e) => e.type)).toEqual(["unlock", "trust", "audit"]);
     expect(byHandle(sim.roster(), "Employee 01")).toMatchObject({ locked: false, flags: [] });
 
     // Let 07 get blocked, then try to clear its voice lock.
@@ -224,6 +260,15 @@ describe("reducer parity with the simulation", () => {
         for (const ev of sim.act({ device_id: e05, action: "lock" }, now, "t").events) s = applyOrg(s, ev, now);
       }
       if (k === 60) for (const ev of sim.act({ device_id: e13, action: "force_reverify" }, now, "t").events) s = applyOrg(s, ev, now);
+      // An admin lock and unlock of an offline device must not bring it online.
+      if (k === 70 || k === 90) {
+        const e18 = byHandle(sim.roster(), "Employee 18").device_id;
+        for (const ev of sim.act({ device_id: e18, action: k === 70 ? "lock" : "unlock" }, now, "t").events) s = applyOrg(s, ev, now);
+      }
+      if (k === 100) {
+        const e05 = byHandle(sim.roster(), "Employee 05").device_id;
+        for (const ev of sim.act({ device_id: e05, action: "unlock" }, now, "t").events) s = applyOrg(s, ev, now);
+      }
       for (const ev of sim.step(now)) s = applyOrg(s, ev, now);
     }
     const truth = sim.roster();
@@ -245,8 +290,36 @@ describe("reducer parity with the simulation", () => {
       flags: r.flags.filter((f) => f !== "insider_drift"),
     });
     expect(s.rows.map(pick)).toEqual(truth.map(pick));
+    expect(byHandle(s.rows, "Employee 18").online).toBe(false);
     // Every audit row the simulation logged arrived through the stream.
     const ids = new Set(s.audit.map((r) => r.id));
     for (const r of sim.audit()) expect(ids.has(r.id)).toBe(true);
+  });
+
+  it("toasts the voice lock with its reason and never the admin's own lock, event by event", () => {
+    const sim = createOrgSim({ seed: 5, now: T0 });
+    let s: OrgState = mergeRoster(initialOrgState(), sim.roster(), T0);
+    let prev: Map<string, Level> = new Map(s.rows.map((r) => [r.device_id, r.level]));
+    const toasts: LevelDrop[] = [];
+    // Each websocket frame can render on its own: check the drops after every single event.
+    const feed = (events: LiveEvent[], now: number) => {
+      for (const ev of events) {
+        s = applyOrg(s, ev, now);
+        toasts.push(...alertingDrops(levelDrops(prev, s.rows)));
+        prev = new Map(s.rows.map((r) => [r.device_id, r.level]));
+      }
+    };
+    const e02 = byHandle(sim.roster(), "Employee 02").device_id;
+    for (let k = 1; k <= 30; k++) {
+      const now = T0 + k * STEP_MS;
+      if (k === 4) feed(sim.act({ device_id: e02, action: "lock" }, now, "t").events, now);
+      feed(sim.step(now), now);
+    }
+    expect(byHandle(s.rows, "Employee 02")).toMatchObject({ locked: true, lock_reason: "admin_lock" });
+    expect(toasts.some((d) => d.row.handle === "Employee 02")).toBe(false);
+    const locked07 = toasts.filter((d) => d.row.handle === "Employee 07" && d.to === "locked");
+    expect(locked07).toHaveLength(1);
+    expect(locked07[0].row.lock_reason).toBe("voice_spoof");
+    for (const d of toasts) if (d.to === "locked") expect(d.row.lock_reason).not.toBeNull();
   });
 });

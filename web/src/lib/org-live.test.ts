@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuditRow, LiveEvent, RosterRow, TrustLive } from "./contracts";
 import {
   ackedRefs,
+  alertingDrops,
   alertRows,
   applyOrg,
   auditCsv,
@@ -150,6 +151,53 @@ describe("applyOrg", () => {
     // A locked device's ticks keep it locked (the hub pins L).
     s = applyOrg(s, trust(0.2, { locked: true }));
     expect(s.rows[0]).toMatchObject({ locked: true, level: "locked", lock_reason: "voice_spoof" });
+  });
+
+  it("reads the lock reason off the trust push the hub sends before `lock` (no unexplained lock, no admin-lock toast)", () => {
+    const lock = (reason: string): LiveEvent => ({ type: "lock", device_id: DEV, t: new Date(T0).toISOString(), data: { reason } });
+    const levels = (st: OrgState) => new Map(st.rows.map((r) => [r.device_id, r.level]));
+
+    // routers/admin.py admin_lock: trust(locked, ["admin_lock"]) → lock("admin_lock"), rendered frame by frame.
+    let s = state([row({ confidence: 0.3, display: 30, level: "suspicious" })]);
+    let prev = levels(s);
+    s = applyOrg(s, trust(0.05, { locked: true, reasons: ["admin_lock"] }));
+    expect(s.rows[0]).toMatchObject({ locked: true, level: "locked", lock_reason: "admin_lock", flags: ["admin_locked"] });
+    const drops = levelDrops(prev, s.rows);
+    expect(drops).toHaveLength(1);
+    expect(alertingDrops(drops)).toEqual([]);
+    prev = levels(s);
+    s = applyOrg(s, lock("admin_lock"));
+    expect(s.rows[0]).toMatchObject({ lock_reason: "admin_lock", flags: ["admin_locked"] });
+    expect(levelDrops(prev, s.rows)).toEqual([]);
+
+    // hub._blocked: trust(locked, ["voice_spoof"]) → lock("voice_spoof"); the toast carries the reason.
+    s = state([row({ confidence: 0.3, display: 30, level: "suspicious" })]);
+    prev = levels(s);
+    s = applyOrg(s, trust(0.05, { locked: true, reasons: ["voice_spoof"] }));
+    expect(s.rows[0]).toMatchObject({ locked: true, level: "locked", lock_reason: "voice_spoof", flags: [] });
+    const voice = alertingDrops(levelDrops(prev, s.rows));
+    expect(voice).toHaveLength(1);
+    expect(voice[0].row.lock_reason).toBe("voice_spoof");
+
+    // A reason already on a locked row is kept; unrelated reasons never invent one.
+    s = applyOrg(s, trust(0.05, { locked: true, reasons: ["admin_lock"] }));
+    expect(s.rows[0].lock_reason).toBe("voice_spoof");
+    const bare = applyOrg(state(), trust(0.05, { locked: true, reasons: ["behavior_drift"] }));
+    expect(bare.rows[0]).toMatchObject({ locked: true, level: "locked", lock_reason: null });
+    // An admin unlock's trust push clears the lock and the admin flag.
+    const cleared = applyOrg(applyOrg(state(), lock("admin_lock")), trust(0.9, { locked: false, reasons: ["admin_unlock"] }));
+    expect(cleared.rows[0]).toMatchObject({ locked: false, lock_reason: null, flags: [], level: "normal" });
+  });
+
+  it("does not mark an offline device online from an admin lock or unlock push", () => {
+    const seen = new Date(T0 - 42 * 60_000).toISOString();
+    let s = state([row({ online: false, last_seen: seen })]);
+    s = applyOrg(s, trust(0.9, { locked: true, reasons: ["admin_lock"] }));
+    expect(s.rows[0]).toMatchObject({ online: false, last_seen: seen, locked: true });
+    s = applyOrg(s, trust(0.9, { locked: false, reasons: ["admin_unlock"] }));
+    expect(s.rows[0]).toMatchObject({ online: false, last_seen: seen, locked: false });
+    s = applyOrg(s, trust(0.9));
+    expect(s.rows[0].online).toBe(true);
   });
 
   it("tracks the open challenge and clears the takeover flag on VERIFY", () => {
