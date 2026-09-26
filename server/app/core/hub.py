@@ -83,6 +83,14 @@ from twobme_common.types import (
 log = logging.getLogger("twobme.hub")
 
 HISTORY_S = 600
+# server-side feed lines for challenge status changes (armed/verified/blocked are fed elsewhere)
+CHALLENGE_FEED = {
+    "prompt_ended": ("Voice prompt played ({trigger}) — recording reply", 1),
+    "retry": ("Voice check retry — attempt {attempt}, fresh phrase", 2),
+    "fallback_mfa": ("Voice gray zone — TOTP fallback (90 s)", 2),
+    "expired": ("Voice challenge expired ({trigger})", 2),
+    "cancelled": ("Voice challenge cancelled ({trigger})", 1),
+}
 TERMINAL = {"verified", "blocked_spoof", "blocked_impostor", "expired", "cancelled"}
 
 
@@ -761,6 +769,9 @@ class DeviceHub:
             "challenge_id": challenge_id, "explanation": None, "resolution": resolution,
         })
         self.publish(drt, "anomaly", a)
+        if drt is not None:
+            why = f" — {a.top_features[0].label} {a.top_features[0].z:+.1f}σ" if a.top_features else ""
+            self.feed(drt, "anomaly", f"Anomaly: {kind.replace('_', ' ')} (severity {severity}){why}", min(severity, 5))
         if self.explainer is not None:
             asyncio.create_task(self._explain(drt, a, t))
         return a
@@ -1070,6 +1081,10 @@ class DeviceHub:
                            expires_at=row.get("expires_at"), verify_url=self.s.verify_url(challenge_id))
         if drt is not None:
             self.publish(drt, "challenge", cl)
+            line = CHALLENGE_FEED.get(status)
+            if line and row["trigger"] not in ("redteam", "sandbox"):
+                self.feed(drt, "challenge", line[0].format(trigger=row["trigger"].replace("_", "-"), attempt=attempt),
+                          line[1])
             if status == "fallback_mfa":
                 deadline = time.monotonic() + self.cfg.resolution.mfa_timeout_s
                 for rec in self.decisions.values():
