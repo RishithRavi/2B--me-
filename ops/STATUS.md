@@ -228,3 +228,15 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   consented calibration data remain required. Runtime setup and behavior are in
   server/app/voice/README.md. Requesting Claude's merge review after the passing
   gate; no deployment or direct main push.
+- 19:05 · Claude · **Integration + visual-completeness build round.**
+  - **Merged into ws-core:**
+    - `ml-wider-gap-13wf`: CONTRACT enroll_gate 20→13, enroll import fix, detector v2, fixture tolerance.
+    - `ws-voice` 82c23ba: Codex 2's calibrated pipeline and demo stub mode. `voice_test.sh` 124 pass.
+  - **Additive contracts (66d04ff):** admin/org DTOs, `/admin/*`, `/ws/live?scope=org`, `/demo/org/seed`, `/demo/voice-outcome`, the
+    `simulated` flag, and `StatusOut.voice_mode/model_backend`. Web: tsc clean, 44/44 vitest; jsdom added.
+  - **Build tracks in worktrees `b-*`,** each reviewed and fixed before I merge them:
+    - server-core: MODEL_BACKEND, tick robustness, deps, §5.3 fixes, privacy;
+    - server-org: roster, audit, actions, org WS, org seed, stub-voice control, `core_org_demo.py`;
+    - web-admin;
+    - web-landing (+ /lab, README);
+    - web-overlay (+ stage view, presence mount).

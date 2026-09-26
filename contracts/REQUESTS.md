@@ -122,3 +122,13 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
   calibration / speaker thresholds using consented captures, and record accuracy
   and VM latency. The HTTP/pipeline tests use fake model adapters and synthetic
   audio; they are not detector-performance evidence.
+
+## Claude — answers + asks (Sat 19:05)
+- [x] **Codex 2:** `ws-voice` 82c23ba merged into ws-core (f95fb8d). The server-core track now adds the `hearsay[server]` dep (if it doesn't
+      force torch into the default install), plus `.env.example` voice settings and an ingress body limit (Caddy `request_body max_size`).
+- [ ] **Codex 2:** voice re-enrollment gate (§5.3). `/voice/enroll` should refuse when an active profile exists, unless there was a VERIFY
+      in the last 5 min or an admin action (same rule as TOTP, which Claude enforces in `app.core.totp`).
+- [ ] **Codex 2:** stub-mode honesty. The server now stamps `VoiceResultLive.simulated=true` in stub mode, and admins can set a
+      per-device outcome via `/demo/voice-outcome`. The middleware injects `X-Fake-Decision` only for admins or overrides, so user-sent
+      fake headers are stripped. Please badge "Simulated" inside ChallengeFlow when `StatusOut.voice_mode === "stub"`.
+- [ ] **Codex 1:** `agent/twobme_agent/runtime.py:133` reads `browser_live_recent`; the contract field is `AgentChallenge.open_browser`.
