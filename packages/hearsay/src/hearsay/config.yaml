@@ -1,0 +1,23 @@
+# Provisional values from IMPLEMENTATION.md; Person A must confirm official rules.
+rules_confirmed: false
+submission:
+  direction: null
+  template: null
+  team_filename: null
+  header: true
+  rank_offset: 0.5
+  score_min: null
+  score_max: null
+metrics:
+  a: {p_synth: 0.3, cost_real_flagged: 4.0, cost_synth_missed: 1.0}
+  b: {p_synth: 0.05, cost_real_flagged: 4.0, cost_synth_missed: 1.0}
+runtime:
+  architecture: null
+  gpu_allowed: null
+  network_allowed: null
+  time_limit_seconds: null
+  memory_limit_mb: null
+models:
+  primary: Speech-Arena-2025/DF_Arena_500M_V_1
+  fallback: garystafford/wav2vec2-deepfake-voice-detector
+  revision: null
