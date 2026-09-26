@@ -50,8 +50,8 @@ fi
 if [ "${GATE_SKIP_WEB:-0}" = "1" ]; then
   skip "web" "GATE_SKIP_WEB=1"
 elif [ -d web/node_modules ]; then
-  step "web typecheck" bash -c "cd web && corepack pnpm -s typecheck"
-  step "web tests" bash -c "cd web && corepack pnpm -s test"
+  step "web typecheck" bash -c "cd web && corepack pnpm run typecheck"
+  step "web tests" bash -c "cd web && corepack pnpm run test"
 else
   skip "web" "web/node_modules missing (cd web && corepack pnpm i)"
 fi

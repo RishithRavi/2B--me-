@@ -595,6 +595,7 @@ export interface HealthLive {
   voice_warm: boolean;
   elevenlabs_quota: number | null;
   activity: number[];
+  last_tick_json: Record<string, unknown> | null;
 }
 
 export interface FeedItem {

@@ -731,6 +731,8 @@ class HealthLive(_Dto):
     voice_warm: bool = False
     elevenlabs_quota: float | None = None  # fraction used, amber at 0.8
     activity: list[int] = Field(default_factory=list)
+    # the literal last tick payload ("What left this laptop"); set on per-tick health events
+    last_tick_json: dict[str, Any] | None = None
 
 
 class FeedItem(_Dto):

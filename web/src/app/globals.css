@@ -1,0 +1,278 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * 2bME design system: a refined "security operations console".
+ * Dark-first: <html class="dark"> is the default (layout.tsx); `.light` or a stored preference flips it.
+ * Without JS, prefers-color-scheme decides.
+ *
+ * Semantic tokens:
+ *   --trust-{normal,watch,suspicious,locked,learning}   trust level colors
+ *   --mod-{keyboard,mouse,scroll,workflow,temporal}      per-modality colors (categorical, CVD-validated order)
+ */
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-grid: var(--grid);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+
+  --color-trust-normal: var(--trust-normal);
+  --color-trust-watch: var(--trust-watch);
+  --color-trust-suspicious: var(--trust-suspicious);
+  --color-trust-locked: var(--trust-locked);
+  --color-trust-learning: var(--trust-learning);
+
+  --color-mod-keyboard: var(--mod-keyboard);
+  --color-mod-mouse: var(--mod-mouse);
+  --color-mod-scroll: var(--mod-scroll);
+  --color-mod-workflow: var(--mod-workflow);
+  --color-mod-temporal: var(--mod-temporal);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --animate-pulse-dot: pulse-dot 1.8s ease-in-out infinite;
+  --animate-sweep: sweep 2.4s linear infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ---------- light ---------- */
+:root {
+  --radius: 0.625rem;
+
+  --background: oklch(0.985 0.003 250);
+  --foreground: oklch(0.2 0.02 260);
+  --surface: oklch(0.965 0.005 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.02 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.02 260);
+  --primary: oklch(0.27 0.03 260);
+  --primary-foreground: oklch(0.98 0.004 250);
+  --secondary: oklch(0.955 0.006 250);
+  --secondary-foreground: oklch(0.25 0.02 260);
+  --muted: oklch(0.955 0.006 250);
+  --muted-foreground: oklch(0.5 0.02 260);
+  --accent: oklch(0.945 0.01 250);
+  --accent-foreground: oklch(0.22 0.02 260);
+  --destructive: oklch(0.56 0.21 25);
+  --border: oklch(0.2 0.02 260 / 11%);
+  --input: oklch(0.2 0.02 260 / 16%);
+  --ring: oklch(0.58 0.12 230);
+  --grid: oklch(0.2 0.02 260 / 7%);
+
+  --brand: oklch(0.6 0.14 170);
+  --brand-2: oklch(0.55 0.15 245);
+
+  --trust-normal: oklch(0.6 0.15 155);
+  --trust-watch: oklch(0.68 0.15 70);
+  --trust-suspicious: oklch(0.57 0.21 25);
+  --trust-locked: oklch(0.55 0.2 300);
+  --trust-learning: oklch(0.56 0.15 250);
+
+  /* Categorical order validated with the dataviz CVD checker (adjacent ΔE ≥ 8, light surface). */
+  --mod-keyboard: #2a78d6; /* blue */
+  --mod-mouse: #eb6834; /* orange */
+  --mod-scroll: #1baf7a; /* aqua */
+  --mod-workflow: #eda100; /* yellow */
+  --mod-temporal: #e87ba4; /* magenta */
+
+  --chart-1: var(--mod-keyboard);
+  --chart-2: var(--mod-mouse);
+  --chart-3: var(--mod-scroll);
+  --chart-4: var(--mod-workflow);
+  --chart-5: var(--mod-temporal);
+
+  color-scheme: light;
+}
+
+/* ---------- dark (default) ---------- */
+.dark {
+  --background: oklch(0.145 0.012 262);
+  --foreground: oklch(0.95 0.005 250);
+  --surface: oklch(0.17 0.013 262);
+  --card: oklch(0.185 0.014 262);
+  --card-foreground: oklch(0.95 0.005 250);
+  --popover: oklch(0.2 0.015 262);
+  --popover-foreground: oklch(0.95 0.005 250);
+  --primary: oklch(0.93 0.01 250);
+  --primary-foreground: oklch(0.18 0.015 262);
+  --secondary: oklch(0.24 0.016 262);
+  --secondary-foreground: oklch(0.94 0.005 250);
+  --muted: oklch(0.23 0.014 262);
+  --muted-foreground: oklch(0.68 0.018 258);
+  --accent: oklch(0.25 0.018 262);
+  --accent-foreground: oklch(0.95 0.005 250);
+  --destructive: oklch(0.66 0.2 24);
+  --border: oklch(1 0 0 / 8.5%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.72 0.11 220);
+  --grid: oklch(1 0 0 / 5.5%);
+
+  --brand: oklch(0.82 0.13 172);
+  --brand-2: oklch(0.74 0.13 240);
+
+  --trust-normal: oklch(0.78 0.16 155);
+  --trust-watch: oklch(0.83 0.15 78);
+  --trust-suspicious: oklch(0.68 0.2 24);
+  --trust-locked: oklch(0.7 0.17 300);
+  --trust-learning: oklch(0.74 0.13 248);
+
+  /* Same hues stepped for the dark surface (validated: L 0.48–0.67, CVD ΔE ≥ 8.4, ≥ 3:1). */
+  --mod-keyboard: #3987e5;
+  --mod-mouse: #d95926;
+  --mod-scroll: #199e70;
+  --mod-workflow: #c98500;
+  --mod-temporal: #d55181;
+
+  color-scheme: dark;
+}
+
+/* No-JS fallback: follow the OS unless a class forces a theme. */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    --background: oklch(0.145 0.012 262);
+    --foreground: oklch(0.95 0.005 250);
+    --surface: oklch(0.17 0.013 262);
+    --card: oklch(0.185 0.014 262);
+    --card-foreground: oklch(0.95 0.005 250);
+    --popover: oklch(0.2 0.015 262);
+    --popover-foreground: oklch(0.95 0.005 250);
+    --primary: oklch(0.93 0.01 250);
+    --primary-foreground: oklch(0.18 0.015 262);
+    --secondary: oklch(0.24 0.016 262);
+    --secondary-foreground: oklch(0.94 0.005 250);
+    --muted: oklch(0.23 0.014 262);
+    --muted-foreground: oklch(0.68 0.018 258);
+    --accent: oklch(0.25 0.018 262);
+    --accent-foreground: oklch(0.95 0.005 250);
+    --destructive: oklch(0.66 0.2 24);
+    --border: oklch(1 0 0 / 8.5%);
+    --input: oklch(1 0 0 / 13%);
+    --ring: oklch(0.72 0.11 220);
+    --grid: oklch(1 0 0 / 5.5%);
+    --brand: oklch(0.82 0.13 172);
+    --brand-2: oklch(0.74 0.13 240);
+    --trust-normal: oklch(0.78 0.16 155);
+    --trust-watch: oklch(0.83 0.15 78);
+    --trust-suspicious: oklch(0.68 0.2 24);
+    --trust-locked: oklch(0.7 0.17 300);
+    --trust-learning: oklch(0.74 0.13 248);
+    --mod-keyboard: #3987e5;
+    --mod-mouse: #d95926;
+    --mod-scroll: #199e70;
+    --mod-workflow: #c98500;
+    --mod-temporal: #d55181;
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--brand) 35%, transparent);
+  }
+}
+
+@layer utilities {
+  /* Tabular numerals for every live number. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  /* Faint console grid used behind heroes and the stage view. */
+  .bg-console-grid {
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .text-brand-gradient {
+    background: linear-gradient(100deg, var(--brand) 0%, var(--brand-2) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .panel {
+    @apply rounded-xl bg-card text-card-foreground ring-1 ring-foreground/10;
+  }
+  .eyebrow {
+    @apply font-mono text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent;
+  }
+}

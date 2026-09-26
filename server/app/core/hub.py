@@ -1236,7 +1236,10 @@ class DeviceHub:
         )
 
     def _maybe_health(self, drt: DeviceRuntime, force: bool = False) -> None:
-        self.publish(drt, "health", self.health(drt))
+        h = self.health(drt)
+        if force:  # per-tick: carry the literal payload for the "What left this laptop" drawer
+            h.last_tick_json = drt.last_tick_json
+        self.publish(drt, "health", h)
 
     # --- periodic loop -------------------------------------------------------------------------------------
     async def _loop(self) -> None:
