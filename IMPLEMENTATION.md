@@ -46,7 +46,8 @@
 
 ### 0.2 Pre-cut
 Start these only after CP4 (Sat 19:00) is green:
-- Admin/org roster page (§2.4, PROPOSED): synthetic multi-employee sessions on the `.tech` site
+- ~~Admin/org roster page~~ (§2.4, PROPOSED): first pass shipped at `/admin` (synthetic multi-employee roster,
+  org audit trail, per-employee drill-in) — still pending the direction sign-off itself
 - B6 browser behavioral scoring (the presence beacon itself is P0)
 - automatic B7 schedule
 - learned C4 team head
@@ -140,12 +141,14 @@ Per `newGoal.txt`: there are two front ends with different jobs, not one consume
   - an audit trail of trust-score changes, alerts, challenges and admin actions.
 - **Reuse, don't rebuild:** `/dashboard` already renders exactly one device's live trust gauge, chart,
   modality bars, why-chips, event feed and identity card (§6 A3) — that becomes the **per-employee drill-in**
-  view an admin opens from the roster, unchanged in substance. The new work is narrow: one roster page
-  (`web/src/app/admin/` or similar, Claude-owned like the other core pages in §4) that lists N synthetic
-  sessions built from mocked/replayed data — **no real multi-tenant backend is required for this**, per
-  newGoal.txt's own "synthetic sessions... first anonymized" framing. `/history` and `/lab` keep their current
-  jobs (per-device history; the A-vs-B identification evidence for the mission's §1.2 claim) and just become
-  reachable from the roster instead of standalone nav items.
+  view an admin opens from the roster, unchanged in substance. `/history` and `/lab` keep their current jobs
+  (per-device history; the A-vs-B identification evidence for the mission's §1.2 claim).
+- **Status: first pass shipped** at `web/src/app/admin/` (Claude-owned like the other core pages in §4;
+  `web/src/lib/admin-mock.ts` fabricates the roster, `web/src/components/admin/`). Admin-role gated, ~20 synthetic
+  sessions, org audit trail, click-to-drill-in reusing `TrustGauge`/`ModalityBars`/`WhyChips`/`EventFeed` directly
+  — **no real multi-tenant backend was built**, per newGoal.txt's own "synthetic sessions... first anonymized"
+  framing. Not yet linked from `/history`/`/lab`; the nav just gained an "Admin" link. Still needs the direction
+  itself signed off and a ping to Codex 1/2.
 - **Not affected:** `/shop` and `/verify` stay exactly what they are — the Visa-style demo scenario and the
   voice/MFA step-up flow — since §1.5/§1.7 and `newGoal.txt` line 105 keep Visa as a labelled demo, not a
   product surface. `/enroll` (Codex 1) and the voice components (Codex 2) are unaffected; this only touches
