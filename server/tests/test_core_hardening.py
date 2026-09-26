@@ -254,7 +254,7 @@ def test_update_candidates_revoked_before_arming_and_block(client):
     assert args[0] == uuid.UUID(dev_id) and (datetime.now(UTC) - args[1]).total_seconds() >= 119
     d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
     r = client.post(f"/api/voice/challenges/{d['challenge_id']}/response",
-                    files={"wav": ("a.wav", b"RIFF", "audio/wav")}, headers={"X-Fake-Decision": "BLOCK_SPOOF"})
+                    files={"wav": ("a.wav", b"RIFF", "audio/wav")}, headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
     assert r.status_code == 200, r.text
     assert revokes() == base + 2
     agent.close()
@@ -307,7 +307,7 @@ def test_decision_lookup_falls_back_to_tiger(client):
         agent.tick("b")
     d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
     client.post(f"/api/voice/challenges/{d['challenge_id']}/response",
-                files={"wav": ("a.wav", b"RIFF", "audio/wav")}, headers={"X-Fake-Decision": "BLOCK_SPOOF"})
+                files={"wav": ("a.wav", b"RIFF", "audio/wav")}, headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
     client.portal.call(rt().writer.flush)
     rt().hub.decisions.clear()  # what a restart does to the in-memory decision log
     login(client, "a")  # BLOCK_* revoked a@'s sessions

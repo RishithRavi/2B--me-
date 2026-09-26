@@ -242,7 +242,7 @@ async def e2e(args: argparse.Namespace) -> int:
             cid = d.get("challenge_id")
             check("step-up consumed the armed challenge", bool(ch) and cid == ch[0]["challenge_id"], (cid, ch[:1]))
             r = await c.post(f"/api/voice/challenges/{cid}/response", files={"wav": ("r.wav", b"RIFF", "audio/wav")},
-                             headers={"X-Fake-Decision": "BLOCK_IMPOSTOR"})
+                             headers={**admin, "X-Fake-Decision": "BLOCK_IMPOSTOR"})
             out = r.json().get("outcome", {})
             check("BLOCK_IMPOSTOR locks the device", out.get("device_locked") is True, r.text[:200])
             check("attacker order → N", any(x["trans_status"] == "N" for x in out.get("resolved_decisions", [])), out)
