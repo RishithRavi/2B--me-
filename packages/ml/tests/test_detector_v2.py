@@ -5,6 +5,7 @@ from sig_test_contracts import spec
 from twobme_common.spec import load_spec
 from twobme_ml.evaluation import block_from_row, roc_metrics
 from twobme_ml.model import (
+    ACTIVE_MODALITIES,
     BAND_POWERS,
     GATES,
     EnsembleV2,
@@ -46,22 +47,26 @@ def typicalities(model, df, s):
 def test_gates_come_from_the_spec_with_contract_fallback():
     assert enrollment_gates(load_spec().model_dump())["workflow"] == 13
     assert enrollment_gates(spec()) == GATES  # the isolated test spec has no enroll_gate
-    # Five purged folds over a gate-sized enrollment: 13 workflow blocks leave 8 per fold.
+    assert ACTIVE_MODALITIES == ("keyboard", "mouse", "scroll")
     assert (fold_minimum(13), fold_minimum(20), fold_minimum(30), fold_minimum(100)) == (8, 14, 20, 20)
 
 
-def test_workflow_trains_from_13_blocks_without_experimental_override():
+def test_workflow_is_not_trained_or_scored(tmp_path):
     canonical = load_spec().model_dump()
-    # Workflow blocks cover 60s and close about once a minute.
-    df = blocks("workflow", 13, names=load_spec().names("workflow"), spacing=120, duration=60)
-    df["extras"] = [{"transitions": {"ide>browser": 1 + i % 2}} for i in range(len(df))]
+    workflow = blocks("workflow", 20, names=load_spec().names("workflow"), spacing=120, duration=60)
+    workflow["extras"] = [{"transitions": {"ide>browser": 1 + i % 2}} for i in range(len(workflow))]
+    scroll = blocks("scroll", 40, names=load_spec().names("scroll"), spacing=120, duration=60)
+    df = pd.concat([workflow, scroll], ignore_index=True)
     model = UserModel.train(df, {"spec": canonical})
-    assert "workflow" in model.models
-    assert model.experimental["gate_overrides"] == {}
-    assert len(model.models["workflow"]["oof_typicality"]) == 13
-    assert 0 < model.score_block(block_from_row(df.iloc[0], canonical)).typicality < 1
-    with pytest.raises(ValueError, match="Need 13 eligible blocks; have 12"):
-        UserModel.train(df.iloc[:12], {"spec": canonical})
+    assert set(model.models) == {"scroll"}
+    assert "workflow" not in model.n_blocks
+    assert model.score_block(block_from_row(workflow.iloc[0], canonical)) is None
+    # A legacy artifact that contains the retired modality is made inactive on load.
+    model.models["workflow"] = model.models["scroll"]
+    model.save(tmp_path)
+    restored = UserModel.load(tmp_path)
+    assert set(restored.models) == {"scroll"}
+    assert restored.disabled["workflow"] == "Removed from the active identity model"
 
 
 def test_v2_tail_scores_a_missing_owner_habit_as_surprising():
@@ -140,15 +145,12 @@ def test_detector_and_calibration_fail_closed_and_are_recorded(tmp_path):
     assert '"detector": "v2"' in meta and "cross-conformal" in meta
 
 
-def test_v2_fits_temporal_on_every_window_but_gates_on_non_overlapping_ones():
+def test_temporal_is_not_trained_or_scored():
     s = spec()
-    df = blocks("temporal", 420, spacing=5, duration=30)  # 30s windows on a 5s hop
+    temporal = blocks("temporal", 420, spacing=5, duration=30)
+    scroll = blocks("scroll", 40, spacing=120, duration=60)
+    df = pd.concat([temporal, scroll], ignore_index=True)
     model = UserModel.train(df, {"spec": s})
-    fitted = model.models["temporal"]
-    assert model.n_blocks["temporal"] == 70  # every 6th window
-    assert len(fitted["oof_typicality"]) == 70  # aligned with non-overlapping evidence
-    assert fitted["raw_ref"].shape[0] == 420  # references come from every window
-    legacy = UserModel.train(df, {"spec": s, "detector": "v1"})
-    assert legacy.models["temporal"]["raw_ref"].shape[0] == 70
-    with pytest.raises(ValueError, match="Need 60 eligible blocks; have 59"):
-        UserModel.train(df.iloc[:354], {"spec": s})
+    assert set(model.models) == {"scroll"}
+    assert "temporal" not in model.n_blocks
+    assert model.score_block(block_from_row(temporal.iloc[0], s)) is None

@@ -6,6 +6,7 @@ import math
 import yaml
 from twobme_common.types import TrustState, ModalityContribution
 from .config import trust_config
+from .model import ACTIVE_MODALITIES
 
 
 def logit(p):
@@ -64,6 +65,8 @@ class TrustEngine:
         contributions = {}
         for s in scores:
             m = s.modality
+            if m not in ACTIVE_MODALITIES:
+                continue
             if s.typicality is None and s.llr_direct is None:
                 continue
             if s.n <= 0:

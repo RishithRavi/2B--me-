@@ -11,20 +11,19 @@ import { startPresence } from "../../sdk/presence";
 import styles from "./page.module.css";
 
 type Progress = Pick<EnrollProgress, "counts" | "gates" | "ready">;
-// Enrollment gates come from feature_spec.yaml (via the generated contracts) so the
-// wizard always matches what the model actually requires.
-const gates = Object.entries(FEATURE_SPEC.modalities).map(
-  ([m, spec]) => [m as Modality, spec.enroll_gate] as const,
+// Workflow and temporal remain accepted by the wire contract for compatibility, but
+// are not active identity signals and therefore are not enrollment requirements.
+const activeModalities: readonly Modality[] = ["keyboard", "mouse", "scroll"];
+const gates = activeModalities.map(
+  (m) => [m, FEATURE_SPEC.modalities[m].enroll_gate] as const,
 );
 const labels: Record<string, string> = {
   keyboard: "Typing rhythm",
   mouse: "Pointer movement",
   scroll: "Scrolling",
-  workflow: "App & window changes",
-  temporal: "Activity rhythm",
 };
 const practice =
-  "A familiar rhythm emerges as you work. Write a short plan for your day, pause to think, and correct a few words. Switch between your usual apps, move the pointer, and scroll naturally.";
+  "A familiar rhythm emerges as you work. Write a short plan for your day, pause to think, correct a few words, move the pointer, and scroll naturally.";
 
 async function request<T>(url: string, data?: unknown): Promise<T> {
   const response = await fetch(`/api${url}`, {
@@ -443,9 +442,7 @@ export default function EnrollPage() {
                 <small>
                   {count >= goal
                     ? "Collection goal reached"
-                    : m === "temporal"
-                      ? "Non-overlapping 30-second windows"
-                      : "Evidence blocks"}
+                    : "Evidence blocks"}
                 </small>
               </div>
             );

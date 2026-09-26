@@ -262,4 +262,4 @@ def test_short_impostor_trace_evaluates_owner_without_fake_identification():
     assert report["identification"]["accuracy"] is None
     assert report["identification"]["confusion"] == [[0, 0], [0, 0]]
     assert any("Two-way identification unavailable" in note for note in report["notes"])
-    assert report["modalities"]["temporal"]["eer"] is None
+    assert set(report["modalities"]) == {"keyboard", "mouse", "scroll"}

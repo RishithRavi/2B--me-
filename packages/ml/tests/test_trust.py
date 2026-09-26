@@ -77,6 +77,14 @@ def test_missing_and_multiple_blocks():
         a.on_tick(1, 0, [])
 
 
+def test_retired_modalities_do_not_change_trust():
+    engine = TrustEngine(trust_config(), initial=0.5)
+    before = engine.L
+    state = engine.on_tick(1, 0, [score(0.001, "workflow"), score(0.001, "temporal")])
+    assert state.logit == before
+    assert state.per_modality == {}
+
+
 def test_seeded_monte_carlo():
     rng = np.random.default_rng(2048)
     cfg = trust_config()

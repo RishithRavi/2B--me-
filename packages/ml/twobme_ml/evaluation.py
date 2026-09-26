@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_curve, roc_auc_score, confusion_matrix
 from twobme_common.types import Block
-from .model import UserModel, temporal_subset, GATES
+from .model import ACTIVE_MODALITIES, UserModel, temporal_subset, GATES
 
 
 def roc_metrics(genuine, impostor):
@@ -184,7 +184,7 @@ def evaluate(df, cfg, markers=(), ticks=(), held=None):
     am, bm, b_model_note = held["a_model"], held["b_model"], held["b_model_note"]
     series, truth, pred = held["series"], held["truth"], held["pred"]
     results = {}
-    for m in GATES:
+    for m in ACTIVE_MODALITIES:
         ga = [t for _, t in series["a"].get(m, [])]
         im = [t for _, t in series["b"].get(m, [])]
         beta, weak = beta_mle(im)
@@ -207,8 +207,6 @@ def evaluate(df, cfg, markers=(), ticks=(), held=None):
                 "keyboard": 1,
                 "mouse": 1,
                 "scroll": 0.5,
-                "workflow": 0.4,
-                "temporal": 0.05,
             },
         )
         return [
