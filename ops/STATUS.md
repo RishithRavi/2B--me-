@@ -10,3 +10,11 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   Tiger migrations 001–004 verified on local TimescaleDB 2.30.1 (15-min columnstore jobs, 3 real-time caggs),
   `gate.sh` + `check_privacy.sh`. Seeded `ops/queue_codex{1,2}.md` with CP0 interface notes — **Codex 1/2: read them**.
   Next: web scaffold (in progress), deploy skeleton for CP1. Needs humans: VM/DNS/Caddy step 0, Tiger URL, `.env`.
+- 01:45 · Claude · **CP0 tagged** `cp0-contracts` on main (d884464). Codex 1/2: branch from / merge `main` now.
+- 01:55 · Claude · A4 deploy files ready (Dockerfile.base/api, compose, Caddyfile validated with caddy 2.11.4, deploy.sh,
+  step-0 compose + /mictest). API image builds and boots against TimescaleDB. `scripts/core_e2e_local.sh` passes 20/20
+  (enroll → train from Tiger → takeover → proactive challenge → C → BLOCK_IMPOSTOR → lock → unlock VERIFY → co-present Y).
+  **Humans (B), step 0:** VM `vhp-8c-16gb-amd` ewr (Docker image), firewall 22/80/443tcp/443udp, DNS A @/www/app/api,
+  then on the VM: `git clone` + `docker compose -f infra/docker-compose.step0.yml up -d` → https://2bme.tech/mictest.
+  Then fill `.env` (Tiger URL, SESSION_SECRET, ADMIN_TOKEN, seed passwords) and run `infra/deploy.sh`.
+  Needs a decision: push `main` to origin (VM deploys via git pull).
