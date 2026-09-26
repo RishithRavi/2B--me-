@@ -1,0 +1,130 @@
+Core Idea: This project is a continuous behavioral identity system for cybersecurity. Instead of one-time authorization, the program continues to ask whether the person currently operating the system still behaves like the authorized user. 
+
+Goal: the strongest version of the product is something where you enroll one person, let the model learn that persons normal behavior, and then show that it can detect when someone else takes over the session.
+
+We are trying to demonstrate that the information that we collect is enough to determine an individual person and their interaction with their computer to create a continuously update their representation identity.
+
+We're building continuous authentication from human behavior. Instead of trusting a session because someone logged in correctly, our model continuously learns how the authorized person types, moves, navigates, and interacts, and detects when the person behind the session changes.
+
+The data collected would be behavioral metadata such as this:
+BEHAVIORAL SIGNATURE
+│
+├── Keyboard
+│   ├── Hold duration
+│   ├── Inter-key latency
+│   ├── Digraph/trigraph timing
+│   ├── Typing cadence
+│   ├── Pause/burst behavior
+│   └── Correction behavior
+│
+├── Mouse / Trackpad
+│   ├── Velocity
+│   ├── Acceleration
+│   ├── Curvature
+│   ├── Jerk/smoothness
+│   ├── Click timing
+│   └── Hover/dwell behavior
+│
+├── Scrolling
+│   ├── Velocity
+│   ├── Burst length
+│   ├── Inter-scroll timing
+│   └── Direction/reversals
+│
+├── Workflow
+│   ├── Application switching
+│   ├── Task-switch latency
+│   ├── App transition patterns
+│   ├── Window/tab behavior
+│   └── Keyboard ↔ mouse transitions
+│
+└── Temporal Signature
+    ├── Event frequency
+    ├── Burstiness
+    ├── Idle intervals
+    ├── Periodicity
+    └── Frequency-domain / FFT features
+
+
+The idea remains that we dont record the actual content being typed. Such by we dont need passwords, sentences, clipboard contents, document text and all that. 
+
+This data then gets anonymized and gets fed into an ML model that build a behavioral footprint of the authorized user. If someone else starts using the computer, the system tells that the behavior differs from the established profile and raises the session risk level.
+
+NSA Hearsay: Voice becomes another authorization layer. When model confidence drops in matching the current user to the established profile. The computer asks the person to speak a randomly generated phrase. And we extract the features from the audio, including maybe a FFT to move from the time domain into the frequency domain and analyze the spectral characteristics of the voice.
+
+Eleven Labs: Eleven labs generates the spoken challenge, and provides synthetic voices for testing how the system handles AI generated or spoofed speech.
+
+Tiger Data: Since our model is handling a lot of behaviour telemetry data, we are generate a lot of timestamped data. Tiger data stores this time series data and lets us query historical baselines, recent sessions, anomalies, and changes over time.
+
+Vultr: Vultr is used to host our backend and behavioral inference model.
+
+Visa: Used in hackathon demo to showcase on example of a high risk action that our identity engine can protect. Dont worry about this for actually building the product.
+
+Backboard.io: Use this to store/retrieve the contextual history to model how a specific person behaves digitally over time.
+
+2 examples:
+User purchases $2,000 item
+        ↓
+Behavioral confidence = 97%
+        ↓
+Known user
+        ↓
+frictionless checkout
+
+
+
+
+Stolen authenticated session
+        ↓
+Attacker attempts $2,000 purchase
+        ↓
+Behavioral confidence = 31%
+        ↓
+step-up authentication
+        ↓
+voice / MFA challenge
+
+
+
+MLH/.tech: put the entire security platform behind a polished .tech site and showcase a real working deployment. We dont need to distort the actual production for this one.
+
+You can think of the whole stack as:                    
+
+ CONTINUOUS IDENTITY
+
+                          USER
+                            │
+          ┌─────────────────┼─────────────────┐
+          ↓                 ↓                 ↓
+       Keyboard           Mouse          Computer usage
+          │                 │                 │
+          └─────────────────┼─────────────────┘
+                            ↓
+                    Feature extraction
+                            ↓
+                       Tiger Data
+                    behavior history
+                            ↓
+                         Vultr
+                       ML model
+                            ↓
+                CONTINUOUS TRUST SCORE
+                            │
+                    ┌───────┴───────┐
+                    ↓               ↓
+                 Normal         Suspicious
+                    │               │
+                  Allow        Voice challenge
+                                    │
+                              NSA Hearsay
+                             FFT + voice model
+                                    │
+                            ElevenLabs layer
+                                    │
+                         ┌──────────┴──────────┐
+                         ↓                     ↓
+                      Verify                 Block
+                Backboard.io
+
+                                                 
+
