@@ -1,0 +1,22 @@
+# Local dev / offline fallback (§6 A4, §13 demo_offline). Brings up TimescaleDB-HA (includes
+# pgvector + pgvectorscale + toolkit) on localhost:5433. The API runs on the host in dev:
+#   docker compose -f infra/docker-compose.dev.yml up -d db
+#   TIGER_DATABASE_URL=postgres://postgres:postgres@localhost:5433/tsdb uv run uvicorn app.main:app --app-dir server --reload
+name: twobme-dev
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tsdb
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - dbdata:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tsdb"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  dbdata:

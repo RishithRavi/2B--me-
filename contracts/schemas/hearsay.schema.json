@@ -1,0 +1,144 @@
+{
+  "$defs": {
+    "HearsayDetector": {
+      "properties": {
+        "min_dcf_a": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Min Dcf A"
+        },
+        "min_dcf_b": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Min Dcf B"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "min_dcf_a",
+        "min_dcf_b"
+      ],
+      "title": "HearsayDetector",
+      "type": "object"
+    },
+    "HearsayDev": {
+      "properties": {
+        "eer": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Eer"
+        },
+        "min_dcf_a": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Min Dcf A"
+        },
+        "min_dcf_b": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Min Dcf B"
+        },
+        "n": {
+          "title": "N",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "n",
+        "min_dcf_a",
+        "min_dcf_b",
+        "eer"
+      ],
+      "title": "HearsayDev",
+      "type": "object"
+    }
+  },
+  "$id": "https://2bme.tech/schemas/hearsay.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "ablation": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Ablation",
+      "type": "array"
+    },
+    "detectors": {
+      "items": {
+        "$ref": "#/$defs/HearsayDetector"
+      },
+      "title": "Detectors",
+      "type": "array"
+    },
+    "dev": {
+      "$ref": "#/$defs/HearsayDev"
+    },
+    "fusion": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fusion"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "rules_confirmed": {
+      "title": "Rules Confirmed",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "generated_at",
+    "rules_confirmed",
+    "dev"
+  ],
+  "title": "HearsayReport",
+  "type": "object"
+}
