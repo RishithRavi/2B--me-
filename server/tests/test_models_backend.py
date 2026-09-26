@@ -362,6 +362,62 @@ def test_train_sql_row_level_against_tiger(client):
     agent.close()
 
 
+@pytest.mark.skipif(not os.environ.get("TEST_TIGER_URL"), reason="needs TEST_TIGER_URL")
+def test_train_sql_stays_fast_with_many_takeover_windows(client):
+    """A rehearsal night of rows and takeover windows must train well inside the pool's 30 s command_timeout.
+
+    The inlined takeover CTE re-ran every window (and its two correlated subqueries) per feature row and took
+    minutes at this shape; the materialized one is sub-second."""
+    from app.core.models import TRAIN_SQL
+    from app.core.runtime import rt
+
+    me = login(client, "a")
+    dev_id, _token = register(client)
+    client.portal.call(rt().writer.flush)  # the devices row (the window CTE is scoped to the user's devices)
+    uid, dev, sid = uuid.UUID(me["user_id"]), uuid.UUID(dev_id), uuid.uuid4()
+    base = datetime.now(UTC) - timedelta(days=3)
+    n_rows, n_windows, gap_s = 12_000, 60, 200
+
+    def run(sql: str, *args) -> None:
+        assert client.portal.call(rt().db.execute, sql, *args), rt().db.last_error
+
+    run("""INSERT INTO feature_blocks (time, block_start, user_id, device_id, session_id, channel, modality,
+                                       schema_version, mode, n, features, label, actor, baseline_eligible)
+           SELECT $1::timestamptz + make_interval(secs => i), $1::timestamptz + make_interval(secs => i - 0.5),
+                  $2::uuid, $3::uuid, $4::uuid, 'desktop', CASE WHEN i % 2 = 0 THEN 'keyboard' ELSE 'mouse' END,
+                  1, 'enroll', 10, ARRAY[0.0]::real[], 'genuine', 'a', true
+           FROM generate_series(1, $5::int) AS i""", base, uid, dev, sid, n_rows)
+    # windows every gap_s: even ones end at a takeover_end marker 30 s later, odd ones at a verified challenge 20 s
+    # later; plus failed challenges as noise the window subquery has to skip
+    run("""INSERT INTO markers (time, device_id, session_id, label)
+           SELECT $1::timestamptz + make_interval(secs => k * $4::int + 50), $2::uuid, $3::uuid, 'takeover_start'
+           FROM generate_series(0, $5::int - 1) AS k""", base, dev, sid, gap_s, n_windows)
+    run("""INSERT INTO markers (time, device_id, session_id, label)
+           SELECT $1::timestamptz + make_interval(secs => k * $4::int + 80), $2::uuid, $3::uuid, 'takeover_end'
+           FROM generate_series(0, $5::int - 1, 2) AS k""", base, dev, sid, gap_s, n_windows)
+    run("""INSERT INTO voice_challenges (id, user_id, device_id, session_id, trigger, status, phrase, issued_at,
+                                         updated_at)
+           SELECT gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, 'proactive', 'verified', 'p',
+                  $4::timestamptz + make_interval(secs => k * $5::int + 60),
+                  $4::timestamptz + make_interval(secs => k * $5::int + 70)
+           FROM generate_series(1, $6::int - 1, 2) AS k""", uid, dev, sid, base, gap_s, n_windows)
+    run("""INSERT INTO voice_challenges (id, user_id, device_id, session_id, trigger, status, phrase, issued_at,
+                                         updated_at)
+           SELECT gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, 'step_up', 'failed', 'p',
+                  $4::timestamptz + make_interval(secs => k * 97), $4::timestamptz + make_interval(secs => k * 97 + 5)
+           FROM generate_series(0, $5::int) AS k""", uid, dev, sid, base, 2 * n_windows)
+
+    t = time.perf_counter()
+    rows = client.portal.call(rt().db.fetch, TRAIN_SQL, uid, 1)
+    took = time.perf_counter() - t
+    assert rows is not None and rt().db.up, rt().db.last_error
+    mine = [r for r in rows if r["session_id"] == sid]
+    assert len(mine) == n_rows
+    # rows i with t0 < time and block_start < t1 → i in (start, end]: 30 per marker-closed, 20 per voice-closed
+    assert sum(r["takeover_excluded"] for r in mine) == (n_windows // 2) * (30 + 20)
+    assert took < 3.0, f"TRAIN_SQL took {took:.2f}s"
+
+
 # --- 5f. secrets startup guard ---------------------------------------------------------------------------------
 def _app_env(monkeypatch, tmp_path, **over):
     env = {"TIGER_DATABASE_URL": "", "DATA_DIR": str(tmp_path / "data"), "REPORTS_DIR": str(tmp_path / "r"),

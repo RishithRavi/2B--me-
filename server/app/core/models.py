@@ -91,8 +91,11 @@ class TrainingRefused(Exception):
 # (`_eligible`), never by the session's end reason: one Reset must not orphan the baseline (§5.3).
 # `takeover_excluded`: the block overlaps a takeover_start marker window that ends at the next
 # takeover_end / reset marker or the next verified voice/TOTP challenge on that device.
+# `tw` is MATERIALIZED and limited to the user's devices: an inlined CTE re-evaluates every window (and its
+# two correlated subqueries) per feature row, which passes the pool's 30 s command_timeout after a
+# rehearsal night and makes Db mark Tiger down mid-train.
 TRAIN_SQL = """
-WITH tw AS (
+WITH tw AS MATERIALIZED (
   SELECT m.device_id, m.time AS t0,
          least(
            coalesce((SELECT min(m2.time) FROM markers m2
@@ -104,6 +107,7 @@ WITH tw AS (
          ) AS t1
   FROM markers m
   WHERE m.label = 'takeover_start'
+    AND m.device_id IN (SELECT d.id FROM devices d WHERE d.user_id = $1)
 )
 SELECT fb.time, fb.block_start, fb.session_id, fb.modality, fb.n, fb.features, fb.extras, fb.label, fb.actor,
        fb.schema_version, fb.baseline_eligible, fb.update_candidate, fb.mode,
