@@ -12,7 +12,7 @@ Ordered. Done-criteria in brackets. If blocked → note in `contracts/REQUESTS.m
 7. [ ] **Merge ws-signals / ws-voice** within 30 min of each request (gate must pass); regenerate uv.lock; add workspace deps to server
 8. [ ] **A3 P0 by CP4**: landing, /history-min, /lab-min, status footer
 9. [ ] **A5 P1**: Vultr explanations (template fallback done), drift_30m (cut first)
-10. [x] **A6 overlay** (user decision 02:50): Electron shell + /overlay page; pill → prompt → lock → unlock verified headless
+10. [x] **A6 overlay** (user decision 14:30): Electron shell + /overlay page; pill → prompt → lock → unlock verified headless
 11. [ ] **CP4**: promote `trust_config.tuned.yaml` after review; VM snapshot
 
 Rules: never deploy Sun 09:00–11:30; after any API restart run one `sandbox` challenge; `CONTINUOUS_UPDATE=false` + `TRAINING_FROZEN=1` from demo freeze.
