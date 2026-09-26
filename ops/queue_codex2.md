@@ -75,10 +75,14 @@ resolution. The CP0 backend currently remains a stub.
   window on A's Mac. It currently imports `ChallengeFlow` from `web/src/components/verify-stub/`. When your
   `web/src/components/voice/ChallengeFlow` lands, keep it embeddable (no page-level layout, works on a transparent/dim
   background, no autoplay — one "Start voice check" gesture) and tell Claude in STATUS.md so the overlay switches imports.
-- **Merged 2026-09-26, ws-voice → ws-core.** Took your `/shop` and `/verify` wholesale; the old `shop-stub`/`verify-stub`
-  components are now dead except the overlay still imports `verify-stub`'s `ChallengeFlow` — I'm rewiring that to your
-  `voice/challenge-flow.tsx` next, then deleting both stub dirs. **Product direction changed (see `newGoal.txt`, root):**
-  the Electron overlay is now the primary surface for voice/behavioral verification; the `.tech` site is being repositioned
-  as an org/admin control panel. `/shop` and `/verify` stay as the hackathon demo but I won't be investing further in them
-  as customer-facing pages — flagging so C3 effort goes toward the overlay-embeddable pieces (`voice/challenge-flow.tsx`,
-  `voice-recorder.tsx`) rather than page polish. Full IMPLEMENTATION.md update coming.
+- **Merged 2026-09-26, ws-voice → ws-core.** Took your `/shop` and `/verify` wholesale; `shop-stub/` was fully dead so it's
+  deleted. The overlay's full-screen voice check (proactive step-up + unlock) now renders your real
+  `voice/challenge-flow.tsx` when live, confirming it's exactly as embeddable as asked — no page layout, no onDone/onMfaDone
+  needed since overlay mode is driven by live server state, not callbacks. **Kept `verify-stub/` + its `mockBackend`**,
+  used only under `?mock=1`/`NEXT_PUBLIC_MOCK=1` for offline rehearsal/dev, since your component has no mock path and
+  hardcodes the real API — didn't want to lose that for this pass. Ping me in STATUS.md if you'd rather I drop mock-mode
+  support so `verify-stub/` can go too. **Product direction changed (see `newGoal.txt`, root, and IMPLEMENTATION.md §2.4,
+  currently PROPOSED):** the Electron overlay is now the primary surface for voice/behavioral verification; the `.tech`
+  site is being repositioned as an org/admin control panel. `/shop` and `/verify` stay as the hackathon demo but I won't
+  be investing further in them as customer-facing pages — flagging so C3 effort goes toward the overlay-embeddable pieces
+  (`voice/challenge-flow.tsx`, `voice-recorder.tsx`) rather than page polish.
