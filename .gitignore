@@ -42,3 +42,5 @@ overlay/dist/
 .worktrees/
 .DS_Store
 *.log
+# generated local test artifacts
+work/

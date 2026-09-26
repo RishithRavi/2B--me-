@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "twobme-ml"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["twobme-common", "twobme-features", "numpy==2.5.*", "scipy==1.18.1", "scikit-learn==1.9.1", "pandas>=2", "pyarrow", "joblib", "pyyaml", "asyncpg==0.31.0"]
+
+[project.scripts]
+twobme-ml = "twobme_ml.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["twobme_ml"]
+
+[tool.uv.sources]
+twobme-common = { workspace = true }
+twobme-features = { workspace = true }
