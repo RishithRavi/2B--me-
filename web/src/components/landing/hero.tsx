@@ -2,14 +2,13 @@
 
 import { motion } from "framer-motion";
 import { ArrowRight, Building2, Laptop, MonitorPlay, PlayCircle } from "lucide-react";
-import Link from "next/link";
-
 import { Dot } from "@/components/site/empty-state";
 import { Button } from "@/components/ui/button";
 import { useMounted, useNow } from "@/lib/hooks";
 import type { LiveState } from "@/lib/live";
 import { feedTone, fmtClock, levelColor, levelLabel, toneColor } from "@/lib/ui";
 
+import { LIVE_DASHBOARD, ORG_CONSOLE_DEMO, SIMULATED_TAKEOVER } from "./links";
 import { TrustSparkline } from "./trust-sparkline";
 
 export function Hero({ state, simulated }: { state: LiveState; simulated: boolean }) {
@@ -51,22 +50,22 @@ export function Hero({ state, simulated }: { state: LiveState; simulated: boolea
           <div className="space-y-3">
             <div className="flex flex-wrap gap-3">
               <Button asChild size="lg" className="h-10 px-4">
-                <Link href="/dashboard?stage=1">
+                <a href={LIVE_DASHBOARD}>
                   <MonitorPlay /> Watch the live dashboard <ArrowRight />
-                </Link>
+                </a>
               </Button>
               <Button asChild size="lg" variant="outline" className="h-10 px-4">
-                <Link href="/admin?mock=1">
+                <a href={ORG_CONSOLE_DEMO}>
                   <Building2 /> Open the org console demo
-                </Link>
+                </a>
               </Button>
             </div>
-            <Link
-              href="/dashboard?stage=1&mock=1"
+            <a
+              href={SIMULATED_TAKEOVER}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
             >
               <PlayCircle className="size-4" /> No account? Watch a simulated takeover
-            </Link>
+            </a>
           </div>
         </motion.div>
 

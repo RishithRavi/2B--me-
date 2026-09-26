@@ -1,10 +1,10 @@
 "use client";
 
 import { ArrowRight, Building2, FlaskConical, MonitorPlay } from "lucide-react";
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Hero } from "@/components/landing/hero";
+import { EVIDENCE, LIVE_DASHBOARD, ORG_CONSOLE_DEMO } from "@/components/landing/links";
 import { Problem } from "@/components/landing/problem";
 import { SafeLoop } from "@/components/landing/safe-loop";
 import { HowItWorks, PrivacyPromise, RiskExamples, SponsorStrip } from "@/components/landing/sections";
@@ -61,7 +61,7 @@ export default function HomePage() {
         id="learning"
         eyebrow="How it keeps learning"
         title="It learns only from you being you"
-        lead="Behavior drifts, so the baseline has to grow. The rule for what the model may learn from is strict, so an attacker at the keyboard can never teach it their habits."
+        lead="Behavior drifts, so the baseline has to grow. The rule for what the model may learn from is strict, and it is designed so that an attacker at the keyboard can't teach it their habits."
       >
         <SafeLoop />
       </Section>
@@ -114,20 +114,20 @@ export default function HomePage() {
               The stage view shows live trust, the takeover stopwatch and every step-up as it happens. The org console shows the same signal across a
               synthetic company.
             </p>
-            <Link href="/lab" className="mt-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+            <a href={EVIDENCE} className="mt-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
               <FlaskConical className="size-4" /> Or read the verification evidence
-            </Link>
+            </a>
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild size="lg" className="h-10 px-4">
-              <Link href="/dashboard?stage=1">
+              <a href={LIVE_DASHBOARD}>
                 <MonitorPlay /> Watch the live dashboard <ArrowRight />
-              </Link>
+              </a>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-10 px-4">
-              <Link href="/admin?mock=1">
+              <a href={ORG_CONSOLE_DEMO}>
                 <Building2 /> Open the org console demo
-              </Link>
+              </a>
             </Button>
           </div>
         </div>

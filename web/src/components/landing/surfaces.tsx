@@ -1,5 +1,4 @@
 import { ArrowRight, Building2, Laptop, Lock, Mic, ShieldAlert } from "lucide-react";
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { LogoMark } from "@/components/site/logo";
@@ -7,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import type { Level } from "@/lib/contracts";
 import { levelColor, levelFromConfidence, levelLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
+
+import { ORG_CONSOLE_DEMO } from "./links";
 
 // Static, illustrative mockups of the two product surfaces (not live data; labelled as such).
 
@@ -267,9 +268,9 @@ export function ProductSurfaces() {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[11px] text-muted-foreground">Illustration. The console demo uses synthetic, anonymized employees.</p>
           <Button asChild size="sm" variant="outline">
-            <Link href="/admin?mock=1">
+            <a href={ORG_CONSOLE_DEMO}>
               Open the org console demo <ArrowRight />
-            </Link>
+            </a>
           </Button>
         </div>
       </div>

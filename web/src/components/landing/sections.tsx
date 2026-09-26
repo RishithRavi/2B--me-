@@ -17,6 +17,8 @@ import type { ReactNode } from "react";
 import { TRUST_CONFIG } from "@/lib/contracts";
 import { levelColor } from "@/lib/ui";
 
+import { EVIDENCE } from "./links";
+
 // ---------------------------------------------------------------------------
 // How it works
 // ---------------------------------------------------------------------------
@@ -103,7 +105,7 @@ function OneClass() {
         <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
           Every threshold trades false accepts against false rejects, so behavior raises the alarm and an independent factor makes the call. The
           measured trade-off, weak numbers included, is on the{" "}
-          <a href="/lab" className="text-foreground underline underline-offset-4">
+          <a href={EVIDENCE} className="text-foreground underline underline-offset-4">
             verification evidence page
           </a>
           .
@@ -359,7 +361,7 @@ export function SponsorStrip() {
         <div className="text-sm font-medium">Claims match what&apos;s built</div>
         <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
           Anything not live is labelled. Measured results, weak ones included, are on{" "}
-          <a href="/lab" className="text-foreground underline underline-offset-4">
+          <a href={EVIDENCE} className="text-foreground underline underline-offset-4">
             /lab
           </a>
           .

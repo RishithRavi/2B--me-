@@ -129,12 +129,12 @@ export function SafeLoop() {
           over the previous minute, strong evidence of its own, and no open or failed challenge, or right after a voice check verified you.
         </p>
         <p>
-          <b className="text-foreground">Takeovers never leak in.</b> Blocks marked as someone else, and anything from a locked or challenged device, are
-          never eligible. A password alone never makes behavior trusted.
+          <b className="text-foreground">Marked takeovers stay out.</b> Blocks marked as someone else, and anything from a locked or challenged device,
+          never become update candidates. A password alone never makes behavior trusted.
         </p>
         <p>
-          <b className="text-foreground">In this demo,</b> retraining is operator-triggered (&ldquo;Retrain now&rdquo;) and every model is versioned. An
-          automatic schedule is on the roadmap.
+          <b className="text-foreground">In this demo,</b> retraining is operator-triggered (&ldquo;Retrain now&rdquo;) and every model is versioned.
+          Still to come: dropping candidates from the minutes just before an alert, and an automatic schedule.
         </p>
       </div>
     </div>

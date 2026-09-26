@@ -26,8 +26,11 @@ one-class, 1:1 check against a single person's own baseline, so it needs no data
    needs ≥ 90%), 2bME asks for an **independent factor**: a spoken random phrase checked for the words, the
    speaker and synthetic speech, or a TOTP code. **Behavior alone never blocks**; only that check can.
 4. **Safe learning.** Only high-confidence genuine blocks (trust ≥ 95% over the last minute, no open or
-   failed challenge) become update candidates, so an attacker can't teach the model their habits.
-   Retraining is operator-triggered ("Retrain now") and versioned; an automatic schedule is roadmap.
+   failed challenge) become update candidates, and blocks marked as a takeover never do. The loop is
+   designed so an attacker can't teach the model their habits, but it isn't airtight yet: candidates from
+   the minutes before an alert aren't revoked, and enroll-mode rows are trusted without evaluation
+   (IMPLEMENTATION.md §7 B7). Retraining is operator-triggered ("Retrain now") and versioned; an
+   automatic schedule is roadmap.
 
 Tiger Data stores the behavior history, baselines, anomalies and the audit trail.
 
@@ -51,7 +54,7 @@ Tiger Data stores the behavior history, baselines, anomalies and the audit trail
 | Where it runs | per user, one-class, but scored and trained **on the server** from Tiger history. On-device scoring is roadmap | — |
 | Voice step-up | `VOICE_MODE=stub`: canned demo outcomes, labelled **"Voice: simulated (stub)"** in the site footer; never narrate them as a live analysis. `VOICE_MODE=real`: Hearsay VAD, anti-spoof (DF_Arena), ECAPA speaker match, DSP/FFT and speech-to-text, which needs pinned model revisions and a measured calibration | footer, `GET /api/status` → `voice_mode` |
 | Anomaly explanations | a local template unless a Vultr Serverless Inference key is set | footer "explanations template/vultr" |
-| Evidence (`/lab`) | real recordings of two teammates, and weak so far: fused A-vs-not-A EER 37.5% (AUC 0.78); mouse near chance; keyboard, workflow and temporal not measured yet; 0 of 5 live takeover trials | `reports/eval.json`, rendered at `/lab` |
+| Evidence (`/lab`) | real recordings of two teammates, and weak so far: fused A-vs-not-A EER 37.5% (AUC 0.78); mouse near chance; keyboard, workflow and temporal not measured yet; 0 of 5 live takeover trials. Not a blind test: not-A's blocks also fitted β and were used to choose the detector, so the EERs are optimistic. FAR/FRR at the 40% cut needs the splice replay (not run) | `reports/eval.json`, rendered at `/lab` |
 
 The synthetic end-to-end test (`scripts/core_e2e_local.sh`) separates people by construction. It proves the
 plumbing, never discrimination, so its numbers are never quoted as evidence.
@@ -102,7 +105,9 @@ Contracts: edit `packages/common/src/twobme_common/types.py` or `contracts/*.yam
 `uv run python scripts/core_gen_ts.py` (regenerates `web/src/lib/contracts.ts` + report schemas).
 
 No backend? Every page has a clearly labelled simulated mode: add `?mock=1` (for example
-`/dashboard?stage=1&mock=1`, `/admin?mock=1`, `/lab?mock=1`, which shows SAMPLE fixtures).
+`/dashboard?stage=1&mock=1`, `/admin?mock=1`, `/lab?mock=1`, which shows SAMPLE fixtures). The flag
+sticks for the browser tab until a page is opened with `?mock=0`, so on the stage laptop open the live view
+as `/dashboard?stage=1&mock=0` (the landing CTAs already do).
 
 ## Running the demo
 - **Real agent** (A's Mac, Terminal.app with Input Monitoring): see `agent/README.md`
