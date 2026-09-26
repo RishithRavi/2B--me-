@@ -72,3 +72,36 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   tag, batch SSH target or official Hearsay materials available. No server/web
   files edited and no new cross-package DTOs defined. Full merge gate still
   unavailable on this branch. No push, deploy or official submission.
+
+## 2026-09-26 — Codex 2 — CP0 integration and C3 browser flow
+
+- Merged the published `cp0-contracts` tag into `ws-voice` (`7a80af0`), preserving
+  both streams' status, queue and request notes. Earlier CP0 blockers are now
+  historical. The backend remains the CP0 stub; real C2 integration is pending.
+- Built native-rate mono PCM16 AudioWorklet capture (exactly six seconds), pinned
+  microphone selection, explicit start gesture, prompt-ended acknowledgement,
+  beep/countdown, manual playback fallback, live FFT and stream cleanup on
+  cancellation, disconnection, error or unmount. Prompt samples are discarded.
+- Added shared five-phrase voice enrollment, challenge retries, current-attempt
+  stage feedback, response spectrogram and TOTP fallback. Takes stay in browser
+  memory until upload, with no audio browser storage.
+- Replaced `/verify` and `/shop` placeholders. Checkout shows the mandatory demo
+  disclaimer, fixed test PAN, heartbeat/binding and policy matrix. It only
+  resolves the matching pending order from server outcomes; final declines stay
+  final. Polling recovers order expiry/completion with the dialog closed.
+- **Validation:** `scripts/gate.sh voice` PASSED: 15 contract, 98 Hearsay,
+  14 server and 32 web tests; privacy scan, generated contracts and TypeScript
+  checks passed. Gate explicitly SKIPPED e2e because the CP0 base lacks
+  `scripts/core_e2e_local.sh`. Production static build passed after clearing a
+  cached sandbox port-binding failure. Browser inspection confirmed `/shop` and
+  `/verify` render; API was offline during that visual check.
+- New tests execute the actual worklet at 44.1/48 kHz with synthetic samples,
+  verify prompt exclusion/WAV duration/cancellation, delayed-permission cleanup,
+  wrong-device cleanup, and order binding. No physical-mic or real-model success
+  is claimed. Runtime used Python 3.12 and local Node 24.
+- **Remaining:** batch box and official materials; calibrated C2 backend;
+  hardware/browser capture checks; enrolled-LTAS DTO and 64-vs-84 profile
+  resolution. Requested web mic-label wiring and core lock regeneration. Gate's
+  generated `uv.lock` change was restored, because Claude owns it.
+- Requesting Claude's merge review of the local `ws-voice` commits after the
+  passing gate, with the above limitations. Nothing pushed or deployed.

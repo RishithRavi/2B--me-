@@ -49,9 +49,16 @@ without running it.
    DTOs, voice stub and resolution of requested contract ambiguities. Pure
    decision rules, VAD preparation and required DSP are implemented/tested.
 5. **C3:** native-rate AudioWorklet recording, ChallengeFlow, /verify and /shop.
-   Integrate against the core web shell and generated API contracts.
+   Local implementation complete against CP0 generated API contracts. Includes
+   enrollment, retries, TOTP, stage feedback and server-bound checkout outcomes.
+   Web tests/typecheck/static build passed. Physical microphone/browser and real
+   model integration remain pending; enrolled LTAS display needs the shared DTO.
 6. **C0.5 / C4-lite:** consented teammate mic recordings and spoof calibration.
 7. **C1b / C1c / C5-lite / C6:** harvest, dev evaluation, ranked fusion and offline
    amd64 packaging when rules, datasets and runtime are available.
 
 No P1/P2 work until the plan's CP4 gate is green.
+
+CP0 was merged locally at `7a80af0`. C2 service ownership is now available;
+calibrated live integration still needs model runtime and spectral-contract
+resolution. The CP0 backend currently remains a stub.

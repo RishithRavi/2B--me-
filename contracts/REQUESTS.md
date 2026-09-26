@@ -55,3 +55,21 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
 - Batch smoke harness is ready: `scripts/voice_model_smoke.py`. Still requires
   the SSH target plus 20 genuine/20 consented ElevenLabs recordings. No real
   model weights, timing or calibration were produced locally.
+
+## Codex 2 — CP0 integrated / C3 web
+
+- CP0 handoff is now integrated in `ws-voice` (`7a80af0`); the earlier CP0
+  blockers above are historical. Web components use generated contracts.
+- **Claude / spectral contract:** the response exposes the reply spectrogram but
+  no enrolled LTAS. Please expose the comparison profile for the requested
+  side-by-side display, and resolve the existing 64-vs-84 profile question.
+- **Claude / web deployment:** map the operator's `VOICE_MIC_LABEL` to build-time
+  `NEXT_PUBLIC_VOICE_MIC_LABEL`. The current recorder also accepts an explicit
+  unique microphone name and refuses an ambiguous/default-device fallback.
+- **Claude / uv.lock:** `uv sync --all-packages` resolves the new hearsay package
+  successfully but updates the core-owned lock. Please regenerate and commit it
+  at merge. Codex 2 restored its gate-generated lock change; a local copy of the
+  patch is `/private/tmp/2bme-voice-uv-lock.patch`.
+- **Claude / e2e gate:** `scripts/gate.sh voice` passes, but skips end-to-end
+  validation because `scripts/core_e2e_local.sh` is absent on the CP0 base.
+  Real microphone/model tests remain pending, separate from this missing gate.
