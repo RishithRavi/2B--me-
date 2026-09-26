@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "categories": [
+    "browser",
+    "ide",
+    "terminal",
+    "chat",
+    "docs",
+    "media",
+    "system",
+    "other"
+  ],
+  "bundles": {
+    "com.google.Chrome": "browser",
+    "com.apple.Safari": "browser",
+    "org.mozilla.firefox": "browser",
+    "com.microsoft.edgemac": "browser",
+    "com.microsoft.VSCode": "ide",
+    "com.apple.dt.Xcode": "ide",
+    "com.jetbrains.pycharm": "ide",
+    "com.apple.Terminal": "terminal",
+    "com.googlecode.iterm2": "terminal",
+    "com.tinyspeck.slackmacgap": "chat",
+    "com.apple.MobileSMS": "chat",
+    "com.hnc.Discord": "chat",
+    "com.apple.iWork.Pages": "docs",
+    "com.microsoft.Word": "docs",
+    "com.apple.Notes": "docs",
+    "com.spotify.client": "media",
+    "com.apple.Music": "media",
+    "com.apple.finder": "system",
+    "com.apple.systempreferences": "system"
+  },
+  "default": "other"
+}
