@@ -11,6 +11,8 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
 
 ## Open
 
+- [ ] 2026-09-26 19:05 ET · from Codex 1 → Claude · core fallback/docs/contracts · The user removed workflow and temporal from the active identity model after the real-data comparison. `twobme_ml`, evaluation, trust scoring and `/enroll` now use keyboard/mouse/scroll only while preserving the five-modality wire schema. Please make the core fallback model use the same three active modalities and revise the core-owned `IMPLEMENTATION.md` plus the now-obsolete workflow-gate CHANGELOG wording. Do not remove schema fields or stored-data compatibility. · blocking? n
+
 ## Done
 
 ## Codex 2 — 2026-09-26 — C0 / pre-CP0
@@ -86,7 +88,6 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
 - **Claude / e2e gate:** `scripts/gate.sh voice` passes, but skips end-to-end
   validation because `scripts/core_e2e_local.sh` is absent on the CP0 base.
   Real microphone/model tests remain pending, separate from this missing gate.
-
 ## Codex 2 — C2 service integration (2026-09-26)
 
 - **Claude / deployment dependency (blocks real runtime):** the voice routes now
@@ -122,3 +123,15 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
   voice-owned suite remains green (124 tests). These files are outside Codex 2
   ownership. A separate local `uv sync` step also could not fetch `hatchling`
   because this sandbox has no PyPI DNS; that is an environment failure.
+- **Codex 1 / review + real-data run (branch `ml-wider-gap-13wf`):** at the user's request, Claude edited signals-owned files:
+  - `packages/ml`: detector v2, cross-conformal scoring, temporal fitted on every window, gates from the spec.
+  - `scripts/sig_gap_experiment.py`, `scripts/sig_prepare_demo.py` (workflow rationale).
+  - `agent/TRAINING.md`, `agent/COLLECTION_PROTOCOL.md`, `web/src/app/enroll/page.tsx`, and a float tolerance in `test_features.py`.
+
+  `detector: v1` restores the old model exactly. Please:
+  - run `uv run python scripts/sig_gap_compare.py --run-dir <your real run>` and share `gap-compare.json` (aggregates only);
+  - confirm v2 before anyone packages or activates it. The simulated gains are development evidence only.
+- **Codex 1 / trust engine:** since `twobme_ml` joined the server's environment, `twobme_ml.trust.TrustEngine.on_tick` raises
+  "Out-of-order tick must not be scored" inside the hub (`hub.py` → `on_tick`). This fails
+  `server/tests/test_flows.py::test_copresent_owner_frictionless_purchase` and `core_e2e_local.sh` on `main`. The server's
+  fallback engine clamps `dt = max(0, t_end - t_prev)` (`trust_fallback.py:57`) instead of raising.

@@ -152,7 +152,6 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   backend endpoints. Verified with tsc, vitest, a static export build and a headless-Chrome screenshot of the
   rendered page. Gate green (core). §2.4 direction is still PROPOSED — needs sign-off and a ping to Codex 1/2
   before this is anything more than a Workstream-A draft.
-
 ## 2026-09-26 — Codex 2 — C2 real service wiring
 
 - Fast-forwarded local `ws-voice` to main `770fe1e` (the earlier voice work is
@@ -212,3 +211,21 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   generated `web/src/lib/contracts.ts` is stale, and the new signals trust engine
   rejects an out-of-order tick in a core server flow. These are logged for their
   owners in `contracts/REQUESTS.md`; no out-of-ownership fix was made.
+- 18:45 · Claude · **Branch `ml-wider-gap-13wf`** (user request; not merged, not pushed). It widens the owner-vs-impostor
+  gap for all five signals and trains workflow from 13 blocks.
+  - `CONTRACT:` workflow `enroll_gate` is now 20 → 13, and the model reads gates from the spec.
+  - The new default detector `v2` treats missing features as evidence, compares band powers as shares, and scales
+    features robustly with floors. It scores new blocks cross-conformally (the old full-model scoring put fresh
+    owner blocks at typicality 0.57 instead of 0.5) and fits temporal on every window. `v1` is kept verbatim.
+  - Across 30 seeded simulated pairs, mean OOF AUC went up for keyboard (+0.11 to +0.15), mouse (+0.04), scroll
+    (+0.02 to +0.04), temporal (+0.02 to +0.04) and workflow (v2 vs v1 at gate 13: +0.05 to +0.15). Fused
+    held-out AUC went from 0.76 to 0.83 on the hardest pairs. v2 is also 10× smaller and 5× faster.
+  - **Unverified on real data**: the recordings aren't on this laptop and Tiger rejects the local `.env`
+    password. Run `scripts/sig_gap_compare.py --run-dir <run>` where the recordings live (REQUESTS.md).
+  - Gate: privacy, contracts, generated TS, features, ml, agent and hearsay pass, and web typecheck now passes
+    (fixed the enroll page's `VoiceEnroll` import). These still fail, **identically on clean `main`**:
+    - `test_copresent_owner_frictionless_purchase` and the e2e run hit `twobme_ml.trust` "Out-of-order tick".
+    - e2e: the real `UserModel` can't train on the 3-min fixture at its gates.
+    - web tests: `jsdom` isn't in `web/package.json`.
+    - `voice_test.sh` needs `python3.12` on PATH.
+- 19:05 · Codex 1 · **Real-data follow-up on `ml-wider-gap-13wf`:** processed the three local A recordings and one B recording without Tiger or upload. With all signals, v2 held-out fused AUC/EER was .830/.273 versus v1 .761/.375; OOF AUC improved for all five groups, but temporal remained below chance (.418) and workflow had only 13 A blocks. At the user's direction, the active model is now keyboard/mouse/scroll only: training, loaded artifacts, trust contributions, evaluation, gap comparison and the enroll UI exclude workflow/temporal while the frozen wire schema continues to accept them. Requested the same restriction in Claude-owned fallback/docs; fresh B validation is still required for a final claim.

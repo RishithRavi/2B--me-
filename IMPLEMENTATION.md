@@ -377,7 +377,9 @@ The agent hotkeys ⌃⌥⌘M and ⌃⌥⌘R are consumed by the agent and exclud
   - **Modifiers:** on `flagsChanged` with keycode k, toggle the tracked state of k. Resync all modifiers to up when `flags & 0xFFFF0000 == 0`. Caps Lock counts as a key-down only.
 - **Scroll:** an event is a user event when `MomentumPhase == 0`, whatever `ScrollPhase` is. That keeps plain mouse-wheel events.
 - **Mouse:** stroke splitting and dwell detection (no move for >100 ms) run on **raw** events. Resample each stroke to 60 Hz only afterwards, for derivatives.
-- **Temporal:** the temporal model trains and calibrates on every 6th context window only, so the windows are non-overlapping.
+- **Temporal:** the enrollment gate and every evaluation count only every 6th context window, so those windows are non-overlapping.
+  Detector v1 also trains and calibrates on that subset. Detector v2 (default since 2026-09-26) fits and calibrates on every
+  window: its 60 s fold purge exceeds the 30 s window, so out-of-fold references never overlap their model's training windows.
 
 ### 5.2 WebSocket protocol (`contracts/messages.md`; pydantic in `twobme_common.types`)
 **Time:**
@@ -917,7 +919,13 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
 - Tests: fixture tests, property tests (a constant +30 ms flight delay shifts `kb.dd_p50` by about 30), and `test_signature_coverage.py`.
 
 **B3 — Models (P0).**
-- **Per modality:** `RobustScaler`, then ensemble members chosen by n_train:
+- **Detector v2 (default since 2026-09-26; v1 below stays selectable with `detector: v1`):** see `EnsembleV2` in
+  `twobme_ml/model.py`. Band powers become shares, durations/speeds/counts are log-compressed, and features are robust-scaled
+  with floors and clipped. Members: a nonparametric per-feature tail surprise that also scores missing-vs-present against the
+  owner's own missing rates, a scaled Manhattan and a k-NN distance over observed features, then GMM (n ≥ 60) and OCSVM
+  (n > 150). Missing values are never imputed as typical. New blocks are scored **cross-conformally**: each fold model is
+  compared only with the held-out blocks it scored. Checked with `scripts/sig_gap_compare.py`.
+- **Detector v1, per modality:** `RobustScaler`, then ensemble members chosen by n_train:
   - under 20: the modality is disabled (zero evidence);
   - 20–60: scaled-Manhattan + `IsolationForest(n_estimators=300, max_samples=min(64, n))`;
   - 60–150: add `GaussianMixture(k=1, covariance_type='diag', reg_covar=1e-3)`;
@@ -937,7 +945,7 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
 - **Enrollment gates:**
   - keyboard ≥ 100 blocks (about 2,000 keys)
   - mouse ≥ 60 (about 300 actions)
-  - scroll ≥ 30, workflow ≥ 20
+  - scroll ≥ 30, workflow ≥ 13 (lowered from 20 on 2026-09-26; per-fold minimum derives from the gate, 13 → 8)
   - temporal ≥ 60 non-overlapping context windows
   - A modality under its gate is disabled.
 - **Training data:** A's model trains on `baseline_eligible` rows (or `update_candidate` rows older than 10 min), excluding `actor='b'`.

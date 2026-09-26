@@ -106,7 +106,7 @@ modalities:
     n_unit: transitions
     n_ref: 3
     close: {emit_every_s: 60, min_count: 1}
-    enroll_gate: 20
+    enroll_gate: 13
     features:
       - {name: wf.switch_rate,       unit: per_min,  label: "app switching rate",        headline: true}
       - {name: wf.switch_latency_p50, unit: ms,      label: "task-switch latency"}

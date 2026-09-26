@@ -23,6 +23,10 @@ never blocks. On the laptop itself, an always-on-top overlay shows live trust an
 with the voice check when someone else seems to be at the keyboard; a failed check locks the Mac.
 Tiger Data stores the behavior history, baselines and anomalies.
 
+For a security team, `/admin` gives org-wide visibility: a roster of employee sessions, insider-threat
+and anomaly surfacing across the org, and an audit trail of trust changes, alerts and challenges — the
+same continuous-identity signal, aggregated instead of per-person.
+
 ```
 agent (PyObjC tap → key classes → evidence blocks) ──wss──▶ FastAPI hub on Vultr ──▶ TrustEngine ──▶ dashboard
                                                                  │                        │
@@ -44,7 +48,7 @@ retains it in account history (Zero Retention is enterprise-only). `STT_BACKEND=
 | `contracts/` | frozen contracts: feature spec, trust config, WS/REST docs, schemas, fixtures | Claude |
 | `packages/common` | `twobme_common`: shared pydantic DTOs, spec loader, config | Claude |
 | `server/` | FastAPI hub, policy, Tiger writer/history, auth | Claude (`server/app/voice`: Codex 2) |
-| `web/` | Next.js static site (landing, dashboard, history, lab, shop, verify, enroll, overlay) | Claude / Codex 1 / Codex 2 |
+| `web/` | Next.js static site (landing, dashboard, history, lab, shop, verify, enroll, overlay, admin) | Claude / Codex 1 / Codex 2 |
 | `overlay/` | Electron on-laptop overlay: trust pill → full-screen voice check on a suspected takeover → lock screen | Claude |
 | `infra/` | Docker Compose, Caddy, migrations, deploy | Claude |
 | `agent/`, `packages/features`, `packages/ml` | macOS agent, feature extraction, models, TrustEngine | Codex 1 |
@@ -63,4 +67,5 @@ Contracts: edit `packages/common/src/twobme_common/types.py` or `contracts/*.yam
 `uv run python scripts/core_gen_ts.py` (regenerates `web/src/lib/contracts.ts` + report schemas).
 
 Sponsors: Tiger Data · Vultr · ElevenLabs · .tech · NSA Hearsay. The Visa-style checkout is a clearly
-labelled demo scenario, not affiliated with Visa.
+labelled demo scenario, not affiliated with Visa. `/admin`'s employee roster is synthetic, anonymized
+demo data generated in the browser — no real person's behavior.
