@@ -179,7 +179,7 @@ export default function LabPage() {
         Voice step-up
       </SectionTitle>
       <div className="grid gap-4 xl:grid-cols-12">
-        <Panel title="Red team: cloned and replayed voices" icon={ShieldAlert} action={<ResourceBadge res={red} />} className="xl:col-span-7">
+        <Panel title="Voice red team" icon={ShieldAlert} hint="cloned and replayed voices" action={<ResourceBadge res={red} />} className="xl:col-span-7">
           <Gate
             res={red}
             what="red-team"
