@@ -38,6 +38,10 @@ export function TrustSparkline({ history, now, height = 120 }: { history: TrustP
           <stop offset={y(TRUST_CONFIG.levels.watch) / H} stopColor="var(--trust-suspicious)" />
           <stop offset={1} stopColor="var(--trust-suspicious)" />
         </linearGradient>
+        {/* points just before the window keep the line continuous; clip them at the left edge */}
+        <clipPath id={`spark-clip-${uid}`}>
+          <rect x={0} y={-8} width={W + 8} height={H + 16} />
+        </clipPath>
         <linearGradient id={`spark-fill-${uid}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.14} />
           <stop offset="100%" stopColor="var(--brand)" stopOpacity={0} />
@@ -46,9 +50,10 @@ export function TrustSparkline({ history, now, height = 120 }: { history: TrustP
       {[TRUST_CONFIG.levels.normal, TRUST_CONFIG.levels.watch].map((lvl) => (
         <line key={lvl} x1={0} x2={W} y1={y(lvl)} y2={y(lvl)} stroke="var(--muted-foreground)" strokeOpacity={0.25} strokeDasharray="3 5" vectorEffect="non-scaling-stroke" />
       ))}
-      {area && <path d={area} fill={`url(#spark-fill-${uid})`} />}
+      {area && <path d={area} fill={`url(#spark-fill-${uid})`} clipPath={`url(#spark-clip-${uid})`} />}
       {d && (
         <path
+          clipPath={`url(#spark-clip-${uid})`}
           d={d}
           fill="none"
           stroke={locked ? "var(--trust-locked)" : `url(#spark-${uid})`}

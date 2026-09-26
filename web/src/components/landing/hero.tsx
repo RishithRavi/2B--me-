@@ -116,6 +116,11 @@ export function Hero({ state, simulated }: { state: LiveState; simulated: boolea
               <span className="text-muted-foreground">Waiting for the first evidence block…</span>
             )}
           </div>
+          {simulated && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Simulation: about 40 s in, someone else takes the keyboard. Watch trust fall and the step-up kick in.
+            </p>
+          )}
         </motion.div>
       </div>
     </section>
