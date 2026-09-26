@@ -59,6 +59,22 @@ def test_scroll_wheel_and_momentum():
     assert b.features["sc.v_mean_p50"] < 1
 
 
+def assert_matches(result, expected, path="ticks"):
+    # Floats may differ in the last bits across BLAS/CPU builds (np.correlate in tp.acf_peak).
+    if isinstance(expected, float) and isinstance(result, float):
+        assert result == pytest.approx(expected, rel=1e-9, abs=1e-12), path
+    elif isinstance(expected, dict) and isinstance(result, dict):
+        assert result.keys() == expected.keys(), path
+        for k in expected:
+            assert_matches(result[k], expected[k], f"{path}.{k}")
+    elif isinstance(expected, list) and isinstance(result, list):
+        assert len(result) == len(expected), path
+        for i, (r, e) in enumerate(zip(result, expected)):
+            assert_matches(r, e, f"{path}[{i}]")
+    else:
+        assert result == expected, path
+
+
 def test_fixture_reproducibility():
     for name, actor in [("genuine_A", "a"), ("impostor_B", "b")]:
         expected = json.loads(
@@ -72,7 +88,7 @@ def test_fixture_reproducibility():
             }
             for t, bb, c in features_from_events(events(actor), spec())
         ]
-        assert result == expected
+        assert_matches(result, expected)
 
 
 def test_mouse_sample_rate_invariance():
