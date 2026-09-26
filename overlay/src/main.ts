@@ -1,18 +1,22 @@
 // 2bME overlay shell. One transparent, frameless, always-on-top window that loads <origin>/overlay and
 // resizes itself when the page asks for a mode:
-//   pill   → small, top-right, never steals focus
-//   panel  → centered sign-in card
+//   pill    → small, top-right, never steals focus
+//   details → "My behavior": the pill expanded in place (top-right), shown without stealing focus from other apps
+//   panel   → centered sign-in card
 //   prompt → full display, focused (suspected takeover → voice check; dismissible)
 //   lock   → full display, focused, refocuses on blur, can't be closed (optional kiosk with --hard-lock)
 // Operator escape hatch: ⌃⌥⌘⇧Q quits even while locked (demo safety). No input is captured here; the macOS
 // agent does behavior capture, and this shell only talks to the 2bME API through the page.
+// Hardening (§6 A6): no application menu at all (the default menu's ⌘H / ⌘W / ⌥⌘I would hide or inspect the lock
+// screen), and DevTools exist only with --dev.
 import * as path from "node:path";
 
-import { app, BrowserWindow, globalShortcut, ipcMain, screen, session, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, session, shell, systemPreferences } from "electron";
 
-import { boundsFor, isMode, type Mode, parseArgs, sameOrigin } from "./geometry";
+import { boundsFor, isMode, type Mode, parseArgs, sameOrigin, shellPolicy } from "./geometry";
 
 const args = parseArgs(process.argv, process.env);
+const policy = shellPolicy(args, process.argv);
 const PARTITION = "persist:twobme-overlay"; // keeps the cookie session across restarts
 let win: BrowserWindow | null = null;
 let mode: Mode = "pill";
@@ -43,6 +47,8 @@ function applyMode(next: Mode): void {
     win.show();
     win.focus();
     app.focus({ steal: true });
+  } else if (next === "details") {
+    win.show(); // the user just clicked the pill: keep focus, but don't pull the app forward
   } else {
     win.showInactive();
   }
@@ -76,6 +82,7 @@ function createWindow(): void {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      devTools: policy.devTools,
       additionalArguments: [`--twobme-hard-lock=${args.hardLock ? 1 : 0}`],
     },
   });
@@ -105,7 +112,7 @@ function createWindow(): void {
   });
   win.once("ready-to-show", () => applyMode("pill"));
   load();
-  if (process.argv.includes("--devtools")) win.webContents.openDevTools({ mode: "detach" });
+  if (policy.openDevToolsOnStart) win.webContents.openDevTools({ mode: "detach" });
 }
 
 function setupSession(): void {
@@ -133,6 +140,7 @@ app.on("second-instance", () => {
 });
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(policy.applicationMenu);
   if (process.platform === "darwin") {
     app.dock?.hide();
     try {
@@ -151,7 +159,7 @@ app.whenReady().then(async () => {
     if (args.hardLock) win?.setKiosk(false);
     app.quit();
   });
-  if (args.dev) {
+  if (policy.devTools) {
     globalShortcut.register("Control+Alt+Command+O", () => win?.webContents.toggleDevTools());
   }
 });

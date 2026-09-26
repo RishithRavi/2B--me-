@@ -1,15 +1,20 @@
 "use client";
 
 // The on-laptop overlay (rendered at /overlay inside the Electron shell in overlay/).
-//   pill   — always-on-top trust pill; red "Verify" when a voice check is waiting
-//   prompt — a different person may be at the keyboard: full-screen voice check (dismissible — behavior alone
-//            never blocks; purchases and other high-risk actions keep stepping up until it's answered)
-//   lock   — the device was locked by a failed voice check: full screen, not dismissible; the owner signs in
-//            again and unlocks with a fresh voice phrase (§5.4)
-//   panel  — sign in
-import { CheckCircle2, Loader2, Lock, LogIn, Mic, ShieldAlert, WifiOff } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+//   pill    — always-on-top trust pill; red "Verify" when a voice check is waiting; click → "My behavior"
+//   details — "My behavior": the pill expanded into a compact panel (still floating over other apps)
+//   prompt  — a different person may be at the keyboard: full-screen voice check (dismissible — behavior alone
+//             never blocks; purchases and other high-risk actions keep stepping up until it's answered)
+//   lock    — the device was locked by a failed voice check: full screen, not dismissible; the owner signs in
+//             again and unlocks with a fresh voice phrase (§5.4). Fails closed: offline, loading or signed out with
+//             a remembered lock still shows the lock screen.
+//   panel   — sign in
+import { CheckCircle2, ChevronDown, Loader2, Lock, LogIn, Mic, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useRefreshMeOnAuthClose, useResnapshotOnFirstDevice } from "@/components/dashboard/live-hooks";
+import { SimulatedBadge } from "@/components/dashboard/voice-analysis";
+import { useVoiceMode, type VoiceMode } from "@/components/dashboard/voice-mode";
 import { WhyChips } from "@/components/dashboard/why-chips";
 import { LogoMark } from "@/components/site/logo";
 import { Button } from "@/components/ui/button";
@@ -17,31 +22,33 @@ import { ChallengeFlow as RealChallengeFlow } from "@/components/voice/challenge
 import { ChallengeFlow as MockChallengeFlow } from "@/components/verify-stub/challenge-flow";
 import { mockBackend, realBackend } from "@/components/verify-stub/backend";
 import { ApiError } from "@/lib/api";
-import type { TrustPoint } from "@/lib/contracts";
-import { useNow } from "@/lib/hooks";
+import type { ChallengeLive, Level, TrustPoint, VoiceDecision } from "@/lib/contracts";
+import { useMounted, useNow } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
-import { useMe } from "@/lib/session";
+import { refreshMe, useMe } from "@/lib/session";
 import { levelColor, levelLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
-import { type OverlayMode, overlayBridge } from "./bridge";
+import { BehaviorPanel } from "./behavior-panel";
+import { type OverlayMode, inElectron, overlayBridge } from "./bridge";
 import { OverlaySignIn } from "./sign-in";
-import { challengeKey, overlayMode, promptable } from "./overlay-state";
+import { type MeStatus, challengeKey, fullScreen, overlayMode, promptable, settleAfterPrompt, SETTLE_MS } from "./overlay-state";
 
-const LOCK_KEY = "2bme:overlay:locked";
+// The simulated stream never shares the real lock memory (a mock lock must not lock the real overlay).
+const lockKey = (mock: boolean) => (mock ? "2bme:overlay:locked:mock" : "2bme:overlay:locked");
 
-function readLocked(): boolean {
+function readLocked(mock: boolean): boolean {
   try {
-    return window.localStorage.getItem(LOCK_KEY) === "1";
+    return window.localStorage.getItem(lockKey(mock)) === "1";
   } catch {
     return false;
   }
 }
 
-function writeLocked(v: boolean) {
+function writeLocked(mock: boolean, v: boolean) {
   try {
-    if (v) window.localStorage.setItem(LOCK_KEY, "1");
-    else window.localStorage.removeItem(LOCK_KEY);
+    if (v) window.localStorage.setItem(lockKey(mock), "1");
+    else window.localStorage.removeItem(lockKey(mock));
   } catch {
     /* storage unavailable: the lock screen still follows live state */
   }
@@ -51,122 +58,10 @@ const LOCK_REASON: Record<string, string> = {
   voice_spoof: "A synthetic (cloned) voice answered the voice check.",
   voice_impostor: "The voice that answered didn't match the owner.",
   lock: "The TOTP fallback failed.",
+  admin_lock: "An administrator locked this device.",
 };
 
-export function OverlayView() {
-  const me = useMe();
-  const { state, store, mock } = useLive({ enabled: me.status === "ok" || me.mock });
-  const now = useNow(1000);
-  const [lastKnownLocked, setLastKnownLocked] = useState(false);
-  const [snoozedKey, setSnoozedKey] = useState<string | null>(null);
-  const [wantPanel, setWantPanel] = useState(false);
-  const devControls = mock || process.env.NODE_ENV === "development" || useDevFlag();
-
-  useEffect(() => setLastKnownLocked(readLocked()), []);
-  const locked = !!state.device?.locked;
-  useEffect(() => {
-    if (!state.device) return;
-    writeLocked(locked);
-    setLastKnownLocked(locked);
-  }, [locked, state.device]);
-
-  const challenge = state.open_challenge;
-  const mode = overlayMode({
-    meStatus: me.mock ? "ok" : me.status,
-    locked,
-    lastKnownLocked,
-    challenge,
-    snoozedKey,
-    wantPanel,
-  });
-
-  useEffect(() => {
-    overlayBridge()?.setMode(mode);
-  }, [mode]);
-
-  useEffect(() => {
-    if (me.status === "ok") setWantPanel(false);
-  }, [me.status]);
-
-  const onSignedIn = useCallback(() => {
-    store?.reconnect();
-    setWantPanel(false);
-  }, [store]);
-
-  const backend = mock ? mockBackend : realBackend;
-  const lastVerify = state.voiceResults.find((r) => r.decision === "VERIFY");
-  const justVerified = !!lastVerify && now - Date.parse(lastVerify.t) < 8000;
-
-  return (
-    <OverlayFrame mode={mode}>
-      {mode === "pill" && (
-        <Pill
-          display={state.trust?.display ?? null}
-          level={state.trust?.level ?? null}
-          history={state.trust_history}
-          connected={state.connected}
-          meStatus={me.mock ? "ok" : me.status}
-          waiting={promptable(challenge) ? () => setSnoozedKey(null) : null}
-          verified={justVerified}
-          onSignIn={() => setWantPanel(true)}
-        />
-      )}
-      {mode === "panel" && (
-        <Card>
-          <Header icon={<LogIn className="size-5" />} title="Sign in to 2bME" sub="The overlay shows this Mac's live trust and runs voice checks." />
-          <OverlaySignIn onDone={onSignedIn} />
-          <Button variant="ghost" className="mt-2 w-full" onClick={() => setWantPanel(false)}>
-            Cancel
-          </Button>
-        </Card>
-      )}
-      {mode === "prompt" && promptable(challenge) && (
-        <FullScreen tone="prompt">
-          <Card wide>
-            <Header
-              icon={<ShieldAlert className="size-6 text-trust-suspicious" />}
-              title="Is this still the owner?"
-              sub={`Typing and pointer rhythm stopped matching the enrolled profile (trust ${state.trust ? `${state.trust.display}%` : "—"}). Behavior alone never blocks — answer a quick voice check to continue.`}
-            />
-            <div className="mb-4">
-              <WhyChips blocks={state.blocks} limit={4} />
-            </div>
-            {mock ? (
-              <MockChallengeFlow
-                key={challengeKey(challenge) ?? ""}
-                challengeId={challenge.challenge_id}
-                decisionId={null}
-                backend={backend}
-                devControls={devControls}
-              />
-            ) : (
-              <RealChallengeFlow key={challengeKey(challenge) ?? ""} challengeId={challenge.challenge_id} />
-            )}
-            <div className="mt-4 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-              <span>Until you verify, purchases and other high-risk actions keep asking for a step-up.</span>
-              <Button variant="ghost" size="sm" onClick={() => setSnoozedKey(challengeKey(challenge))}>
-                Not now
-              </Button>
-            </div>
-          </Card>
-        </FullScreen>
-      )}
-      {mode === "lock" && (
-        <FullScreen tone="lock">
-          <LockScreen
-            signedIn={me.status === "ok" || me.mock}
-            reason={state.device?.lock_reason ?? null}
-            deviceLabel={state.device?.label ?? "This Mac"}
-            backend={backend}
-            devControls={devControls}
-            onSignedIn={onSignedIn}
-          />
-        </FullScreen>
-      )}
-    </OverlayFrame>
-  );
-}
-
+/** ?dev=1 (the shell passes it with --dev) shows the stub's demo-decision controls. Always called (hook order). */
 function useDevFlag(): boolean {
   const [dev, setDev] = useState(false);
   useEffect(() => {
@@ -177,6 +72,209 @@ function useDevFlag(): boolean {
     }
   }, []);
   return dev;
+}
+
+export function OverlayView() {
+  const me = useMe();
+  const mounted = useMounted();
+  const devFlag = useDevFlag();
+  const signedIn = me.status === "ok" || me.mock;
+  const { state, store, mock } = useLive({ enabled: signedIn });
+  const voiceMode = useVoiceMode(mock);
+  const now = useNow(1000);
+  const [lockMemo, setLockMemo] = useState<boolean | null>(null);
+  const [snoozedKey, setSnoozedKey] = useState<string | null>(null);
+  const [wantPanel, setWantPanel] = useState(false);
+  const [wantDetails, setWantDetails] = useState(false);
+  const [closed, setClosed] = useState<ChallengeLive | null>(null);
+  const [replies, setReplies] = useState<Record<string, VoiceDecision>>({});
+  const devControls = mock || process.env.NODE_ENV === "development" || devFlag;
+
+  useResnapshotOnFirstDevice(state, store, mock);
+  useRefreshMeOnAuthClose(state.closeCode, mock);
+
+  const meStatus: MeStatus = me.mock ? "ok" : me.status;
+  const serverLocked = !!(state.device?.locked || state.trust?.locked || state.trust?.level === "locked");
+  const synced = signedIn && state.device !== null;
+  const lastKnownLocked = lockMemo ?? (mounted && readLocked(mock));
+  const remember = useCallback(
+    (v: boolean) => {
+      writeLocked(mock, v);
+      setLockMemo(v);
+    },
+    [mock],
+  );
+
+  // The owner's live device is authoritative: remember its lock state across revocations, restarts and outages.
+  useEffect(() => {
+    if (synced && serverLocked !== lastKnownLocked) remember(serverLocked);
+  }, [synced, serverLocked, lastKnownLocked, remember]);
+
+  const challenge = state.open_challenge;
+  const decisionFor = (id: string): VoiceDecision | null =>
+    replies[id] ?? state.voiceResults.find((r) => r.challenge_id === id)?.decision ?? null;
+  const settling = closed ? settleAfterPrompt(closed, decisionFor(closed.challenge_id)) : null;
+
+  const mode = overlayMode({
+    meStatus,
+    locked: serverLocked,
+    lastKnownLocked,
+    synced,
+    challenge,
+    snoozedKey,
+    wantPanel,
+    wantDetails,
+    settling,
+  });
+
+  // A prompt we were showing just closed (terminal challenge event): hold full screen until the outcome is known,
+  // so the shell goes prompt → lock directly instead of prompt → pill → lock.
+  const shownPrompt = useRef<ChallengeLive | null>(null);
+  useEffect(() => {
+    const prev = shownPrompt.current;
+    if (prev && (!challenge || challenge.challenge_id !== prev.challenge_id)) setClosed(prev);
+    shownPrompt.current = mode === "prompt" && promptable(challenge) ? challenge : null;
+  }, [challenge, mode]);
+  useEffect(() => {
+    if (!closed) return;
+    const id = setTimeout(() => setClosed(null), SETTLE_MS);
+    return () => clearTimeout(id);
+  }, [closed]);
+  // BLOCK_* on a proactive/step-up check locks the device (§5.4): remember it now, before the session is revoked.
+  useEffect(() => {
+    if (settling === "lock" && !lastKnownLocked) remember(true);
+  }, [settling, lastKnownLocked, remember]);
+
+  useEffect(() => {
+    if (mounted) overlayBridge()?.setMode(mode);
+  }, [mode, mounted]);
+
+  useEffect(() => {
+    if (me.status === "ok") setWantPanel(false);
+  }, [me.status]);
+  useEffect(() => {
+    if (fullScreen(mode)) setWantDetails(false);
+  }, [mode]);
+  useEffect(() => {
+    if (mode !== "details") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setWantDetails(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode]);
+
+  const onSignedIn = useCallback(() => {
+    store?.reconnect();
+    setWantPanel(false);
+  }, [store]);
+
+  const onReply = useCallback((id: string, d: VoiceDecision) => setReplies((r) => ({ ...r, [id]: d })), []);
+
+  const backend = mock ? mockBackend : realBackend;
+  const lastVerify = state.voiceResults.find((r) => r.decision === "VERIFY");
+  const justVerified = !!lastVerify && now - Date.parse(lastVerify.t) < 8000;
+  const dashboardHref = mock ? "/dashboard?mock=1" : "/dashboard";
+  const learning = !state.model || state.model.status !== "ready" || state.device?.mode === "enroll";
+
+  // Nothing until hydrated: the lock memory lives in localStorage, and the first frame must not be a pill.
+  if (!mounted) return <OverlayFrame mode="pill">{null}</OverlayFrame>;
+
+  return (
+    <OverlayFrame mode={mode}>
+      {mode === "pill" && (
+        <Pill
+          display={state.trust?.display ?? null}
+          level={serverLocked ? "locked" : learning && state.trust ? "learning" : (state.trust?.level ?? null)}
+          history={state.trust_history}
+          connected={state.connected}
+          hasDevice={state.device !== null}
+          meStatus={meStatus}
+          waiting={promptable(challenge) ? () => setSnoozedKey(null) : null}
+          verified={justVerified}
+          onSignIn={() => setWantPanel(true)}
+          onExpand={() => setWantDetails(true)}
+        />
+      )}
+      {mode === "details" && (
+        <BehaviorPanel state={state} onClose={() => setWantDetails(false)} dashboardHref={dashboardHref} fill={inElectron()} />
+      )}
+      {mode === "panel" && (
+        <Card>
+          <Header icon={<LogIn className="size-5" />} title="Sign in to 2bME" sub="The overlay shows this Mac's live trust and runs voice checks." />
+          <OverlaySignIn onDone={onSignedIn} />
+          <Button variant="ghost" className="mt-2 w-full" onClick={() => setWantPanel(false)}>
+            Cancel
+          </Button>
+        </Card>
+      )}
+      {mode === "prompt" && (
+        <FullScreen tone="prompt">
+          <Card wide>
+            <Header
+              icon={<ShieldAlert className="size-6 text-trust-suspicious" />}
+              title="Is this still the owner?"
+              sub={`Typing and pointer rhythm stopped matching the enrolled profile (trust ${state.trust ? `${state.trust.display}%` : "—"}). Behavior alone never blocks — answer a quick voice check to continue.`}
+              badge={voiceMode === "stub" ? <SimulatedBadge /> : null}
+            />
+            {promptable(challenge) ? (
+              <>
+                <div className="mb-4">
+                  <WhyChips blocks={state.blocks} limit={4} />
+                </div>
+                {mock ? (
+                  <MockChallengeFlow
+                    key={challengeKey(challenge) ?? ""}
+                    challengeId={challenge.challenge_id}
+                    decisionId={null}
+                    backend={backend}
+                    devControls={devControls}
+                  />
+                ) : (
+                  <RealChallengeFlow
+                    key={challengeKey(challenge) ?? ""}
+                    challengeId={challenge.challenge_id}
+                    onDone={(res) => onReply(challenge.challenge_id, res.result.decision)}
+                  />
+                )}
+                <div className="mt-4 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <span>Until you verify, purchases and other high-risk actions keep asking for a step-up.</span>
+                  <Button variant="ghost" size="sm" onClick={() => setSnoozedKey(challengeKey(challenge))}>
+                    Not now
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div role="status" className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-6 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Checking the result of the voice check…
+              </div>
+            )}
+          </Card>
+        </FullScreen>
+      )}
+      {mode === "lock" && (
+        <FullScreen tone="lock">
+          <LockScreen
+            meStatus={meStatus}
+            reason={state.device?.lock_reason ?? (settling === "lock" && closed ? blockReason(decisionFor(closed.challenge_id)) : null)}
+            deviceLabel={state.device?.label ?? "This Mac"}
+            backend={backend}
+            devControls={devControls}
+            voiceMode={voiceMode}
+            onSignedIn={onSignedIn}
+            onNotLocked={() => {
+              remember(false);
+              store?.reconnect();
+            }}
+          />
+        </FullScreen>
+      )}
+    </OverlayFrame>
+  );
+}
+
+function blockReason(d: VoiceDecision | null): string | null {
+  return d === "BLOCK_SPOOF" ? "voice_spoof" : d === "BLOCK_IMPOSTOR" ? "voice_impostor" : null;
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -215,12 +313,15 @@ function Card({ children, wide = false }: { children: React.ReactNode; wide?: bo
   );
 }
 
-function Header({ icon, title, sub }: { icon: React.ReactNode; title: string; sub?: string }) {
+function Header({ icon, title, sub, badge }: { icon: React.ReactNode; title: string; sub?: string; badge?: React.ReactNode }) {
   return (
     <div className="mb-5 flex items-start gap-3">
       <div className="mt-0.5 rounded-xl border border-border bg-muted/40 p-2">{icon}</div>
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          {badge}
+        </div>
         {sub && <p className="mt-1 text-sm text-muted-foreground">{sub}</p>}
       </div>
     </div>
@@ -247,30 +348,35 @@ function Pill({
   level,
   history,
   connected,
+  hasDevice,
   meStatus,
   waiting,
   verified,
   onSignIn,
+  onExpand,
 }: {
   display: number | null;
-  level: Parameters<typeof levelColor>[0];
+  level: Level | null;
   history: TrustPoint[];
   connected: boolean;
-  meStatus: string;
+  hasDevice: boolean;
+  meStatus: MeStatus;
   waiting: (() => void) | null;
   verified: boolean;
   onSignIn: () => void;
+  onExpand: () => void;
 }) {
   const color = levelColor(level);
-  return (
-    <div
-      className={cn(
-        "overlay-drag absolute right-2 top-2 flex h-[68px] w-[304px] items-center gap-3 rounded-2xl border bg-background/92 px-3.5 shadow-xl backdrop-blur-md",
-        waiting ? "border-trust-suspicious/70 ring-2 ring-trust-suspicious/40" : "border-border",
-      )}
-    >
-      <LogoMark className="size-6 shrink-0" />
-      {meStatus !== "ok" ? (
+  const body = (() => {
+    if (meStatus === "loading") {
+      return (
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Connecting to 2bME…
+        </div>
+      );
+    }
+    if (meStatus !== "ok") {
+      return (
         <>
           <div className="min-w-0 flex-1 text-sm leading-tight">
             <div className="font-medium">{meStatus === "offline" ? "2bME offline" : "2bME"}</div>
@@ -284,11 +390,28 @@ function Pill({
             </Button>
           )}
         </>
-      ) : (
-        <>
+      );
+    }
+    if (!hasDevice) {
+      return (
+        <div className="min-w-0 flex-1 text-sm leading-tight">
+          <div className="font-medium">{connected ? "Waiting for this Mac" : "Connecting…"}</div>
+          <div className="text-xs text-muted-foreground">{connected ? "start the 2bME agent to begin" : "opening the live stream"}</div>
+        </div>
+      );
+    }
+    return (
+      <>
+        <button
+          type="button"
+          onClick={onExpand}
+          title="My behavior"
+          aria-label="Open My behavior"
+          className="overlay-no-drag group flex min-w-0 flex-1 items-center gap-3 rounded-xl py-1 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <div className="w-[62px] shrink-0 leading-none">
             <div className="tnum text-2xl font-semibold" style={{ color }}>
-              {display === null ? "—" : `${display}%`}
+              {display === null ? "—" : `${Math.min(99, display)}%`}
             </div>
             <div className="mt-1 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
               <span className={cn("size-1.5 rounded-full", connected ? "" : "animate-pulse")} style={{ background: connected ? color : "var(--muted-foreground)" }} />
@@ -302,36 +425,53 @@ function Pill({
           ) : (
             <Sparkline history={history} color={color} />
           )}
-          {waiting && (
-            <Button size="sm" variant="destructive" className="overlay-no-drag ml-auto" onClick={waiting}>
-              <Mic className="size-3.5" /> Verify
-            </Button>
-          )}
-        </>
+          {!waiting && <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />}
+        </button>
+        {waiting && (
+          <Button size="sm" variant="destructive" className="overlay-no-drag ml-auto" onClick={waiting}>
+            <Mic className="size-3.5" /> Verify
+          </Button>
+        )}
+      </>
+    );
+  })();
+  return (
+    <div
+      className={cn(
+        "overlay-drag absolute right-2 top-2 flex h-[68px] w-[304px] items-center gap-3 rounded-2xl border bg-background/92 px-3.5 shadow-xl backdrop-blur-md",
+        waiting ? "border-trust-suspicious/70 ring-2 ring-trust-suspicious/40" : "border-border",
       )}
+    >
+      <LogoMark className="size-6 shrink-0" />
+      {body}
     </div>
   );
 }
 
 function LockScreen({
-  signedIn,
+  meStatus,
   reason,
   deviceLabel,
   backend,
   devControls,
+  voiceMode,
   onSignedIn,
+  onNotLocked,
 }: {
-  signedIn: boolean;
+  meStatus: MeStatus;
   reason: string | null;
   deviceLabel: string;
   backend: typeof realBackend;
   devControls: boolean;
+  voiceMode: VoiceMode;
   onSignedIn: () => void;
+  onNotLocked: () => void;
 }) {
   const [unlockId, setUnlockId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   async function startUnlock() {
     setBusy(true);
@@ -345,6 +485,7 @@ function LockScreen({
         setErr(e.status === 403 ? "Sign in again: unlocking needs a session started after the lock." : null);
       } else if (e instanceof ApiError && e.status === 409) {
         setErr("The device isn't locked anymore.");
+        onNotLocked();
       } else {
         setErr(e instanceof ApiError ? e.detail || `HTTP ${e.status}` : String(e));
       }
@@ -353,7 +494,18 @@ function LockScreen({
     }
   }
 
-  const showLogin = !signedIn || needsLogin;
+  async function retry() {
+    setRetrying(true);
+    try {
+      await refreshMe();
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  const offline = meStatus === "offline";
+  const connecting = meStatus === "loading";
+  const showLogin = !offline && !connecting && (meStatus !== "ok" || needsLogin);
 
   return (
     <div className="w-full max-w-3xl text-center">
@@ -366,7 +518,21 @@ function LockScreen({
         fresh voice phrase.
       </p>
       <div className="mx-auto mt-8 max-w-3xl text-left">
-        {showLogin ? (
+        {offline || connecting ? (
+          <div className="mx-auto flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-border bg-card p-6 text-center">
+            {offline ? <WifiOff className="size-5 text-muted-foreground" /> : <Loader2 className="size-5 animate-spin text-muted-foreground" />}
+            <p className="text-sm text-muted-foreground">
+              {offline
+                ? "Can't reach 2bME. The lock holds until the owner verifies: it never opens because the network is down."
+                : "Checking the lock with 2bME…"}
+            </p>
+            {offline && (
+              <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying}>
+                {retrying ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />} Try again
+              </Button>
+            )}
+          </div>
+        ) : showLogin ? (
           <div className="mx-auto max-w-sm rounded-2xl border border-border bg-card p-6">
             <OverlaySignIn
               hint="Sign in as the owner to unlock with your voice."
@@ -380,6 +546,11 @@ function LockScreen({
           </div>
         ) : unlockId ? (
           <div className="rounded-2xl border border-border bg-card p-6">
+            {voiceMode === "stub" && (
+              <div className="mb-4 flex justify-end">
+                <SimulatedBadge />
+              </div>
+            )}
             {backend.mock ? (
               <MockChallengeFlow challengeId={unlockId} decisionId={null} backend={backend} devControls={devControls} />
             ) : (
@@ -391,6 +562,7 @@ function LockScreen({
             <Button size="lg" onClick={startUnlock} disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Mic className="size-4" />} Unlock with voice
             </Button>
+            {voiceMode === "stub" && <SimulatedBadge />}
             {err && <p className="text-sm text-trust-suspicious">{err}</p>}
           </div>
         )}
