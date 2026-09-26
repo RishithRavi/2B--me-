@@ -18,3 +18,7 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   then on the VM: `git clone` + `docker compose -f infra/docker-compose.step0.yml up -d` → https://2bme.tech/mictest.
   Then fill `.env` (Tiger URL, SESSION_SECRET, ADMIN_TOKEN, seed passwords) and run `infra/deploy.sh`.
   Needs a decision: push `main` to origin (VM deploys via git pull).
+- 02:40 · Claude · Real-backend check in headless Chrome (uvicorn + TimescaleDB + synthetic agent): dashboard live, takeover →
+  1% with TTD 11 s + proactive challenge banner; /shop Pay → C (remote, 0.30); /verify stub VERIFY → own order Y, a
+  different web session's order N. Fixed: FFT panel (log10 PSD), why-chips (red only when against owner), feed duplicates,
+  reload loses block history (`Snapshot.recent_blocks`). main fast-forwarded. **Codex 1: no ws-signals branch yet.**

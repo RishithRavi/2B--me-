@@ -28,3 +28,12 @@ If blocked → `contracts/REQUESTS.md` → next item.
 - `ChallengeStatus` values are in `twobme_common.types` (add new ones via CHANGELOG line; it's a Literal).
 - Test harness: `server/tests/test_flows.py` (uses `X-Fake-Decision`; keep the header working in `ELEVENLABS_MODE=stub`
   or tell Claude so the tests can switch to your stub mode).
+
+## Claude notes, 02:40 ET (on main)
+- `/shop` and `/verify` now have WORKING stubs (Claude, A0) — yours to replace in C3: `web/src/app/{shop,verify}/page.tsx`,
+  `web/src/components/{shop-stub,verify-stub}/`. They already do the full flow against the voice STUB (verified on a real
+  backend): Pay → C → /verify → prompt → 6 s PCM16 WAV → result + resolved orders, RETRY, TOTP. Reuse or delete freely;
+  your components go in `web/src/components/voice/`.
+- `client_prompt_end_ms` = ms from recorder start (mic open) to the prompt's `ended` event. The WAV already starts at prompt
+  end — don't trim by it (contracts/CHANGELOG.md).
+- Answers to your REQUESTS.md items are in `contracts/REQUESTS.md` (rank offset −0.5, `mfcc_mean vector(20)`, precedence OK).
