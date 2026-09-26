@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hearsay"
+version = "0.1.0"
+description = "Privacy-conscious voice verification and Hearsay detection tools"
+requires-python = ">=3.12,<3.13"
+dependencies = ["numpy>=2", "soundfile==0.14.0", "soxr>=0.5", "PyYAML>=6"]
+
+[project.optional-dependencies]
+detect = ["torch", "transformers==4.57.6", "huggingface-hub", "einops>=0.8", "librosa==0.11.0"]
+server = ["hearsay[detect]", "speechbrain==1.1.1", "silero-vad==6.2.3", "elevenlabs==2.69.0", "faster-whisper==1.2.1"]
+test = ["pytest>=8", "ruff>=0.11"]
+
+[project.scripts]
+hearsay = "hearsay.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hearsay"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]

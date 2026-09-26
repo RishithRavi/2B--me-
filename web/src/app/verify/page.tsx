@@ -1,106 +1,41 @@
-// STUB (A0) — owner: Codex 2
 "use client";
-
-import { AudioLines, Loader2, Lock, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-
-import { EmptyState, PageHeader } from "@/components/site/empty-state";
+import { PageHeader } from "@/components/site/empty-state";
 import { Button } from "@/components/ui/button";
-import { mockBackend, realBackend } from "@/components/verify-stub/backend";
-import { ChallengeFlow } from "@/components/verify-stub/challenge-flow";
-import { ApiError } from "@/lib/api";
-import { useLive } from "@/lib/live";
-import { useMockMode } from "@/lib/mode";
-import { useMe } from "@/lib/session";
-
-function NoChallenge({ mock }: { mock: boolean }) {
-  const router = useRouter();
-  const me = useMe();
-  const { state } = useLive({ enabled: me.status === "ok" });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const backend = mock ? mockBackend : realBackend;
-  const locked = Boolean(state.device?.locked || me.me?.device?.locked);
-  const open = state.open_challenge;
-
-  async function unlock() {
-    setBusy(true);
-    setError(null);
-    try {
-      const ch = await backend.createUnlock();
-      router.replace(`/verify?c=${encodeURIComponent(ch.challenge_id)}`);
-    } catch (e) {
-      setError(
-        e instanceof ApiError
-          ? e.status === 409
-            ? "This device isn't locked."
-            : e.status === 403
-              ? "Log in again: unlocking needs a session created after the lock."
-              : e.status === 429
-                ? "Too many unlock attempts. Wait 10 minutes."
-                : e.detail
-          : String(e),
-      );
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="panel">
-      <EmptyState
-        icon={locked ? Lock : ShieldCheck}
-        title={locked ? "This device is locked" : "No voice check is waiting"}
-        action={
-          <div className="flex flex-wrap justify-center gap-2">
-            {(locked || mock) && (
-              <Button onClick={() => void unlock()} disabled={busy}>
-                {busy ? <Loader2 className="animate-spin" /> : <AudioLines />} Unlock with voice
-              </Button>
-            )}
-            {open && (
-              <Button asChild variant="outline">
-                <Link href={`/verify?c=${encodeURIComponent(open.challenge_id)}`}>Open the pending challenge</Link>
-              </Button>
-            )}
-            {me.status === "anon" && (
-              <Button asChild variant="outline">
-                <Link href="/login">Log in</Link>
-              </Button>
-            )}
-          </div>
-        }
-      >
-        {locked
-          ? "A failed voice check locked it. The owner can unlock it with a fresh phrase."
-          : "Challenges open here from the dashboard banner, a stepped-up checkout, or the agent's notification (/verify?c=…)."}
-        {error && <span className="mt-2 block text-destructive">{error}</span>}
-      </EmptyState>
-    </div>
-  );
-}
+import { ChallengeFlow } from "@/components/voice/challenge-flow";
+import { VoiceEnroll } from "@/components/voice/voice-enroll";
+import { api, errorMessage } from "@/lib/api";
 
 function VerifyBody() {
   const params = useSearchParams();
-  const mock = useMockMode();
-  const c = params.get("c");
-  const d = params.get("d");
-  const dev = params.get("dev") === "1" || mock || process.env.NODE_ENV === "development";
-  if (!c) return <NoChallenge mock={mock} />;
-  return <ChallengeFlow key={c} challengeId={c} decisionId={d} backend={mock ? mockBackend : realBackend} devControls={dev} />;
+  const [created, setCreated] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const challengeId = created ?? params.get("c");
+  async function unlock() {
+    setBusy(true); setError("");
+    try { setCreated((await api.createChallenge("unlock")).challenge_id); }
+    catch (e) { setError(errorMessage(e)); }
+    finally { setBusy(false); }
+  }
+  return <div className="space-y-6">
+    <section className="panel p-6">
+      {challengeId ? <ChallengeFlow key={challengeId} challengeId={challengeId} /> : <div className="space-y-3">
+        <p className="text-sm">Open a challenge link, or sign in again after a lock to request an unlock.</p>
+        <Button disabled={busy} onClick={() => void unlock()}>{busy ? "Requesting…" : "Request unlock challenge"}</Button>
+        <Link href="/login" className="ml-4 text-sm underline">Sign in</Link>
+      </div>}
+      {error && <p role="alert" className="mt-3 text-sm text-red-500">{error}</p>}
+    </section>
+    {!challengeId && <section className="panel p-6"><VoiceEnroll /></section>}
+  </div>;
 }
-
 export default function VerifyPage() {
-  return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
-      <PageHeader eyebrow="Step-up" title="Voice check">
-        Listen to the prompt, then read the phrase back. We check the words, the speaker and the spectrum, and an anti-spoof model
-        checks whether the voice is synthetic. Audio is deleted after scoring.
-      </PageHeader>
-      <Suspense fallback={<div className="panel h-64 animate-pulse" />}>
-        <VerifyBody />
-      </Suspense>
-    </div>
-  );
+  return <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+    <PageHeader eyebrow="Step-up" title="Voice check">Listen, then read the five words. We check the phrase, speaker and signs of synthetic speech.</PageHeader>
+    <Suspense fallback={<div className="panel h-48 animate-pulse" />}><VerifyBody /></Suspense>
+    <p className="mt-6 text-xs text-muted-foreground">Challenge audio is processed by our server and deleted after scoring. <Link href="/#privacy" className="underline">Voice privacy details</Link></p>
+  </div>;
 }

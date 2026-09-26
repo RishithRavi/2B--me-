@@ -1,169 +1,102 @@
-// STUB (A0) — owner: Codex 2
 "use client";
-
-import { CreditCard, Laptop, Loader2, Lock, ShieldAlert, ShoppingBag } from "lucide-react";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-
+import { useEffect, useRef, useState } from "react";
+import { ShoppingBag } from "lucide-react";
 import { PageHeader } from "@/components/site/empty-state";
-import { AMOUNT_CENTS, TEST_PAN, authorize, clearLast, loadLast, purchaseTier, refreshDecision, saveLast } from "@/components/shop-stub/backend";
-import { BindingBadge, ResultCard, TierMatrix } from "@/components/shop-stub/parts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api";
-import type { DecisionDetailOut, DecisionOut } from "@/lib/contracts";
-import { useNow } from "@/lib/hooks";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ChallengeFlow } from "@/components/voice/challenge-flow";
+import { resolveCheckout } from "@/components/voice/checkout-result";
+import { api, errorMessage } from "@/lib/api";
+import type { DecisionOut, VoiceOutcome } from "@/lib/contracts";
 import { useLive } from "@/lib/live";
-import { useMockMode } from "@/lib/mode";
 import { useMe } from "@/lib/session";
-import { fmtMoney } from "@/lib/ui";
-
-function payError(e: unknown): string {
-  if (e instanceof ApiError) {
-    if (e.offline) return "Can't reach the 2bME API.";
-    if (e.status === 401) return "Sign in to check out.";
-    return e.detail || `HTTP ${e.status}`;
-  }
-  return String(e);
-}
+import { useNow } from "@/lib/hooks";
 
 export default function ShopPage() {
-  const mock = useMockMode();
-  const me = useMe();
-  const { state } = useLive({ enabled: me.status === "ok" || me.status === "offline" });
-  const now = useNow(1000);
+  const { me } = useMe();
+  const { state, connected } = useLive({ mock: false });
+  const now = useNow();
   const [decision, setDecision] = useState<DecisionOut | null>(null);
-  const [detail, setDetail] = useState<DecisionDetailOut | null>(null);
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const submitting = useRef(false);
+  const device = me?.device;
+  const matching = !!device && state.device?.id === device.id;
+  const age = matching && state.health?.heartbeat_age_s != null && state.healthAt != null
+    ? state.health.heartbeat_age_s + (now - state.healthAt) / 1000
+    : device?.last_seen ? (now - Date.parse(device.last_seen)) / 1000 : null;
+  const bound = matching && connected && age !== null && age >= 0 && age < 30 && state.presence?.binding === "co-present";
+  const confidence = bound ? state.trust?.confidence : null;
 
-  // Restore the last order after a round-trip to /verify, and fetch its final status.
+  // An order can expire or finish in /verify while its dialog is closed.
   useEffect(() => {
-    const last = loadLast();
-    if (!last) return;
-    setDecision(last);
-    void refreshDecision(last.decision_id, mock).then((d) => d && setDetail(d));
-  }, [mock]);
-
-  // Live `decision` events for this order (e.g. resolved by a voice VERIFY / BLOCK) update the card in place.
-  const liveDecision = useMemo(
-    () => (decision ? state.decisions.find((d) => d.decision_id === decision.decision_id) : undefined),
-    [decision, state.decisions],
-  );
-  const shown: DecisionOut | null = decision ? { ...decision, ...(liveDecision ?? {}) } : null;
+    if (!decision || decision.status !== "pending") return;
+    const id = decision.decision_id;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function refresh() {
+      try {
+        const latest = await api.decision(id);
+        if (!cancelled && latest.status === "final") {
+          setDecision((current) => current?.decision_id === id && current.status === "pending"
+            ? { ...latest, decision: latest.final_decision ?? latest.decision,
+                trans_status: latest.final_trans_status ?? latest.trans_status } : current);
+          return;
+        }
+      } catch { /* A temporary disconnect must not approve or decline an order. */ }
+      if (!cancelled) timer = setTimeout(() => void refresh(), 3000);
+    }
+    void refresh();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [decision?.decision_id, decision?.status]);
 
   async function pay() {
-    setBusy(true);
-    setError(null);
-    setDetail(null);
+    if (submitting.current || decision?.status === "pending") return;
+    submitting.current = true; setBusy(true); setError("");
     try {
-      const d = await authorize(mock);
-      setDecision(d);
-      saveLast(d);
-    } catch (e) {
-      setError(payError(e));
-    } finally {
-      setBusy(false);
-    }
+      const result = await api.authorizeCheckout({ amount_cents: 200000, card_last4: "1111" });
+      setDecision(result);
+      if (result.trans_status === "C" && result.challenge_id) { setChallenge(result.challenge_id); setOpen(true); }
+    } catch (e) { setError(errorMessage(e)); }
+    finally { submitting.current = false; setBusy(false); }
   }
+  function resolved(outcome: VoiceOutcome) { setDecision((current) => resolveCheckout(current, outcome)); }
 
-  const tier = shown?.tier ?? purchaseTier(AMOUNT_CENTS);
-  const locked = Boolean(state.device?.locked || state.trust?.locked);
-
-  return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-      <div role="note" className="mb-6 flex items-center gap-2.5 rounded-lg border border-trust-watch/45 bg-trust-watch/10 px-4 py-2.5 text-sm font-medium text-trust-watch">
-        <ShieldAlert className="size-4 shrink-0" />
-        DEMO – no real payment, not affiliated with Visa
-      </div>
-
-      <PageHeader eyebrow="2bME Demo Store" title="Checkout">
-        The order is authorized by live behavioral confidence, not by the fact that you&apos;re logged in.
-      </PageHeader>
-
-      <div className="grid gap-5 lg:grid-cols-12">
-        <div className="space-y-5 lg:col-span-7">
-          {/* the one item */}
-          <div className="panel flex gap-5 p-5">
-            <div className="grid size-28 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand/25 to-brand-2/25 ring-1 ring-foreground/10">
-              <Laptop className="size-12 text-foreground/80" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-lg font-semibold">Field Workstation 16″</div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                The demo&apos;s high-risk purchase: a policy tier R3 action that needs ≥ 90% behavioral confidence to go through without friction.
-              </p>
-              <div className="tnum mt-3 text-2xl font-semibold">{fmtMoney(AMOUNT_CENTS)}</div>
-            </div>
-          </div>
-
-          {/* card form (read-only test data) */}
-          <div className="panel space-y-4 p-5">
-            <div className="flex items-center gap-2">
-              <CreditCard className="size-4 text-muted-foreground" />
-              <h2 className="text-sm font-medium">Payment</h2>
-              <span className="ml-auto text-[11px] text-muted-foreground">test card · read-only</span>
-            </div>
-            <BindingBadge state={state} now={now} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="pan">Card number</Label>
-                <Input id="pan" value={TEST_PAN} readOnly className="tnum font-mono tracking-wider" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="exp">Expiry</Label>
-                <Input id="exp" value="12 / 29" readOnly className="tnum font-mono" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cvc">CVC</Label>
-                <Input id="cvc" value="•••" readOnly className="font-mono" />
-              </div>
-            </div>
-            {error && (
-              <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}{" "}
-                {error.startsWith("Sign in") && (
-                  <Link href="/login" className="underline underline-offset-4">
-                    Log in
-                  </Link>
-                )}
-              </p>
-            )}
-            <Button className="h-11 w-full text-base" onClick={() => void pay()} disabled={busy}>
-              {busy ? <Loader2 className="animate-spin" /> : locked ? <Lock /> : <ShoppingBag />}
-              Pay {fmtMoney(AMOUNT_CENTS)}
-            </Button>
-            {decision && (
-              <button
-                type="button"
-                className="block w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
-                onClick={() => {
-                  clearLast();
-                  setDecision(null);
-                  setDetail(null);
-                }}
-              >
-                Clear result
-              </button>
-            )}
-          </div>
+  return <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6">
+    <p className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm font-medium">DEMO – no real payment, not affiliated with Visa</p>
+    <PageHeader eyebrow="2bME Demo Store" title="A purchase that knows it’s you">A $2,000 demo purchase uses continuous trust and a voice or MFA step-up when needed.</PageHeader>
+    <div className="grid gap-6 md:grid-cols-[1.2fr_1fr]">
+      <section className="panel space-y-5 p-6">
+        <div className="flex items-center gap-4 rounded-xl bg-muted p-5"><ShoppingBag className="size-12" aria-hidden /><div><h2 className="font-semibold">Studio travel collection</h2><p className="text-sm text-muted-foreground">One demo item · $2,000.00</p></div></div>
+        <label className="block space-y-1 text-sm">Test card number<Input readOnly value="4111 1111 1111 1111" aria-label="Read-only test card number" /></label>
+        <div className={`rounded-xl border p-4 text-sm ${bound ? "border-emerald-500/50" : "border-red-500/50 text-red-500"}`}>
+          <p>{device?.label ?? "No bound device"} · {age === null ? "No heartbeat" : `${Math.max(0, Math.floor(age))}s since heartbeat`}</p>
+          <p>{bound ? "Co-present" : "Remote or stale binding"} · {confidence == null ? "Remote session prior: 30%" : `Live confidence: ${Math.round(confidence * 100)}%`}</p>
         </div>
-
-        <div className="space-y-5 lg:col-span-5">
-          {shown ? (
-            <ResultCard decision={shown} detail={detail} wasStepUp={decision?.trans_status === "C" && shown.trans_status !== "C"} />
-          ) : (
-            <div className="panel px-5 py-8 text-center text-sm text-muted-foreground">
-              Press Pay to see the 3-D Secure-style result (Y / C / N, simulated).
-            </div>
-          )}
-          <div className="panel p-5">
-            <h2 className="mb-2 text-sm font-medium">Tier × confidence</h2>
-            <TierMatrix confidence={state.trust?.confidence ?? null} activeTier={tier} locked={locked} />
-          </div>
-        </div>
-      </div>
+        <div className="flex items-center justify-between border-t pt-4"><span>Total</span><strong className="text-xl">$2,000.00</strong></div>
+        <Button className="w-full" disabled={busy || decision?.status === "pending"} onClick={() => void pay()}>{busy ? "Authorizing…" : "Pay $2,000 (demo)"}</Button>
+        {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
+        {decision && <div className="space-y-2 rounded-xl border p-4" role="status">
+          <p className="font-semibold">3-D Secure-style result: {decision.trans_status} (simulated)</p>
+          <p>{decision.trans_status === "Y" ? "Approved" : decision.trans_status === "C" ? "Verification required" : "Declined"}</p>
+          <p className="text-sm">{Math.round(decision.confidence * 100)}% at authorization · {decision.binding} · {decision.tier}</p>
+          <ul className="text-sm text-muted-foreground">{decision.reasons?.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul>
+          {decision.trans_status === "C" && challenge && <Button variant="outline" onClick={() => setOpen(true)}>Continue verification</Button>}
+        </div>}
+      </section>
+      <aside className="panel h-fit space-y-4 p-6"><h2 className="font-semibold">When we ask for verification</h2>
+        <table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="py-2">Tier</th><th>Action</th><th>Trust</th></tr></thead>
+          <tbody>{[["R0", "View", "40%"], ["R1", "Purchase under $100", "60%"], ["R2", "$100–499 or export", "80%"], ["R3", "$500+ or account changes", "90%"]].map(([tier, action, value]) =>
+            <tr className="border-b" key={tier}><td className="py-3 font-mono">{tier}</td><td>{action}</td><td>{value}</td></tr>)}</tbody></table>
+        <p className="text-sm text-muted-foreground">Below the threshold, we request a step-up. Behavioral signals alone never decline a purchase. A device lock returns N.</p>
+      </aside>
     </div>
-  );
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogHeader><DialogTitle>Verify this purchase</DialogTitle><DialogDescription>Read the fresh phrase using your demo microphone. The server resolves this order.</DialogDescription></DialogHeader>
+      {challenge && <ChallengeFlow key={challenge} challengeId={challenge} onDone={({ outcome }) => resolved(outcome)} onMfaDone={resolved} />}
+    </DialogContent></Dialog>
+  </div>;
 }
