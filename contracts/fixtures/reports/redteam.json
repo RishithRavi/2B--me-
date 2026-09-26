@@ -1,0 +1,40 @@
+{
+  "generated_at": "2026-09-26T18:40:00.000Z",
+  "delivery": "acoustic",
+  "thresholds": {
+    "T_ASV_HIGH": 0.6,
+    "T_ASV_LOW": 0.35,
+    "T_CM": 0.5,
+    "T_SPEC": 0.8
+  },
+  "genuine": {
+    "n": 20,
+    "frr": 0.05,
+    "far": null
+  },
+  "impostor": {
+    "n": 20,
+    "frr": null,
+    "far": 0.0
+  },
+  "attacks": [
+    {
+      "class": "tts_flash",
+      "generator": "eleven_flash_v2_5",
+      "n": 20,
+      "far_asv_only": 0.55,
+      "far_cm_only": 0.05,
+      "far_fused": 0.0,
+      "mean_asv_cos": 0.58
+    },
+    {
+      "class": "replay",
+      "generator": "phone_speaker",
+      "n": 20,
+      "far_asv_only": 0.8,
+      "far_cm_only": 0.4,
+      "far_fused": 0.0,
+      "mean_asv_cos": 0.66
+    }
+  ]
+}

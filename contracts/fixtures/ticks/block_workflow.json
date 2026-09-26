@@ -1,0 +1,22 @@
+{
+  "modality": "workflow",
+  "t_start": "2026-09-26T14:29:05.000Z",
+  "t_end": "2026-09-26T14:30:05.000Z",
+  "n": 3,
+  "features": {
+    "wf.switch_rate": 3.0,
+    "wf.switch_latency_p50": 820.0,
+    "wf.kbd_switch_frac": 0.67,
+    "wf.win_change_rate": 1.0,
+    "wf.tab_chord_rate": 2.0,
+    "wf.k2m_p50": 610.0,
+    "wf.m2k_p50": 540.0,
+    "wf.app_dwell_p50": 14500.0,
+    "wf.markov_ll": null
+  },
+  "transitions": {
+    "ide>browser": 2,
+    "browser>ide": 1
+  },
+  "psd": null
+}

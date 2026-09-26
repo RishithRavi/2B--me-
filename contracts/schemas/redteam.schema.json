@@ -1,0 +1,158 @@
+{
+  "$defs": {
+    "RedteamAttack": {
+      "properties": {
+        "class": {
+          "title": "Class",
+          "type": "string"
+        },
+        "far_asv_only": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Far Asv Only"
+        },
+        "far_cm_only": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Far Cm Only"
+        },
+        "far_fused": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Far Fused"
+        },
+        "generator": {
+          "title": "Generator",
+          "type": "string"
+        },
+        "mean_asv_cos": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mean Asv Cos"
+        },
+        "n": {
+          "title": "N",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "class",
+        "generator",
+        "n",
+        "far_asv_only",
+        "far_cm_only",
+        "far_fused",
+        "mean_asv_cos"
+      ],
+      "title": "RedteamAttack",
+      "type": "object"
+    },
+    "RedteamCount": {
+      "properties": {
+        "far": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Far"
+        },
+        "frr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frr"
+        },
+        "n": {
+          "title": "N",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "n"
+      ],
+      "title": "RedteamCount",
+      "type": "object"
+    }
+  },
+  "$id": "https://2bme.tech/schemas/redteam.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attacks": {
+      "items": {
+        "$ref": "#/$defs/RedteamAttack"
+      },
+      "title": "Attacks",
+      "type": "array"
+    },
+    "delivery": {
+      "enum": [
+        "acoustic",
+        "injected"
+      ],
+      "title": "Delivery",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "genuine": {
+      "$ref": "#/$defs/RedteamCount"
+    },
+    "impostor": {
+      "$ref": "#/$defs/RedteamCount"
+    },
+    "thresholds": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Thresholds",
+      "type": "object"
+    }
+  },
+  "required": [
+    "generated_at",
+    "delivery",
+    "thresholds",
+    "genuine",
+    "impostor"
+  ],
+  "title": "RedteamReport",
+  "type": "object"
+}

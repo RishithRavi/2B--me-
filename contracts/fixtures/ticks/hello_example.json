@@ -1,0 +1,18 @@
+{
+  "type": "hello",
+  "v": 1,
+  "device_token": "dt_example_not_a_real_token",
+  "run_id": "7d3f5a8e-2c41-4b8e-9d61-0f5b1a7c9e21",
+  "resume_session_id": null,
+  "requested_mode": "monitor",
+  "agent_version": "0.1.0",
+  "schema_version": 1,
+  "os": "macOS 26.4",
+  "pointer": "trackpad",
+  "display": {
+    "w_pt": 1512.0,
+    "h_pt": 982.0,
+    "hz": 120
+  },
+  "last_unlock_at": null
+}

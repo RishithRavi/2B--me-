@@ -1,0 +1,206 @@
+{
+  "generated_at": "2026-09-26T18:40:00.000Z",
+  "n_blocks": {
+    "a": {
+      "keyboard": 400,
+      "mouse": 400,
+      "scroll": 400,
+      "workflow": 400,
+      "temporal": 400
+    },
+    "b": {
+      "keyboard": 60,
+      "mouse": 60,
+      "scroll": 60,
+      "workflow": 60,
+      "temporal": 60
+    }
+  },
+  "modalities": {
+    "keyboard": {
+      "auc": 0.91,
+      "eer": 0.16,
+      "roc": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.16,
+          0.84
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "n_genuine": 120,
+      "n_impostor": 60,
+      "beta": 6.0,
+      "weak": false
+    },
+    "mouse": {
+      "auc": 0.84,
+      "eer": 0.23,
+      "roc": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.23,
+          0.77
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "n_genuine": 120,
+      "n_impostor": 60,
+      "beta": 6.0,
+      "weak": false
+    },
+    "scroll": {
+      "auc": 0.71,
+      "eer": 0.34,
+      "roc": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.34,
+          0.6599999999999999
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "n_genuine": 120,
+      "n_impostor": 60,
+      "beta": 6.0,
+      "weak": false
+    },
+    "workflow": {
+      "auc": 0.64,
+      "eer": 0.39,
+      "roc": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.39,
+          0.61
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "n_genuine": 120,
+      "n_impostor": 60,
+      "beta": 6.0,
+      "weak": true
+    },
+    "temporal": {
+      "auc": 0.69,
+      "eer": 0.36,
+      "roc": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.36,
+          0.64
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "n_genuine": 120,
+      "n_impostor": 60,
+      "beta": 6.0,
+      "weak": false
+    }
+  },
+  "fused": {
+    "auc": 0.96,
+    "eer": 0.09
+  },
+  "ablation": [
+    {
+      "removed": "keyboard",
+      "fused_eer": 0.14
+    },
+    {
+      "removed": "mouse",
+      "fused_eer": 0.12
+    },
+    {
+      "removed": "scroll",
+      "fused_eer": 0.09999999999999999
+    },
+    {
+      "removed": "workflow",
+      "fused_eer": 0.09
+    },
+    {
+      "removed": "temporal",
+      "fused_eer": 0.095
+    }
+  ],
+  "identification": {
+    "labels": [
+      "a",
+      "b"
+    ],
+    "confusion": [
+      [
+        112,
+        8
+      ],
+      [
+        9,
+        51
+      ]
+    ],
+    "accuracy": 0.906
+  },
+  "live_trials": [
+    {
+      "t_start": "2026-09-26T14:10:00.000Z",
+      "ttd_s": 38.0,
+      "detected": true
+    },
+    {
+      "t_start": "2026-09-26T14:15:00.000Z",
+      "ttd_s": 52.0,
+      "detected": true
+    },
+    {
+      "t_start": "2026-09-26T14:20:00.000Z",
+      "ttd_s": 41.0,
+      "detected": true
+    },
+    {
+      "t_start": "2026-09-26T14:25:00.000Z",
+      "ttd_s": 60.0,
+      "detected": true
+    },
+    {
+      "t_start": "2026-09-26T14:30:00.000Z",
+      "ttd_s": 47.0,
+      "detected": true
+    }
+  ],
+  "splice": null,
+  "notes": [
+    "SAMPLE FIXTURE \u2014 not real results",
+    "Impostor data from teammates only."
+  ]
+}

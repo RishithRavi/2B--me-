@@ -1,0 +1,111 @@
+# 2bME trust contract (§5.4). Owner: Claude. Frozen at CP0.
+# Engine = twobme_ml.trust.TrustEngine (Codex 1); policy / lock / challenge state = server (Claude).
+# `twobme-ml eval` writes tuned values to trust_config.tuned.yaml; Claude promotes them after review.
+# n_ref per modality comes from feature_spec.yaml (twobme_common.config.load_trust_config merges it).
+
+version: 1
+
+# L = logit P(same enrolled person), clamped to [-logit(cap), logit(cap)]
+cap: 0.995
+
+anchors:
+  verify: 0.97            # voice VERIFY or TOTP pass
+  reset: 0.97             # /demo/reset (operator action, not authentication)
+  model_activate: 0.97    # trained model activated while label != impostor
+  screen_unlock: 0.80     # only after screen_locked in same run_id and device not locked
+  remote: 0.30            # web session not bound (heartbeat stale or not co-present)
+  restart_stale: 0.30     # devices.trust_state older than restart_stale_s at server start
+  new_device_enroll: 0.97
+  new_device_monitor: 0.30
+  rearm_default: 0.31     # /demo/rearm
+
+restart_stale_s: 600
+
+# Idle hazard (one-way; waiting never raises trust)
+#   idle_part = clamp(idle_s - grace_s, 0, dt); if dt > gap_s: idle_part = max(idle_part, dt - grace_s)
+#   keep = 2^-(idle_part/half_life_idle_s + (dt - idle_part)/half_life_active_s);  L = logit(sigmoid(L) * keep)
+idle:
+  grace_s: 60
+  gap_s: 15
+  half_life_idle_s: 600
+  half_life_active_s: 14400
+
+# Per-block LLR from typicality t (genuine t ~ U(0,1), impostor t ~ Beta(1, beta_m)):
+#   llr = clip(llr_direct if set else -ln(beta) - (beta-1)*ln(1 - min(t, 1-1e-6)), -clip, clip)
+llr:
+  clip: 4.0
+  t_max: 0.999999
+  beta_default: 6.0
+  beta:
+    keyboard: 6.0
+    mouse: 6.0
+    scroll: 6.0
+    workflow: 6.0
+    temporal: 6.0
+
+# Evidence per tick: dL = kappa * sum_blocks w_m * q * f(llr);  q = min(1, n / n_ref_m)
+#   f(x) = min(-D + D*(1 + 1/C) / (1/C + exp(-x/B)), C)
+squash: {C: 1.0, D: 1.0, B: 0.5}
+kappa: 0.5
+weights:
+  keyboard: 1.0
+  mouse: 1.0
+  scroll: 0.5
+  workflow: 0.4
+  temporal: 0.05
+
+# Bands (engine returns band only; hub overrides with learning / locked)
+levels:
+  normal: 0.80            # >= normal
+  watch: 0.40             # [watch, normal); below watch = suspicious
+
+# Behavior alone never blocks.
+arming:
+  threshold: 0.40         # proactive challenge armed after N consecutive ticks below
+  consecutive_ticks: 2
+  rearm_above: 0.60       # re-arm once confidence recovers above this ...
+  cooldown_s: 60          # ... or after this cooldown
+  proactive_expiry_s: 180 # unanswered proactive challenge expires; level stays suspicious; no lock
+
+policy:
+  # Evaluated after ingesting the tick that contains the click. block only when the device is locked.
+  tiers:
+    R0: {min_conf: 0.40, actions: [view]}
+    R1: {min_conf: 0.60, purchase_below_cents: 10000}
+    R2: {min_conf: 0.80, purchase_below_cents: 50000, actions: [export]}
+    R3: {min_conf: 0.90, actions: [add_payee, password_change]}   # and purchase >= 50000
+  trans_status: {allow: "Y", step_up: "C", block: "N"}
+  checkout_badge_min: 0.95  # A clicks Pay only when the shop badge shows >= this
+
+resolution:
+  verify_window_s: 120      # VERIFY resolves an attached pending decision only if created within this
+  mfa_timeout_s: 90         # FALLBACK_MFA: pending until TOTP passes (Y) or this elapses (N)
+
+challenge:
+  one_open_per_device: true
+  unlock_max_per_window: 3
+  unlock_window_s: 600
+  gray_zone_max_retries: 2  # then TOTP; gray zone never locks the owner
+
+binding:
+  heartbeat_max_s: 30
+  window_s: 20
+  lags_s: [-1, 0, 1]
+  min_pearson: 0.5
+  min_active_s: 5
+  count_ratio: 0.8
+  count_ratio_frac: 0.8
+
+update_candidate:           # §7 B7 — stamped by the server at ingest
+  min_conf: 0.95
+  window_s: 60
+  min_llr: 1.0
+  post_verify_s: 60
+
+session:
+  end_after_ws_close_s: 600
+  resume_max_s: 600
+
+hub:
+  late_drop_s: 60           # late blocks with t_end < now - late_drop_s are stored, not scored
+  clock_skew_s: 30

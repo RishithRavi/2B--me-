@@ -1,0 +1,179 @@
+# 2bME feature spec — THE ONLY ORDERING SOURCE (§5.1). Owner: Claude. Frozen at CP0.
+#
+# Rules
+# - List order is canonical and append-only within a schema_version.
+#   Reordering or removing a feature bumps schema_version (CONTRACT: commit).
+# - Wire blocks carry a dict with EXACTLY names(modality); null = insufficient evidence.
+# - DB stores features real[] = twobme_common.spec.vectorize(...) in this order.
+# - Units: times in ms; mouse distances in display-diagonal units (dd).
+# - `headline: true` marks the 15 headline columns (§5.1.6): column = name.lower().replace('.', '_').
+# - `derived: model` means the agent always sends null; UserModel computes it at score time.
+#
+# Closure (§5.1.9): timeout is measured from the block's first event; if `min_count`
+# isn't met by `timeout_s`, the block is discarded and a fresh one starts.
+
+schema_version: 1
+
+enums:
+  app_categories: [browser, ide, terminal, chat, docs, media, system, other]
+  key_classes: [L_LETTER, R_LETTER, DIGIT, PUNCT, SPACE, ENTER, BKSP, TAB, ESC, ARROW, NAV, FKEY,
+                SHIFT, CMD, CTRL, OPT, CAPS, OTHER]
+  modifier_classes: [SHIFT, CMD, CTRL, OPT, CAPS]
+  chord_kinds: [tab_new, tab_close, tab_jump, tab_cycle, app_switch_kbd, window_cycle, other_cmd]
+  app_switch_via: [cmdtab, click, other]
+
+tick:
+  interval_s: 5
+  activity_bucket_s: 1
+
+modalities:
+  keyboard:
+    n_unit: key_downs
+    n_ref: 20
+    close: {count: 20, timeout_s: 15, min_count: 8}
+    enroll_gate: 100
+    features:
+      - {name: kb.hold_p50,          unit: ms,       label: "key hold",                  headline: true}
+      - {name: kb.hold_iqr,          unit: ms,       label: "key hold spread"}
+      - {name: kb.hold_p50_L,        unit: ms,       label: "left-hand key hold"}
+      - {name: kb.hold_p50_R,        unit: ms,       label: "right-hand key hold"}
+      - {name: kb.hold_p50_space,    unit: ms,       label: "space-bar hold"}
+      - {name: kb.dd_p50,            unit: ms,       label: "flight time",               headline: true}
+      - {name: kb.dd_iqr,            unit: ms,       label: "flight time spread"}
+      - {name: kb.ud_p50,            unit: ms,       label: "release-to-press gap",      headline: true}
+      - {name: kb.ud_iqr,            unit: ms,       label: "release-to-press spread"}
+      - {name: kb.rollover_frac,     unit: frac,     label: "key rollover"}
+      - {name: kb.dd_p50_same_hand,  unit: ms,       label: "same-hand digraph"}
+      - {name: kb.dd_p50_cross_hand, unit: ms,       label: "cross-hand digraph"}
+      - {name: kb.dd_p50_letter_space, unit: ms,     label: "letter-to-space"}
+      - {name: kb.dd_p50_space_letter, unit: ms,     label: "space-to-letter"}
+      - {name: kb.tri_p50,           unit: ms,       label: "trigraph time"}
+      - {name: kb.tri_iqr,           unit: ms,       label: "trigraph spread"}
+      - {name: kb.speed_kps,         unit: keys/s,   label: "typing speed",              headline: true}
+      - {name: kb.burst_len_mean,    unit: keys,     label: "typing burst length"}
+      - {name: kb.pause_rate,        unit: per_key,  label: "pause rate"}
+      - {name: kb.bksp_rate,         unit: per_key,  label: "backspace rate",            headline: true}
+      - {name: kb.bksp_run_mean,     unit: keys,     label: "backspace run length"}
+      - {name: kb.pre_bksp_dd_p50,   unit: ms,       label: "pause before correction"}
+      - {name: kb.post_bksp_dd_p50,  unit: ms,       label: "pause after correction"}
+      - {name: kb.shift_lead_p50,    unit: ms,       label: "shift lead time"}
+      - {name: kb.chord_rate,        unit: per_key,  label: "shortcut rate"}
+
+  mouse:
+    n_unit: actions
+    n_ref: 5
+    close: {count: 5, timeout_s: 15, min_count: 2}
+    enroll_gate: 60
+    features:
+      - {name: ms.v_p50,             unit: dd/s,     label: "pointer speed",             headline: true}
+      - {name: ms.v_p90,             unit: dd/s,     label: "peak pointer speed"}
+      - {name: ms.a_p50,             unit: dd/s2,    label: "pointer acceleration"}
+      - {name: ms.jerk_p50,          unit: dd/s3,    label: "pointer jerk"}
+      - {name: ms.curv_p50,          unit: rad/dd,   label: "path curvature",            headline: true}
+      - {name: ms.angvel_p50,        unit: rad/s,    label: "turning speed"}
+      - {name: ms.straightness_p50,  unit: ratio,    label: "path straightness",         headline: true}
+      - {name: ms.path_p50,          unit: dd,       label: "stroke length"}
+      - {name: ms.dur_p50,           unit: ms,       label: "stroke duration"}
+      - {name: ms.t_peak_frac_p50,   unit: frac,     label: "time to peak speed"}
+      - {name: ms.submoves_p50,      unit: count,    label: "sub-movements"}
+      - {name: ms.click_hold_p50,    unit: ms,       label: "click hold",                headline: true}
+      - {name: ms.pre_click_pause_p50, unit: ms,     label: "pause before click"}
+      - {name: ms.dblclick_p50,      unit: ms,       label: "double-click interval"}
+      - {name: ms.frac_pc,           unit: frac,     label: "point-and-click share"}
+      - {name: ms.frac_dd,           unit: frac,     label: "drag share"}
+      - {name: ms.dir_entropy,       unit: bits,     label: "direction entropy"}
+      - {name: ms.dwell_rate,        unit: per_s,    label: "hover rate"}
+      - {name: ms.dwell_p50,         unit: ms,       label: "hover dwell"}
+
+  scroll:
+    n_unit: bursts
+    n_ref: 3
+    close: {count: 3, timeout_s: 30, min_count: 1}
+    enroll_gate: 30
+    features:
+      - {name: sc.burst_dur_p50,     unit: ms,       label: "scroll burst duration"}
+      - {name: sc.burst_events_p50,  unit: count,    label: "events per scroll burst"}
+      - {name: sc.burst_dist_p50,    unit: px,       label: "scroll burst distance"}
+      - {name: sc.v_peak_p50,        unit: px/s,     label: "peak scroll speed"}
+      - {name: sc.v_mean_p50,        unit: px/s,     label: "scroll speed",              headline: true}
+      - {name: sc.iei_cv_p50,        unit: ratio,    label: "scroll rhythm variability"}
+      - {name: sc.inter_burst_p50,   unit: ms,       label: "gap between scrolls"}
+      - {name: sc.reversal_rate,     unit: per_burst, label: "scroll reversals"}
+      - {name: sc.momentum_frac,     unit: frac,     label: "momentum share"}
+      - {name: sc.horizontal_frac,   unit: frac,     label: "horizontal scroll share"}
+
+  workflow:
+    n_unit: transitions
+    n_ref: 3
+    close: {emit_every_s: 60, min_count: 1}
+    enroll_gate: 20
+    features:
+      - {name: wf.switch_rate,       unit: per_min,  label: "app switching rate",        headline: true}
+      - {name: wf.switch_latency_p50, unit: ms,      label: "task-switch latency"}
+      - {name: wf.kbd_switch_frac,   unit: frac,     label: "keyboard app-switch share"}
+      - {name: wf.win_change_rate,   unit: per_min,  label: "window change rate"}
+      - {name: wf.tab_chord_rate,    unit: per_min,  label: "tab shortcut rate"}
+      - {name: wf.k2m_p50,           unit: ms,       label: "keyboard-to-mouse time"}
+      - {name: wf.m2k_p50,           unit: ms,       label: "mouse-to-keyboard time"}
+      - {name: wf.app_dwell_p50,     unit: ms,       label: "time per app"}
+      - {name: wf.markov_ll,         unit: nats,     label: "app transition pattern",    derived: model}
+
+  temporal:
+    n_unit: events
+    n_ref: 100
+    close: {window_s: 30, hop_s: 5, min_count: 30, train_every_nth: 6}
+    enroll_gate: 60
+    psd: {bins: 32, f_max_hz: 25, bin_ms: 20, nperseg: 256}
+    features:
+      - {name: tp.rate,              unit: ev/s,     label: "event rate",                headline: true}
+      - {name: tp.B,                 unit: score,    label: "burstiness",                headline: true}
+      - {name: tp.Bn,                unit: score,    label: "burstiness (finite-n)"}
+      - {name: tp.M,                 unit: score,    label: "inter-event memory"}
+      - {name: tp.idle_frac,         unit: frac,     label: "idle share",                headline: true}
+      - {name: tp.idle_p50,          unit: ms,       label: "idle gap"}
+      - {name: tp.idle_p90,          unit: ms,       label: "long idle gap"}
+      - {name: tp.bp_0_05,           unit: frac,     label: "rhythm power 0-0.5 Hz"}
+      - {name: tp.bp_05_2,           unit: frac,     label: "rhythm power 0.5-2 Hz"}
+      - {name: tp.bp_2_5,            unit: frac,     label: "rhythm power 2-5 Hz"}
+      - {name: tp.bp_5_10,           unit: frac,     label: "rhythm power 5-10 Hz"}
+      - {name: tp.bp_10_25,          unit: frac,     label: "rhythm power 10-25 Hz"}
+      - {name: tp.spec_entropy,      unit: bits,     label: "rhythm spectral entropy"}
+      - {name: tp.peak_hz,           unit: Hz,       label: "dominant rhythm",           headline: true}
+      - {name: tp.centroid_hz,       unit: Hz,       label: "rhythm centroid"}
+      - {name: tp.acf_peak_lag,      unit: ms,       label: "periodicity lag"}
+      - {name: tp.acf_peak,          unit: corr,     label: "periodicity strength"}
+
+# §5.1.8 goal.txt leaf -> feature traceability (test_signature_coverage.py; landing-page tree).
+# Entries ending in '*' are prefixes.
+signature:
+  keyboard:
+    "hold duration": [kb.hold_*]
+    "inter-key latency": [kb.dd_*, kb.ud_*]
+    "digraph/trigraph timing": [kb.dd_p50_same_hand, kb.dd_p50_cross_hand, kb.dd_p50_letter_space, kb.dd_p50_space_letter, kb.tri_*]
+    "typing cadence": [kb.speed_kps]
+    "pause/burst behavior": [kb.burst_len_mean, kb.pause_rate]
+    "correction behavior": [kb.bksp_*, kb.pre_bksp_dd_p50, kb.post_bksp_dd_p50]
+  mouse:
+    "velocity": [ms.v_*]
+    "acceleration": [ms.a_p50]
+    "curvature": [ms.curv_p50, ms.angvel_p50]
+    "jerk/smoothness": [ms.jerk_p50, ms.submoves_p50]
+    "click timing": [ms.click_hold_p50, ms.pre_click_pause_p50, ms.dblclick_p50]
+    "hover/dwell behavior": [ms.dwell_*]
+  scroll:
+    "velocity": [sc.v_*]
+    "burst length": [sc.burst_*]
+    "inter-scroll timing": [sc.inter_burst_p50, sc.iei_cv_p50]
+    "direction/reversals": [sc.reversal_rate]
+  workflow:
+    "application switching": [wf.switch_rate]
+    "task-switch latency": [wf.switch_latency_p50]
+    "app transition patterns": [wf.markov_ll]
+    "window/tab behavior": [wf.win_change_rate, wf.tab_chord_rate]
+    "keyboard-mouse transitions": [wf.k2m_p50, wf.m2k_p50]
+  temporal:
+    "event frequency": [tp.rate]
+    "burstiness": [tp.B, tp.Bn, tp.M]
+    "idle intervals": [tp.idle_*]
+    "periodicity": [tp.acf_*]
+    "frequency-domain / FFT": [tp.bp_*, tp.spec_entropy, tp.peak_hz, tp.centroid_hz]

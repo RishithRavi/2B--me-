@@ -1,0 +1,43 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# data (models, logs, red-team audio, hearsay caches) never goes in git
+data/
+/models/
+.2bme/
+
+# audio outside synthetic test fixtures (also enforced by scripts/check_privacy.sh + pre-push hook)
+*.wav
+*.mp3
+*.webm
+*.flac
+*.m4a
+!tests/fixtures/synthetic/**
+!**/tests/fixtures/synthetic/**
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# web
+node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+*.tsbuildinfo
+
+# tools
+.claude/worktrees/
+.worktrees/
+.DS_Store
+*.log

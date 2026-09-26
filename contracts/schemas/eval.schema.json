@@ -1,0 +1,392 @@
+{
+  "$defs": {
+    "EvalAblation": {
+      "properties": {
+        "fused_eer": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Fused Eer"
+        },
+        "removed": {
+          "enum": [
+            "keyboard",
+            "mouse",
+            "scroll",
+            "workflow",
+            "temporal"
+          ],
+          "title": "Removed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "removed",
+        "fused_eer"
+      ],
+      "title": "EvalAblation",
+      "type": "object"
+    },
+    "EvalFused": {
+      "properties": {
+        "auc": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Auc"
+        },
+        "eer": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Eer"
+        }
+      },
+      "required": [
+        "auc",
+        "eer"
+      ],
+      "title": "EvalFused",
+      "type": "object"
+    },
+    "EvalIdentification": {
+      "properties": {
+        "accuracy": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Accuracy"
+        },
+        "confusion": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Confusion",
+          "type": "array"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Labels",
+          "type": "array"
+        }
+      },
+      "required": [
+        "labels",
+        "confusion",
+        "accuracy"
+      ],
+      "title": "EvalIdentification",
+      "type": "object"
+    },
+    "EvalLiveTrial": {
+      "properties": {
+        "detected": {
+          "title": "Detected",
+          "type": "boolean"
+        },
+        "t_start": {
+          "format": "date-time",
+          "title": "T Start",
+          "type": "string"
+        },
+        "ttd_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ttd S"
+        }
+      },
+      "required": [
+        "t_start",
+        "ttd_s",
+        "detected"
+      ],
+      "title": "EvalLiveTrial",
+      "type": "object"
+    },
+    "EvalModality": {
+      "properties": {
+        "auc": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Auc"
+        },
+        "beta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Beta"
+        },
+        "eer": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Eer"
+        },
+        "n_genuine": {
+          "title": "N Genuine",
+          "type": "integer"
+        },
+        "n_impostor": {
+          "title": "N Impostor",
+          "type": "integer"
+        },
+        "roc": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 200,
+          "title": "Roc",
+          "type": "array"
+        },
+        "weak": {
+          "default": false,
+          "title": "Weak",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "auc",
+        "eer",
+        "n_genuine",
+        "n_impostor"
+      ],
+      "title": "EvalModality",
+      "type": "object"
+    },
+    "EvalSplice": {
+      "properties": {
+        "fa_per_hour": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Fa Per Hour",
+          "type": "object"
+        },
+        "n": {
+          "title": "N",
+          "type": "integer"
+        },
+        "r3_friction_frac": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "R3 Friction Frac"
+        },
+        "ttd_s": {
+          "$ref": "#/$defs/EvalSpliceTtd"
+        },
+        "undetected_300s_frac": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Undetected 300S Frac"
+        }
+      },
+      "required": [
+        "n",
+        "ttd_s",
+        "undetected_300s_frac",
+        "fa_per_hour",
+        "r3_friction_frac"
+      ],
+      "title": "EvalSplice",
+      "type": "object"
+    },
+    "EvalSpliceTtd": {
+      "properties": {
+        "median": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Median"
+        },
+        "p90": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "P90"
+        },
+        "values": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "median",
+        "p90"
+      ],
+      "title": "EvalSpliceTtd",
+      "type": "object"
+    }
+  },
+  "$id": "https://2bme.tech/schemas/eval.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "ablation": {
+      "items": {
+        "$ref": "#/$defs/EvalAblation"
+      },
+      "title": "Ablation",
+      "type": "array"
+    },
+    "fused": {
+      "$ref": "#/$defs/EvalFused"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "identification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvalIdentification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "live_trials": {
+      "items": {
+        "$ref": "#/$defs/EvalLiveTrial"
+      },
+      "title": "Live Trials",
+      "type": "array"
+    },
+    "modalities": {
+      "additionalProperties": {
+        "$ref": "#/$defs/EvalModality"
+      },
+      "propertyNames": {
+        "enum": [
+          "keyboard",
+          "mouse",
+          "scroll",
+          "workflow",
+          "temporal"
+        ]
+      },
+      "title": "Modalities",
+      "type": "object"
+    },
+    "n_blocks": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "type": "object"
+      },
+      "title": "N Blocks",
+      "type": "object"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    },
+    "splice": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvalSplice"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "generated_at",
+    "n_blocks",
+    "modalities",
+    "fused"
+  ],
+  "title": "EvalReport",
+  "type": "object"
+}

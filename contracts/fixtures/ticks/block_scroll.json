@@ -1,0 +1,20 @@
+{
+  "modality": "scroll",
+  "t_start": "2026-09-26T14:29:41.500Z",
+  "t_end": "2026-09-26T14:30:02.115Z",
+  "n": 3,
+  "features": {
+    "sc.burst_dur_p50": 410.0,
+    "sc.burst_events_p50": 18.0,
+    "sc.burst_dist_p50": 620.0,
+    "sc.v_peak_p50": 3900.0,
+    "sc.v_mean_p50": 1480.0,
+    "sc.iei_cv_p50": 0.62,
+    "sc.inter_burst_p50": 1350.0,
+    "sc.reversal_rate": 0.33,
+    "sc.momentum_frac": 0.41,
+    "sc.horizontal_frac": 0.02
+  },
+  "transitions": null,
+  "psd": null
+}

@@ -1,0 +1,29 @@
+{
+  "modality": "mouse",
+  "t_start": "2026-09-26T14:29:58.020Z",
+  "t_end": "2026-09-26T14:30:04.870Z",
+  "n": 5,
+  "features": {
+    "ms.v_p50": 0.42,
+    "ms.v_p90": 1.31,
+    "ms.a_p50": 5.8,
+    "ms.jerk_p50": 142.0,
+    "ms.curv_p50": 2.9,
+    "ms.angvel_p50": 3.4,
+    "ms.straightness_p50": 0.87,
+    "ms.path_p50": 0.19,
+    "ms.dur_p50": 468.0,
+    "ms.t_peak_frac_p50": 0.38,
+    "ms.submoves_p50": 2.0,
+    "ms.click_hold_p50": 88.0,
+    "ms.pre_click_pause_p50": 164.0,
+    "ms.dblclick_p50": null,
+    "ms.frac_pc": 0.6,
+    "ms.frac_dd": 0.0,
+    "ms.dir_entropy": 2.41,
+    "ms.dwell_rate": 0.9,
+    "ms.dwell_p50": 240.0
+  },
+  "transitions": null,
+  "psd": null
+}
