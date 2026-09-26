@@ -14,9 +14,34 @@ The CP0 exports remain `router`, `issuer`, `startup()` and
 
 The core-owned server package and image still need to install `hearsay[server]`
 as a workspace dependency. That request is in `contracts/REQUESTS.md`. Until
-then, a provisioned workspace can use `uv sync --all-packages --all-extras` to install workspace and voice dependencies. Do not install models
-or torch on the demo laptop. Stub imports do not require Hearsay's optional
-model dependencies.
+then, use the checked-in setup command from a clean checkout on the Linux amd64
+batch box or serving VM:
+
+```sh
+scripts/voice_setup_box.sh --resolve-only
+scripts/voice_setup_box.sh --skip-smoke
+scripts/voice_setup_box.sh \
+  --real-dir /private/consented/real \
+  --synth-dir /private/consented/elevenlabs
+```
+
+The first command installs the locked workspace dependencies and resolves the
+current model refs to full commit SHAs without downloading weights. The second
+downloads and warms the pinned models. The third runs the required 20+20
+consented direction and timing smoke test. Artifacts are written under ignored
+`data/voice-runtime/`: `model-revisions.json`, `voice-runtime.env`, and reports.
+Later runs reuse the recorded revisions; `--refresh-revisions` is required to
+resolve mutable `main` refs again. The environment file contains no API keys.
+Setup exits nonzero after a successful preload or smoke when more evidence is
+still required; `--skip-smoke` is the explicit compatibility-only path. Do not
+run any of these commands on the demo laptop. Stub imports do not require
+Hearsay's optional model dependencies.
+
+DF_Arena remote code separately resolves its wav2vec2 backbone. Setup records
+the backbone's full SHA for audit, but the upstream loader has no revision input
+for that nested fetch. Keep the warmed Hugging Face cache with the deployment
+until this upstream limitation is removed; do not describe the nested dependency
+as cryptographically pinned.
 
 Required real-mode settings:
 

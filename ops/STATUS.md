@@ -191,3 +191,24 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   consented calibration data remain required. Runtime setup and behavior are in
   server/app/voice/README.md. Requesting Claude's merge review after the passing
   gate; no deployment or direct main push.
+
+## 2026-09-26 — Codex 2 — repeatable model-host setup
+
+- Merged current `origin/main` into `ws-voice` without conflicts.
+- Added a Linux amd64 setup command that performs a frozen workspace install,
+  resolves model refs to full Hugging Face commit SHAs, persists a nonsecret
+  runtime environment, preloads DF_Arena/fallback + ECAPA + Silero, and invokes
+  the existing 20+20 consented smoke harness when corpus paths are present.
+- The resolver records DF_Arena's separately fetched wav2vec2 backbone SHA and
+  explicitly marks that upstream nested fetch as unenforced. It never guesses a
+  revision, manufactures calibration, copies audio, or downloads weights on the
+  Mac.
+- Host execution remains blocked on the Linux SSH target / checkout path and
+  private consented corpus paths. Real serving also remains fail-closed until a
+  measured, model-bound calibration file is installed.
+- Validation: `scripts/voice_test.sh` passes all 124 voice tests plus lint and
+  format; privacy and shell syntax checks pass. The full voice gate is currently
+  red on three post-merge/baseline issues: sandboxed `uv sync` cannot reach PyPI,
+  generated `web/src/lib/contracts.ts` is stale, and the new signals trust engine
+  rejects an out-of-order tick in a core server flow. These are logged for their
+  owners in `contracts/REQUESTS.md`; no out-of-ownership fix was made.

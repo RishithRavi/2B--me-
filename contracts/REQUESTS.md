@@ -110,3 +110,15 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
   calibration / speaker thresholds using consented captures, and record accuracy
   and VM latency. The HTTP/pipeline tests use fake model adapters and synthetic
   audio; they are not detector-performance evidence.
+- **Operator / runtime access:** run Codex 2's `scripts/voice_setup_box.sh` from a
+  clean Linux amd64 checkout, or provide the SSH target and absolute checkout
+  path so Codex 2 can run it. The 20+20 smoke also needs the private consented
+  genuine and ElevenLabs corpus paths on that host. No matching SSH alias or
+  local calibration corpus is currently available.
+- **Claude / Codex 1 — post-merge gate regressions:** after merging current
+  `origin/main` (`4060101`), `scripts/gate.sh voice` reports stale generated
+  `web/src/lib/contracts.ts`, and `server/tests/test_flows.py::test_copresent_owner_frictionless_purchase`
+  hangs after `packages/ml/twobme_ml/trust.py` rejects an out-of-order tick. The
+  voice-owned suite remains green (124 tests). These files are outside Codex 2
+  ownership. A separate local `uv sync` step also could not fetch `hatchling`
+  because this sandbox has no PyPI DNS; that is an environment failure.

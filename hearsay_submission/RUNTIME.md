@@ -20,3 +20,12 @@ The runnable measurement harness is now `scripts/voice_model_smoke.py`; see
 README for invocation. It reports 40 warmed samples per stage and score-direction
 checks using 20 real + 20 consented ElevenLabs clips. Unit tests exercise the
 harness with fake models only. No real latency numbers are available yet.
+
+`scripts/voice_setup_box.sh` now owns the repeatable Linux amd64 setup. It syncs
+the locked workspace, resolves mutable Hugging Face `main` refs to full SHAs,
+records the otherwise nested DF_Arena backbone revision, preloads the models and
+then calls the smoke harness when consented corpus paths are supplied. Runtime
+artifacts stay below ignored `data/voice-runtime/`; later runs reuse those pins
+unless the operator explicitly passes `--refresh-revisions`. It deliberately
+does not invent calibration or copy recordings. The serving environment remains
+fail-closed until `data/voice-runtime/calibration/expo.json` is supplied.
