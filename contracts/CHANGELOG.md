@@ -39,3 +39,7 @@ Format: `- YYYY-MM-DD HH:MM ET · <who> · <file/type> · <change>`
 - 2026-09-26 18:30 ET · Claude · semantics · temporal `close.train_every_nth: 6` now defines the non-overlapping unit that the
   temporal gate and evaluations count. The model's default detector v2 fits and calibrates on every window. Its 60 s fold purge
   exceeds the 30 s window, so references never overlap their training windows. No wire, DB or name change.
+- 2026-09-26 18:50 ET · Claude · additive · admin/org panel (§2.4): `RosterRow`, `AuditRow` (+ live type `audit`), `AdminActionIn`,
+  `OrgSeedIn/OrgEmployee/OrgSeedOut`, `DemoVoiceOutcomeIn`; endpoints `/admin/roster`, `/admin/audit`, `/admin/actions`,
+  `/ws/live?scope=org`, `/demo/org/seed`, `/demo/voice-outcome` (contracts/api.md). Optional fields: `ModelInfo.backend`,
+  `VoiceResultLive.simulated`, `StatusOut.voice_mode`, `StatusOut.model_backend`. Regenerated `web/src/lib/contracts.ts`.

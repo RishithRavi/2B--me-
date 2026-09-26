@@ -294,6 +294,7 @@ export class MockLive implements MockControls {
     }
     return {
       status,
+      backend: "twobme_ml",
       job_id: randomId(),
       version: this.modelVersion,
       trained_at: iso(Date.now() - 42 * 60_000),
@@ -630,6 +631,7 @@ export class MockLive implements MockControls {
       this.send("voice_result", {
         challenge_id: id,
         decision: "BLOCK_SPOOF",
+        simulated: true,
         voice_confidence: 0.07,
         asv_cos: 0.58,
         cm_p_spoof: 0.93,
@@ -686,6 +688,7 @@ export class MockLive implements MockControls {
       this.send("voice_result", {
         challenge_id: id,
         decision: "VERIFY",
+        simulated: true,
         voice_confidence: 0.96,
         asv_cos: 0.81,
         cm_p_spoof: 0.04,

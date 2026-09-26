@@ -83,11 +83,20 @@ Stub (A0, until Codex 2 replaces it): the response endpoint returns a canned `Vo
 | POST | `/tiger/compress-now` (admin) | compress `feature_blocks` chunks older than 1 h |
 | GET | `/demo/redteam/active-challenge?device_id=` (admin) | → `RedteamActiveOut | null`; every read logs an anomaly `redteam_tool` |
 | POST | `/demo/purge-session` (admin) | `PurgeSessionIn{session_id}` |
+| POST | `/demo/voice-outcome` (admin) | `DemoVoiceOutcomeIn{device_id, decision|null}` — **stub voice only**: sticky operator-chosen outcome for this device's challenge responses until cleared; every result it produces is `simulated=true`. 409 in real voice mode |
+| POST | `/demo/org/seed` (admin) | `OrgSeedIn{n=19}` → `OrgSeedOut{employees[{user_id, handle, team, device_id, device_token}]}` — idempotent pseudonymous org-demo users `emp01@org.2bme.tech`… (`handle` "Employee 01", `team`), one monitor-mode device each; re-seeding rotates tokens. Driven by `scripts/core_org_demo.py` |
+
+## Admin / org panel (§2.4; admin cookie or `X-Admin-Token`)
+| GET | `/admin/roster` | → `RosterRow[]` — every device: hub trust (level, confidence, display), online (heartbeat < 30 s), lock, open challenge, model version/backend, last anomaly, 5-min sparkline, flags; A's real device first, then by severity |
+|---|---|---|
+| GET | `/admin/audit?limit=100&device_id=` | → `AuditRow[]` newest first — trust-level changes, alerts (anomalies), challenges, decisions, locks, markers, model versions and admin actions. Tiger `audit_log` when up, in-memory ring otherwise |
+| POST | `/admin/actions` | `AdminActionIn{device_id, action: lock|unlock|force_reverify|ack_alert|note, anomaly_id?, text?≤80}` → `AuditRow`. `lock` = admin lock (reason `admin_lock`, L pinned); `unlock` clears an admin lock only (voice/BLOCK locks still need a VERIFY, §5.4); `force_reverify` issues a proactive challenge; `ack_alert` sets the anomaly's resolution; every action is audited with the admin's handle |
+| WS | `/ws/live?scope=org` | admin only: no device filter and no snapshot on open; every device's events plus `audit` rows as they happen |
 
 ## Health
 | GET | `/healthz` | 200 `{ok:true}` only after the voice warm-up; 503 otherwise |
 |---|---|---|
-| GET | `/status` | → `StatusOut` (tiger up/down, voice_warm, writer stats, quota, …) |
+| GET | `/status` | → `StatusOut` (tiger up/down, voice_warm, writer stats, quota, `voice_mode` stub/real, `model_backend`, …) |
 
 ## Browser SDK (P1)
 | POST | `/web/blocks` | `{blocks: Block[]}` — counted only when the bound device has no fresh agent heartbeat |
