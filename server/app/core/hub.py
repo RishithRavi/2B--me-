@@ -380,6 +380,9 @@ class DeviceHub:
 
     # --- helpers ----------------------------------------------------------------------------------
     def publish(self, drt: DeviceRuntime | None, type_: str, data: BaseModel | dict | None) -> None:
+        audit = getattr(self, "audit", None)  # core.audit.AuditLog (org audit trail, §2.4); set in main
+        if audit is not None:
+            audit.observe(drt, type_, data)
         if drt is None:
             self.live.publish(None, None, type_, data)
         else:
@@ -1114,9 +1117,14 @@ class DeviceHub:
         trigger = row["trigger"]
         drt = self.rt_by_id(row.get("device_id"))
         live = VoiceResultLive(challenge_id=challenge_id, **result.model_dump(exclude={"spectrogram"}))
+        from app.core.voice_demo import voice_mode
+
+        if voice_mode() == "stub":  # §8 C2 stub honesty: canned/operator-chosen result, badge it
+            live.simulated = True
         if drt is not None:
             self.publish(drt, "voice_result", live)
-            self.feed(drt, "voice", f"Voice {trigger}: {result.decision} (conf {result.voice_confidence:.2f})",
+            sim = " — simulated (stub voice)" if live.simulated else ""
+            self.feed(drt, "voice", f"Voice {trigger}: {result.decision} (conf {result.voice_confidence:.2f}){sim}",
                       4 if result.decision.startswith("BLOCK") else 1)
         else:
             self.live.publish(None, row.get("user_id"), "voice_result", live)

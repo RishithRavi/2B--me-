@@ -202,8 +202,9 @@ def test_block_spoof_locks_and_attacker_order_stays_N_after_owner_verify(client)
     attacker = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
     assert attacker["trans_status"] == "C"
     cid = attacker["challenge_id"]
+    # stub voice: X-Fake-Decision is honoured only for admin (§5.3); the user's session is still revoked
     r = client.post(f"/api/voice/challenges/{cid}/response", files={"wav": ("a.wav", b"RIFF0000", "audio/wav")},
-                    headers={"X-Fake-Decision": "BLOCK_SPOOF"})
+                    headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
     assert r.status_code == 200, r.text
     out = r.json()["outcome"]
     assert out["device_locked"] is True
@@ -244,7 +245,7 @@ def test_unlock_only_via_voice_or_reset(client):
         agent.tick("b")
     d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
     client.post(f"/api/voice/challenges/{d['challenge_id']}/response",
-                files={"wav": ("a.wav", b"RIFF", "audio/wav")}, headers={"X-Fake-Decision": "BLOCK_IMPOSTOR"})
+                files={"wav": ("a.wav", b"RIFF", "audio/wav")}, headers={**ADMIN, "X-Fake-Decision": "BLOCK_IMPOSTOR"})
     # genuine behavior does not unlock
     for _ in range(8):
         t = agent.tick("a")
@@ -274,7 +275,7 @@ def test_sandbox_challenge_has_no_effects(client):
     before = agent.tick("a")["confidence"]
     ch = client.post("/api/voice/challenges", json={"reason": "sandbox"}).json()
     r = client.post(f"/api/voice/challenges/{ch['challenge_id']}/response",
-                    files={"wav": ("a.wav", b"RIFF", "audio/wav")}, headers={"X-Fake-Decision": "BLOCK_SPOOF"})
+                    files={"wav": ("a.wav", b"RIFF", "audio/wav")}, headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
     assert r.json()["outcome"]["device_locked"] is False
     assert agent.tick("a")["confidence"] >= before - 0.2
     agent.close()

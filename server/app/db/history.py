@@ -12,6 +12,7 @@ from app.db.pool import Db
 from twobme_common.spec import load_spec
 from twobme_common.types import (
     AnomalyRow,
+    AuditRow,
     BaselineOut,
     BaselineRow,
     DeviationOut,
@@ -244,3 +245,30 @@ async def compress_now(db: Db) -> int | None:
             return None
         total += len(rows)
     return total
+
+
+async def audit(db: Db, limit: int, device_id: UUID | None) -> list[AuditRow] | None:
+    """Org audit trail (§2.4, migration 006), newest first. None when Tiger is down."""
+    if not db.up:
+        return None
+    rows = await db.fetch(
+        """
+        SELECT time, id, kind, device_id, user_id, handle, actor, summary, severity, ref_id
+        FROM audit_log
+        WHERE ($2::uuid IS NULL OR device_id = $2)
+        ORDER BY time DESC
+        LIMIT $1
+        """,
+        limit, device_id,
+    )
+    if rows is None:
+        return None
+    out = []
+    for r in rows:
+        try:
+            out.append(AuditRow(id=r["id"], t=r["time"], kind=r["kind"], device_id=r["device_id"],
+                                user_id=r["user_id"], handle=r["handle"], actor=r["actor"], summary=r["summary"],
+                                severity=r["severity"], ref_id=r["ref_id"]))
+        except Exception:  # a row written by a newer/older build with an unknown kind: skip, never 500
+            continue
+    return out

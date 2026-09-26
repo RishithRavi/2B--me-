@@ -51,6 +51,7 @@ class User:
     totp_secret_enc: str | None = None
     enrollment_status: str = "new"
     sessions_revoked_at: datetime | None = None
+    team: str | None = None  # org-demo employees only (§2.4; migration 006)
 
 
 @dataclass
@@ -162,13 +163,13 @@ class Registry:
             return
         self.writer.execute(
             """INSERT INTO users (id, email, pw_hash, handle, role, tz, totp_secret_enc, enrollment_status,
-                                  sessions_revoked_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                                  sessions_revoked_at, team)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
                ON CONFLICT (id) DO UPDATE SET pw_hash=EXCLUDED.pw_hash, handle=EXCLUDED.handle, role=EXCLUDED.role,
                  totp_secret_enc=EXCLUDED.totp_secret_enc, enrollment_status=EXCLUDED.enrollment_status,
-                 sessions_revoked_at=EXCLUDED.sessions_revoked_at""",
+                 sessions_revoked_at=EXCLUDED.sessions_revoked_at, team=EXCLUDED.team""",
             u.id, u.email, u.pw_hash, u.handle, u.role, u.tz, u.totp_secret_enc, u.enrollment_status,
-            u.sessions_revoked_at,
+            u.sessions_revoked_at, u.team,
         )
 
     def _queue_device(self, d: Device, insert: bool) -> None:
@@ -203,7 +204,7 @@ class Registry:
                 self.users[r["id"]] = User(
                     id=r["id"], email=r["email"], pw_hash=r["pw_hash"], handle=r["handle"], role=r["role"],
                     tz=r["tz"], totp_secret_enc=r["totp_secret_enc"], enrollment_status=r["enrollment_status"],
-                    sessions_revoked_at=r["sessions_revoked_at"],
+                    sessions_revoked_at=r["sessions_revoked_at"], team=r.get("team"),
                 )
                 n += 1
         for r in rows_d:

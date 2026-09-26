@@ -1,4 +1,4 @@
-"""WebSockets: /ws/agent (device token in `hello`) and /ws/live (cookie). §5.2."""
+"""WebSockets: /ws/agent (device token in `hello`) and /ws/live (cookie; `?scope=org` = admin panel). §5.2."""
 
 from __future__ import annotations
 
@@ -71,6 +71,14 @@ async def ws_live(ws: WebSocket) -> None:
         return
     await ws.accept()
     r = rt()
+    if ws.query_params.get("scope") == "org":
+        # admin/org panel (§2.4): every device's events plus `audit` rows; no device filter and no snapshot on
+        # open (the client fetches GET /api/admin/roster)
+        if not p.is_admin:
+            await _close(ws, 4403, "admin only")
+            return
+        await r.live.serve(Subscriber(ws=ws, user_id=p.user.id, is_admin=True, device_id=None))
+        return
     want = ws.query_params.get("device_id")
     dev = None
     if want:
