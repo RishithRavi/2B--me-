@@ -287,3 +287,34 @@ def test_ws_welcome_after_reconnect_still_acks(client):
         assert _trust_reply(a2, r["seq"])["type"] == "trust"
     assert not any(m.get("type") == "error" for m in a2.pending)
     a2.close()
+
+
+def test_decision_lookup_falls_back_to_tiger(client):
+    """GET /decisions/{id} survives an API restart (the hub's in-memory log is gone) via the Tiger row."""
+    import os
+
+    import pytest
+
+    from app.core.runtime import rt
+
+    assert client.get(f"/api/decisions/{uuid.uuid4()}").status_code in (401, 404)
+    _uid, _dev, agent = setup_monitored(client)
+    assert client.get(f"/api/decisions/{uuid.uuid4()}").status_code == 404
+    if not os.environ.get("TEST_TIGER_URL"):
+        agent.close()
+        pytest.skip("Tiger fallback needs TEST_TIGER_URL")
+    for _ in range(10):
+        agent.tick("b")
+    d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
+    client.post(f"/api/voice/challenges/{d['challenge_id']}/response",
+                files={"wav": ("a.wav", b"RIFF", "audio/wav")}, headers={"X-Fake-Decision": "BLOCK_SPOOF"})
+    client.portal.call(rt().writer.flush)
+    rt().hub.decisions.clear()  # what a restart does to the in-memory decision log
+    login(client, "a")  # BLOCK_* revoked a@'s sessions
+    det = client.get(f"/api/decisions/{d['decision_id']}")
+    assert det.status_code == 200, det.text
+    body = det.json()
+    assert body["final_trans_status"] == "N" and body["status"] == "final" and body["action"] == "purchase"
+    login(client, "b")
+    assert client.get(f"/api/decisions/{d['decision_id']}").status_code == 404  # not b@'s decision
+    agent.close()

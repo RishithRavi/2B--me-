@@ -112,7 +112,8 @@ def test_twobme_ml_refusal_falls_back_and_says_so(client, monkeypatch):
     assert j.status_code == 200, j.text
     mi = wait_job(client, j.json()["job_id"])
     assert mi["status"] == "ready" and mi["version"] == 1 and mi["backend"] == "fallback", mi
-    assert "twobme_ml declined" in mi["metrics"]["backend_note"]
+    note = mi["metrics"]["backend_note"]
+    assert note.startswith("twobme_ml needs a longer enrollment") and "keyboard 40/100" in note, note
     assert mi["error"] is None
     assert set(mi["enabled_modalities"]) == {"keyboard", "mouse"}
 

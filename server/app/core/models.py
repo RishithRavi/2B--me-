@@ -154,6 +154,19 @@ def _impostor(df: pd.DataFrame) -> pd.Series:
     return actor.fillna("a").eq("b") | label.fillna("genuine").eq("impostor")
 
 
+def _decline_note(e: Exception, df: pd.DataFrame) -> str:
+    """One line for the identity card when twobme_ml refuses a job and the fallback model trains instead."""
+    msg = str(e)
+    if "enrollment" in msg and "gates" in msg:
+        spec = load_spec()
+        counts = df.groupby("modality").size().to_dict() if len(df) else {}
+        have = {m: int(counts.get(m, 0)) // (6 if m == "temporal" else 1) for m in MODALITIES}
+        short = [f"{m} {have[m]}/{spec.modalities[m].enroll_gate}" for m in MODALITIES
+                 if have[m] < spec.modalities[m].enroll_gate]
+        return f"twobme_ml needs a longer enrollment ({', '.join(short[:3])}); fallback model trained instead"
+    return f"twobme_ml declined ({msg[:120]}); fallback model trained instead"
+
+
 class ModelManager:
     def __init__(self, model_dir: Path, data_dir: Path, db: Any, writer: Any, backend: str | None = None):
         self.model_dir = model_dir
@@ -341,7 +354,7 @@ class ModelManager:
             try:
                 return self.backend_cls.train(df, cfg), "twobme_ml", None
             except Exception as e:
-                note = f"twobme_ml declined ({str(e)[:160]}); fallback model trained instead"
+                note = _decline_note(e, df)
                 log.warning("twobme_ml training refused (%s); falling back to FallbackUserModel", e)
         model = FallbackUserModel.train(df, cfg, version=version)
         if not model.params:
