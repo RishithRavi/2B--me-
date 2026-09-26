@@ -4,7 +4,7 @@ Ordered. Done-criteria in brackets. If blocked → note in `contracts/REQUESTS.m
 
 1. [x] **A0 contracts → CP0** (tag `cp0-contracts`) [contracts/*, twobme_common + tests, contracts.ts, report schemas, voice stub, gate.sh, check_privacy.sh]
 2. [ ] **A1 backend core** [hub/WS/auth/policy/decisions/presence/TOTP; §11.2 invariant tests green] — skeleton + 14 invariant tests done at CP0
-3. [ ] **A2 Tiger** [migrations 001–004 applied on Tiger Cloud; writer; history queries; /tiger/stats shows 15-min columnstore jobs]
+3. [x] **A2 Tiger** [migrations 001–004 applied on Tiger Cloud; writer; history queries; /tiger/stats shows 15-min columnstore jobs] — `server/tests/test_history_tiger.py` green against real Tiger Cloud (`TEST_TIGER_URL`)
 4. [~] **Walking skeleton deployed (CP1 06:30)** — deploy files + local e2e done; waiting on VM step 0 + push [https://2bme.tech: fixture replay → wss → dashboard → stub challenge → /verify uploads WAV → /shop Y/C/N]
    - needs humans: VM + DNS + Caddy/mictest (step 0), `.env` on the VM, Tiger URL, deploy key
 5. [ ] **A3 core web P0 by CP2** [login, dashboard with all §6 A3 panels, `?stage=1`] — web agent building

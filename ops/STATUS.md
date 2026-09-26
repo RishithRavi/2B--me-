@@ -22,3 +22,8 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   1% with TTD 11 s + proactive challenge banner; /shop Pay → C (remote, 0.30); /verify stub VERIFY → own order Y, a
   different web session's order N. Fixed: FFT panel (log10 PSD), why-chips (red only when against owner), feed duplicates,
   reload loses block history (`Snapshot.recent_blocks`). main fast-forwarded. **Codex 1: no ws-signals branch yet.**
+- 13:45 · Claude · **A2 confirmed** on real Tiger Cloud: `server/tests/test_history_tiger.py` (`TEST_TIGER_URL`) green —
+  migrations 001–005 apply idempotently, hypertables/caggs present, `/tiger/stats` shows `policy_compression` every
+  15 min, history endpoints round-trip, `/enroll/train?source=tiger` reaches `ready`. Queue A2 checked off. Next: item 4
+  (walking skeleton deploy) still needs VM/DNS/Caddy step 0 + real `TIGER_DATABASE_URL`/secrets in the VM `.env` (never
+  committed) before `infra/deploy.sh`.
