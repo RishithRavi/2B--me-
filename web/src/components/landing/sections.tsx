@@ -151,9 +151,9 @@ export function PrivacyPromise() {
 
 const SPONSORS: { name: string; role: string; mono?: boolean; note?: string }[] = [
   { name: "Tiger Data", role: "behavior history, baselines, anomalies, compression" },
-  { name: "Vultr", role: "hosting, inference and anomaly explanations" },
+  { name: "Vultr", role: "compute deployment target + privacy-safe inference adapter", note: "integration ready" },
   { name: "ElevenLabs", role: "spoken prompts, speech-to-text and the red-team voice corpus" },
-  { name: ".tech", role: "this live site: 2bme.tech", mono: true },
+  { name: ".tech", role: "deployment domain: 2bme.tech", mono: true },
   { name: "NSA Hearsay", role: "synthetic-speech detection submission" },
   { name: "Visa", role: "3DS-style checkout", note: "demo scenario, not affiliated" },
 ];

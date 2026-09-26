@@ -152,3 +152,11 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   backend endpoints. Verified with tsc, vitest, a static export build and a headless-Chrome screenshot of the
   rendered page. Gate green (core). §2.4 direction is still PROPOSED — needs sign-off and a ping to Codex 1/2
   before this is anything more than a Workstream-A draft.
+
+## 2026-09-26 — Vultr integration visibility
+
+- Documented the existing Vultr Compute deployment target and Serverless Inference adapter in the root
+  README, and made the integration visible in the landing-page sponsor strip.
+- Kept the claim bounded to what exists in the repository: deploy scripts, Caddy/Compose configuration,
+  privacy-safe anomaly-explanation input and a deterministic no-credential fallback. No live production
+  deployment, DNS change or public-domain availability is claimed.
