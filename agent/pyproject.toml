@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "twobme-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["twobme-common", "twobme-features", "websockets==17.1", "httpx", "keyring", "rich", "pyyaml", "pyobjc-framework-Quartz==12.2.2; sys_platform == \"darwin\"", "pyobjc-framework-Cocoa==12.2.2; sys_platform == \"darwin\""]
+
+[project.scripts]
+twobme-agent = "twobme_agent.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["twobme_agent"]
+
+[tool.uv.sources]
+twobme-common = { workspace = true }
+twobme-features = { workspace = true }

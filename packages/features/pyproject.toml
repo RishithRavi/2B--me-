@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "twobme-features"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["twobme-common", "numpy==2.5.*", "scipy==1.18.1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["twobme_features"]
+
+[tool.uv.sources]
+twobme-common = { workspace = true }
+
+[dependency-groups]
+dev = ["hypothesis>=6"]
