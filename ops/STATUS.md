@@ -172,3 +172,20 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   - **Humans:** B does step 0 (VM + DNS) now; A makes the Hearsay go/no-go by 20:00.
   - **Codex 1:** read `open_browser`.
   - **Codex 2:** commit ws-voice.
+- 18:45 · Claude · **Branch `ml-wider-gap-13wf`** (user request; not merged, not pushed). It widens the owner-vs-impostor
+  gap for all five signals and trains workflow from 13 blocks.
+  - `CONTRACT:` workflow `enroll_gate` is now 20 → 13, and the model reads gates from the spec.
+  - The new default detector `v2` treats missing features as evidence, compares band powers as shares, and scales
+    features robustly with floors. It scores new blocks cross-conformally (the old full-model scoring put fresh
+    owner blocks at typicality 0.57 instead of 0.5) and fits temporal on every window. `v1` is kept verbatim.
+  - Across 30 seeded simulated pairs, mean OOF AUC went up for keyboard (+0.11 to +0.15), mouse (+0.04), scroll
+    (+0.02 to +0.04), temporal (+0.02 to +0.04) and workflow (v2 vs v1 at gate 13: +0.05 to +0.15). Fused
+    held-out AUC went from 0.76 to 0.83 on the hardest pairs. v2 is also 10× smaller and 5× faster.
+  - **Unverified on real data**: the recordings aren't on this laptop and Tiger rejects the local `.env`
+    password. Run `scripts/sig_gap_compare.py --run-dir <run>` where the recordings live (REQUESTS.md).
+  - Gate: privacy, contracts, generated TS, features, ml, agent and hearsay pass, and web typecheck now passes
+    (fixed the enroll page's `VoiceEnroll` import). These still fail, **identically on clean `main`**:
+    - `test_copresent_owner_frictionless_purchase` and the e2e run hit `twobme_ml.trust` "Out-of-order tick".
+    - e2e: the real `UserModel` can't train on the 3-min fixture at its gates.
+    - web tests: `jsdom` isn't in `web/package.json`.
+    - `voice_test.sh` needs `python3.12` on PATH.

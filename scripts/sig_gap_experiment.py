@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Explore repeated evidence and an explicitly low-data workflow branch."""
+"""Explore repeated evidence and the low-data (13-block gate) workflow branch."""
 import argparse
 import json
 from pathlib import Path
@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 from twobme_common.spec import load_spec
 from twobme_ml.evaluation import block_from_row, roc_metrics
-from twobme_ml.model import UserModel, eligible, temporal_subset
+from twobme_ml.model import UserModel, eligible, enrollment_gates, fold_minimum, temporal_subset
 
 
 def window_metrics(frame, seconds=60):
     x = frame.copy()
-    x["bucket"] = pd.to_datetime(x.t, utc=True).astype("int64") // (seconds * 10**9)
+    x["bucket"] = pd.to_datetime(x.t, utc=True, format="ISO8601").astype("int64") // (seconds * 10**9)
     grouped = x.groupby(["actor", "session", "bucket"], as_index=False).typicality.mean()
     return roc_metrics(grouped[grouped.actor == "a"].typicality.tolist(),
                        grouped[grouped.actor == "b"].typicality.tolist())
@@ -31,12 +31,9 @@ def main():
     run = Path(args.run_dir)
     spec = load_spec().model_dump()
     df = pd.read_pickle(run / "features.pkl")
-    cfg = {
-        "spec": spec,
-        "experimental_gates": {"workflow": 13},
-        "experimental_min_fold_train": {"workflow": 8},
-        "allow_experimental_gate_override": True,
-    }
+    # The 13-block workflow gate and its 8-block fold minimum now come from the spec.
+    cfg = {"spec": spec}
+    gate = enrollment_gates(spec)["workflow"]
     model = UserModel.train(df, cfg)
     model.save(run / "all-signals-experimental")
     loaded = UserModel.load(run / "all-signals-experimental")
@@ -63,21 +60,22 @@ def main():
         windowed[modality] = window_metrics(rows)
     report = {
         "model": "all-signals-experimental",
+        "detector": model.detector,
         "enabled_modalities": list(model.models),
         "experimental": model.experimental,
         "workflow": {
             "a_blocks": int((a.modality == "workflow").sum()),
             "b_blocks": int((b.modality == "workflow").sum()),
             "calibration_folds": 5,
-            "minimum_fold_training_blocks": 8,
-            "production_gate_unchanged": 20,
+            "enrollment_gate": gate,
+            "minimum_fold_training_blocks": fold_minimum(gate),
             "artifact_reload": "passed",
         },
         "windowed_60s": windowed,
         "oof_exploratory": exploratory,
         "limitations": [
             "Window metrics contain very few independent windows and are development evidence only.",
-            "OOF A scores versus B scores are exploratory: A uses fold models while B uses the full-A model.",
+            "OOF A scores versus B scores are exploratory; with cross-conformal (v2) scoring both are scored by the fold models.",
             "B influenced analysis; use a new B recording for final validation.",
             "Workflow has only 13 A and 5 B blocks. It is trained, but cannot support a reliable performance claim.",
         ],

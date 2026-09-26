@@ -1,19 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import VoiceEnroll from "../../components/voice/VoiceEnroll";
-import type { EnrollProgress } from "../../lib/contracts";
+import { VoiceEnroll } from "../../components/voice/voice-enroll";
+import {
+  FEATURE_SPEC,
+  type EnrollProgress,
+  type Modality,
+} from "../../lib/contracts";
 import { startPresence } from "../../sdk/presence";
 import styles from "./page.module.css";
 
 type Progress = Pick<EnrollProgress, "counts" | "gates" | "ready">;
-const gates: Record<string, number> = {
-  keyboard: 100,
-  mouse: 60,
-  scroll: 30,
-  workflow: 20,
-  temporal: 60,
-};
+// Enrollment gates come from feature_spec.yaml (via the generated contracts) so the
+// wizard always matches what the model actually requires.
+const gates = Object.entries(FEATURE_SPEC.modalities).map(
+  ([m, spec]) => [m as Modality, spec.enroll_gate] as const,
+);
 const labels: Record<string, string> = {
   keyboard: "Typing rhythm",
   mouse: "Pointer movement",
@@ -157,8 +159,8 @@ export default function EnrollPage() {
       });
       setJob(result.job_id);
     });
-  const total = Object.keys(gates).length;
-  const complete = Object.entries(gates).filter(
+  const total = gates.length;
+  const complete = gates.filter(
     ([m, n]) => (progress.counts[m] ?? 0) >= n,
   ).length;
 
@@ -423,7 +425,7 @@ export default function EnrollPage() {
             <br />
             one signal at a time.
           </h2>
-          {Object.entries(gates).map(([m, goal]) => {
+          {gates.map(([m, goal]) => {
             const count = progress.counts[m] ?? 0;
             return (
               <div className={styles.signal} key={m}>

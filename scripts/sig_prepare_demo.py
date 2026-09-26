@@ -54,14 +54,16 @@ def main():
             "scroll": "Modest held-out separation; retained as supporting evidence.",
             "mouse": "Global holdout AUC 0.549, EER 0.481, weak beta fit; omitted.",
             "temporal": "No qualifying holdout; even optimistic full-A fit diagnostics favor B (AUC 0.427); omitted.",
-            "workflow": "13 eligible A blocks, below required 20; not trained.",
+            "workflow": "13 eligible A blocks; meets the 13-block gate and trains, but too few for a reliable claim.",
         },
+        "rationale_detector": "Figures above come from the detector v1 evaluation; rerun sig_gap_compare.py "
+                              "and revisit these choices before packaging a v2 model.",
     }
     if (run / "all-signals-experimental").is_dir():
         selection["alternate_model"] = {
             "path": "all-signals-experimental",
             "enabled": ["keyboard", "mouse", "scroll", "workflow", "temporal"],
-            "warning": "Workflow gate lowered to 13 for this artifact only; temporal remains unreliable.",
+            "warning": "Workflow trained at the 13-block gate; temporal remains unreliable.",
         }
     (run / "selection.json").write_text(json.dumps(selection, indent=2) + "\n")
 
