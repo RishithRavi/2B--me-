@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone
+from itertools import pairwise
 from pathlib import Path
 import json
 import uuid
@@ -14,11 +15,36 @@ from twobme_common.types import BlockScore, Deviation
 from twobme_features.accumulators import names
 from .config import model_config
 
-GATES = {"keyboard": 100, "mouse": 60, "scroll": 30, "workflow": 20, "temporal": 60}
+# Fallback only: `enroll_gate` in feature_spec.yaml is the source of truth (see enrollment_gates).
+GATES = {"keyboard": 100, "mouse": 60, "scroll": 30, "workflow": 13, "temporal": 60}
 HEADLINES = set(
     "kb_hold_p50 kb_dd_p50 kb_ud_p50 kb_speed_kps kb_bksp_rate ms_v_p50 ms_curv_p50 ms_straightness_p50 ms_click_hold_p50 sc_v_mean_p50 wf_switch_rate tp_rate tp_b tp_idle_frac tp_peak_hz".split()
 )
 CATEGORIES = ["browser", "ide", "terminal", "chat", "docs", "media", "system", "other"]
+# v2 view: fractions, ratios, scores, entropies and log-likelihoods stay linear. Every other
+# feature is a duration, speed, rate or count whose spread grows with its level: signed log.
+LINEAR = frozenset(
+    """kb.rollover_frac kb.pause_rate kb.bksp_rate kb.chord_rate
+    ms.straightness_p50 ms.t_peak_frac_p50 ms.frac_pc ms.frac_dd ms.dir_entropy
+    sc.reversal_rate sc.momentum_frac sc.horizontal_frac wf.kbd_switch_frac wf.markov_ll
+    tp.B tp.Bn tp.M tp.idle_frac tp.spec_entropy tp.acf_peak""".split()
+)
+# Welch band powers arrive absolute (they scale with activity volume); v2 uses their shares.
+BAND_POWERS = ("tp.bp_0_05", "tp.bp_05_2", "tp.bp_2_5", "tp.bp_5_10", "tp.bp_10_25")
+
+
+def enrollment_gates(spec):
+    modalities = spec.get("modalities", {}) if isinstance(spec, dict) else {}
+    return {
+        m: int((modalities.get(m) or {}).get("enroll_gate") or gate)
+        for m, gate in GATES.items()
+    }
+
+
+def fold_minimum(gate):
+    # Five chronological folds with a 60s purge leave about 0.8*gate - 2 training blocks
+    # per fold from a gate-sized enrollment (13 workflow blocks -> 8); capped at 20.
+    return min(20, max(5, int(0.8 * gate) - 2))
 
 
 def eligible(df, now=None, *, actor="a"):
@@ -77,7 +103,9 @@ def markov_ll(transitions, matrix):
 
 
 class Ensemble:
-    def fit(self, x, family_n=None):
+    """Detector "v1": the original CP0 ensemble, kept verbatim for comparison and rollback."""
+
+    def fit(self, x, family_n=None, columns=None):
         self.median = np.array(
             [np.nanmedian(c) if np.isfinite(c).any() else 0 for c in x.T]
         )
@@ -111,12 +139,167 @@ class Ensemble:
             + [-m.score_samples(z) for m in self.members]
         )
 
+    def zscores(self, x):
+        return (x - self.median) / np.maximum(1.4826 * self.mad, 1e-6)
 
-def rank_scores(raw, refs):
+
+class EnsembleV2:
+    """Detector "v2": missing-aware robust ensemble for small, heterogeneous enrollments.
+
+    Every member scores anomaly (higher = stranger) on a view of the canonical vector:
+    band powers become shares, durations/speeds/counts are log-compressed, and each
+    feature is robust-scaled with a floor and clipped so no single feature dominates.
+    - tail: per-feature nonparametric surprise, -log of the two-sided empirical tail
+      probability, plus -log P(missing | present) under the owner's own missing rates.
+    - dist: scaled Manhattan over the features the block actually observed.
+    - knn: mean distance to the k nearest enrollment blocks (keeps context clusters).
+    - gmm (n >= 60) and ocsvm (n > 150) on the clipped view.
+    Missing values are never imputed as typical for tail, dist or knn. An isolation forest
+    ("iforest") is available via `members` but is off by default: in simulated A/B
+    ablations it added nothing on top of these members while dominating artifact size
+    and scoring time.
+    """
+
+    def __init__(self, members=None, clip=4.0, log_view=True, band_shares=True):
+        self.members_wanted = members
+        self.clip = clip
+        self.log_view = log_view
+        self.band_shares = band_shares
+
+    def fit(self, x, family_n=None, columns=None):
+        x = np.where(np.isfinite(x), x, np.nan).astype(float)
+        n, d = x.shape
+        columns = list(columns) if columns is not None else [str(j) for j in range(d)]
+        seen = np.isfinite(x).any(axis=0)
+        # Raw-space medians feed headline medians and explanations only.
+        self.median = np.where(seen, np.nanmedian(np.where(seen, x, 0), axis=0), 0.0)
+        self.bands = (
+            [columns.index(c) for c in BAND_POWERS if c in columns] if self.band_shares else []
+        )
+        self.logged = np.array(
+            [self.log_view and c not in LINEAR and j not in self.bands for j, c in enumerate(columns)]
+        )
+        magnitude = np.abs(x)
+        magnitude[magnitude == 0] = np.nan
+        has = np.isfinite(magnitude).any(axis=0)
+        s0 = np.nanmedian(np.where(has, magnitude, 1.0), axis=0)
+        self.s0 = np.where(has & (s0 > 0), s0, 1.0)
+        v = self._view(x)
+        obs = np.isfinite(v)
+        filled = np.where(obs.any(axis=0), v, 0.0)
+        self.center = np.nanmedian(filled, axis=0)
+        q05, q25, q75, q95 = np.nanpercentile(filled, [5, 25, 75, 95], axis=0)
+        mad = np.nanmedian(np.abs(filled - self.center), axis=0)
+        floor = np.where(self.logged, 0.05, 1e-3)
+        self.scale = np.max(
+            [(q75 - q25) / 1.349, 1.4826 * mad, 0.1 * (q95 - q05), floor], axis=0
+        )
+        self.sorted = [np.sort(v[obs[:, j], j]) for j in range(d)]
+        self.p_missing = ((~obs).sum(axis=0) + 0.5) / (n + 1)
+        self.train_z = self._z(v)
+        self.k = int(np.clip(round(np.sqrt(n) / 2), 2, 10))
+        family = family_n or n
+        if self.members_wanted:
+            self.member_names = list(self.members_wanted)
+        else:
+            self.member_names = ["tail", "dist", "knn"]
+            self.member_names += ["gmm"] if family >= 60 else []
+            self.member_names += ["ocsvm"] if family > 150 else []
+        zi = np.nan_to_num(self.train_z)
+        self.models = {}
+        if "iforest" in self.member_names:
+            self.models["iforest"] = IsolationForest(
+                n_estimators=200, max_samples=min(256, n), random_state=17, n_jobs=1
+            ).fit(zi)
+        if "gmm" in self.member_names:
+            self.models["gmm"] = GaussianMixture(
+                n_components=2 if family > 150 else 1,
+                covariance_type="diag",
+                reg_covar=1e-3,
+                random_state=17,
+            ).fit(zi)
+        if "ocsvm" in self.member_names:
+            self.models["ocsvm"] = OneClassSVM(nu=0.05).fit(zi)
+        return self
+
+    def _view(self, x):
+        v = np.where(np.isfinite(x), x, np.nan).astype(float)
+        if self.bands:
+            b = v[:, self.bands]
+            total = b.sum(axis=1, keepdims=True)
+            with np.errstate(invalid="ignore", divide="ignore"):
+                v[:, self.bands] = np.where(total > 0, b / total, np.nan)
+        if self.logged.any():
+            lg = self.logged
+            v[:, lg] = np.sign(v[:, lg]) * np.log1p(np.abs(v[:, lg]) / self.s0[lg])
+        return v
+
+    def _z(self, v):
+        return np.clip((v - self.center) / self.scale, -self.clip, self.clip)
+
+    def _tail(self, v):
+        obs = np.isfinite(v)
+        total = np.zeros(len(v))
+        for j, ref in enumerate(self.sorted):
+            pm = self.p_missing[j]
+            s = np.full(len(v), -np.log(pm))
+            o = obs[:, j]
+            s[o] = -np.log1p(-pm)
+            if o.any() and len(ref):
+                q = v[o, j]
+                lo = np.searchsorted(ref, q, "left")
+                hi = np.searchsorted(ref, q, "right")
+                f = (lo + 0.5 * (hi - lo) + 0.5) / (len(ref) + 1)
+                s[o] -= np.log(np.minimum(1.0, 2 * np.minimum(f, 1 - f)))
+            total += s
+        return total / max(1, len(self.sorted))
+
+    def _knn(self, z):
+        out = np.empty(len(z))
+        for i, q in enumerate(z):
+            diff = np.abs(self.train_z - q)
+            count = np.isfinite(diff).sum(axis=1)
+            dist = np.where(
+                count > 0, np.nansum(diff, axis=1) / np.maximum(count, 1), 2 * self.clip
+            )
+            k = min(self.k, len(dist))
+            out[i] = np.partition(dist, k - 1)[:k].mean()
+        return out
+
+    def raw(self, x):
+        v = self._view(np.atleast_2d(np.asarray(x, float)))
+        z = self._z(v)
+        cols = []
+        for name in self.member_names:
+            if name == "tail":
+                cols.append(self._tail(v))
+            elif name == "dist":
+                a = np.abs(z)
+                count = np.isfinite(a).sum(axis=1)
+                cols.append(np.nansum(a, axis=1) / np.maximum(count, 1))
+            elif name == "knn":
+                cols.append(self._knn(z))
+            else:
+                cols.append(-self.models[name].score_samples(np.nan_to_num(z)))
+        return np.column_stack(cols)
+
+    def zscores(self, x):
+        v = self._view(np.atleast_2d(np.asarray(x, float)))[0]
+        return (v - self.center) / self.scale
+
+
+DETECTORS = {"v1": Ensemble, "v2": EnsembleV2}
+DEFAULT_DETECTOR = "v2"
+
+
+def rank_scores(raw, refs, self_ranked=False):
+    # A reference ranked against its own pool has only n-1 others, so it gets the n-point
+    # grid; a new block gets the (n+1)-point grid. Both are then exactly uniform.
+    denominator = len(refs) if self_ranked else len(refs) + 1
     return np.column_stack(
         [
             (np.searchsorted(np.sort(refs[:, j]), raw[:, j], side="left") + 0.5)
-            / (len(refs) + 1)
+            / denominator
             for j in range(raw.shape[1])
         ]
     ).mean(axis=1)
@@ -126,26 +309,46 @@ class UserModel:
     @classmethod
     def train(cls, df, cfg):
         cfg = model_config(cfg)
+        spec_gates = enrollment_gates(cfg["spec"])
         gate_overrides = cfg.get("experimental_gates", {})
-        lowered = {m: n for m, n in gate_overrides.items() if n < GATES.get(m, n)}
+        lowered = {m: n for m, n in gate_overrides.items() if n < spec_gates.get(m, n)}
         if lowered and not cfg.get("allow_experimental_gate_override"):
             raise ValueError(
                 "Lower enrollment gates require allow_experimental_gate_override=true: "
                 + str(lowered)
             )
-        gates = dict(GATES)
+        gates = dict(spec_gates)
         gates.update(gate_overrides)
-        min_fold_train = {m: 20 for m in GATES}
+        min_fold_train = {m: fold_minimum(g) for m, g in gates.items()}
         min_fold_train.update(cfg.get("experimental_min_fold_train", {}))
+        detector = cfg.get("detector") or DEFAULT_DETECTOR
+        if detector not in DETECTORS:
+            raise ValueError(f"Unknown detector {detector!r}; expected one of {list(DETECTORS)}")
+        options = cfg.get("detector_options") or {}
+        calibration = cfg.get("calibration") or ("cv+" if detector == "v2" else "full")
+        if calibration not in ("cv+", "full"):
+            raise ValueError(f"Unknown calibration {calibration!r}; expected 'cv+' or 'full'")
+        # Gate and evaluation always count non-overlapping temporal windows (every 6th).
+        # v2 fits on every window: the 60s fold purge exceeds the 30s window, so
+        # out-of-fold references never overlap the windows their model trained on.
+        temporal_windows = cfg.get("temporal_windows") or (
+            "all" if detector == "v2" else "nonoverlapping"
+        )
+        if temporal_windows not in ("all", "nonoverlapping"):
+            raise ValueError(
+                f"Unknown temporal_windows {temporal_windows!r}; expected 'all' or 'nonoverlapping'"
+            )
         self = cls()
         self.cfg = cfg
+        self.detector = detector
+        self.calibration = calibration
+        self.temporal_windows = temporal_windows
         self.spec = cfg["spec"]
         self.schema_version = cfg.get("schema_version", 1)
         if len(df) and not df.schema_version.eq(self.schema_version).all():
             raise ValueError("Mixed or unsupported feature schema")
-        d = temporal_subset(
-            eligible(df, cfg.get("now"), actor=cfg.get("training_actor", "a"))
-        )
+        base = eligible(df, cfg.get("now"), actor=cfg.get("training_actor", "a"))
+        d = temporal_subset(base)
         self.models = {}
         self.disabled = {}
         self.n_blocks = {}
@@ -171,6 +374,16 @@ class UserModel:
                     f"Need {required} eligible blocks; have {len(rows)}"
                 )
                 continue
+            fold_train_min = min_fold_train[modality]
+            evidence = None
+            if modality == "temporal" and temporal_windows == "all":
+                windows = base[base.modality == "temporal"].sort_values("time").reset_index(drop=True)
+                key = ["session_id", "time"]
+                evidence = pd.MultiIndex.from_frame(windows[key]).isin(
+                    pd.MultiIndex.from_frame(rows[key])
+                )
+                rows = windows
+                fold_train_min *= 6  # overlapping windows per non-overlapping one
             columns = names(self.spec, modality)
             x = np.array([self._vector(f, columns) for f in rows.features], float)
             matrix = transition_matrix(rows.extras) if modality == "workflow" else None
@@ -198,7 +411,7 @@ class UserModel:
                 train = np.where(
                     (times < starts[ix].min() - 60) | (starts > times[ix].max() + 60)
                 )[0]
-                if len(train) < min_fold_train[modality]:
+                if len(train) < fold_train_min:
                     continue
                 train_splits.append((train, ix))
             if len(train_splits) != 5:
@@ -206,15 +419,19 @@ class UserModel:
                     "Insufficient chronological coverage for five folds with 60s purge"
                 )
                 continue
+            fold_fits, fold_matrices = [], []
             for train, ix in train_splits:
                 foldx = x.copy()
+                fm = None
                 if matrix is not None:
                     fm = transition_matrix(rows.iloc[train].extras)
                     j = columns.index("wf.markov_ll")
                     foldx[:, j] = [
                         markov_ll((e or {}).get("transitions"), fm) for e in rows.extras
                     ]
-                fit = Ensemble().fit(foldx[train], family_n=len(rows))
+                fit = DETECTORS[detector](**options).fit(
+                    foldx[train], family_n=len(rows), columns=columns
+                )
                 r = fit.raw(foldx[ix])
                 member_count = (
                     r.shape[1]
@@ -223,18 +440,21 @@ class UserModel:
                 )
                 raw_oof.append(r)
                 test_ids.extend(ix.tolist())
+                fold_fits.append(fit)
+                fold_matrices.append(fm)
             refs = np.vstack([r[:, :member_count] for r in raw_oof])
-            ensemble_ref = rank_scores(refs, refs)
+            conformal = calibration == "cv+"
+            ensemble_ref = rank_scores(refs, refs, self_ranked=conformal)
             oof_typicality = (
                 len(ensemble_ref)
                 - np.searchsorted(np.sort(ensemble_ref), ensemble_ref, side="right")
                 + 0.5
-            ) / (len(ensemble_ref) + 1)
+            ) / (len(ensemble_ref) + (0 if conformal else 1))
             if matrix is not None:
                 x[:, columns.index("wf.markov_ll")] = [
                     markov_ll((e or {}).get("transitions"), matrix) for e in rows.extras
                 ]
-            fit = Ensemble().fit(x)
+            fit = DETECTORS[detector](**options).fit(x, columns=columns)
             self.models[modality] = {
                 "fit": fit,
                 "raw_ref": refs,
@@ -245,8 +465,25 @@ class UserModel:
                     {"train": tr.tolist(), "test": te.tolist()}
                     for tr, te in train_splits
                 ],
-                "oof_typicality": oof_typicality.tolist(),
+                # Aligned with the non-overlapping evidence rows, as consumers expect.
+                "oof_typicality": (
+                    oof_typicality if evidence is None else oof_typicality[evidence]
+                ).tolist(),
             }
+            if calibration == "cv+":
+                # Cross-conformal scoring: a new block is compared, fold by fold, only with
+                # the held-out blocks that the same fold model scored. The full-data model
+                # is not exchangeable with the fold models behind the references, so its
+                # scores are miscalibrated against them at small n (fresh owner blocks
+                # averaged 0.54-0.57 instead of 0.5 at n=40 in simulation).
+                bounds = np.cumsum([0] + [len(ix) for _, ix in train_splits])
+                self.models[modality].update(
+                    fold_fits=fold_fits,
+                    fold_matrices=fold_matrices,
+                    fold_ref=[
+                        np.sort(ensemble_ref[a:b]) for a, b in pairwise(bounds)
+                    ],
+                )
         if not self.models:
             raise ValueError(
                 "No modality meets enrollment and purged calibration gates: "
@@ -272,12 +509,23 @@ class UserModel:
                 block.transitions, m["matrix"]
             )
         fit = m["fit"]
-        raw = fit.raw(x[None, :])[:, : m["raw_ref"].shape[1]]
-        score = rank_scores(raw, m["raw_ref"])[0]
-        typicality = (
-            len(m["ref"]) - np.searchsorted(m["ref"], score, side="right") + 0.5
-        ) / (len(m["ref"]) + 1)
-        z = (x - fit.median) / np.maximum(1.4826 * fit.mad, 1e-6)
+        members = m["raw_ref"].shape[1]
+        if m.get("fold_fits"):
+            more_anomalous = 0
+            for fold_fit, fold_ref, fm in zip(m["fold_fits"], m["fold_ref"], m["fold_matrices"]):
+                xk = x.copy()
+                if fm is not None:
+                    xk[m["columns"].index("wf.markov_ll")] = markov_ll(block.transitions, fm)
+                score = rank_scores(fold_fit.raw(xk[None, :])[:, :members], m["raw_ref"])[0]
+                more_anomalous += len(fold_ref) - np.searchsorted(fold_ref, score, side="right")
+            typicality = (more_anomalous + 0.5) / (len(m["ref"]) + 1)
+        else:
+            raw = fit.raw(x[None, :])[:, :members]
+            score = rank_scores(raw, m["raw_ref"])[0]
+            typicality = (
+                len(m["ref"]) - np.searchsorted(m["ref"], score, side="right") + 0.5
+            ) / (len(m["ref"]) + 1)
+        z = fit.zscores(x)
         indices = sorted(
             np.where(np.isfinite(z))[0], key=lambda i: abs(z[i]), reverse=True
         )[:5]
@@ -308,7 +556,13 @@ class UserModel:
                 for i, c in enumerate(m["columns"])
                 if c.replace(".", "_").lower() in HEADLINES
             },
-            "calibration": "five chronological folds, 60s purged; OOF references saved",
+            "calibration": (
+                "five chronological folds, 60s purged; cross-conformal fold scoring"
+                if getattr(self, "calibration", "full") == "cv+"
+                else "five chronological folds, 60s purged; OOF references saved"
+            ),
+            "detector": getattr(self, "detector", "v1"),
+            "temporal_windows": getattr(self, "temporal_windows", "nonoverlapping"),
             "experimental": getattr(self, "experimental", {
                 "gate_overrides": {}, "min_fold_train": {}, "warning": None
             }),

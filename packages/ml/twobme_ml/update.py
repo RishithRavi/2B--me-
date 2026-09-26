@@ -59,7 +59,12 @@ def retrain(current, training, anchor_holdout, impostor_holdout, candidates, cfg
     )
     if any(tuple(x) in holdout_keys for x in merged[keys].astype(str).to_numpy()):
         raise ValueError("Holdout leakage into training")
-    fresh = UserModel.train(merged, dict(cfg, parent_version=current.version))
+    # An update keeps the parent's detector: typicality is only comparable within one
+    # detector/calibration, and switching detectors is a full re-train, not an update.
+    detector = cfg.get("detector") or getattr(current, "detector", "v1")
+    fresh = UserModel.train(
+        merged, dict(cfg, parent_version=current.version, detector=detector)
+    )
     if not set(current.models) <= set(fresh.models):
         raise ValueError("Update disabled a previously enabled modality")
     for m in current.models:
