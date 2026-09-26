@@ -10,8 +10,14 @@
 > - Build both the 2bME voice step-up and the NSA Hearsay submission.
 > - Domain: 2bme.tech. Tiger Data, ElevenLabs and Vultr accounts are ready.
 >
-> The source of truth for the product vision is `goal.txt`; §1 restates it and it is paramount.
-> - **PROPOSED 2026-09-26, pending sign-off — not yet pinged to Codex 1/2:** `newGoal.txt` (root) refines the product split and does not replace `goal.txt`. The Electron **overlay** is the product surface for the enrolled individual (pill → voice/MFA step-up → lock/unlock, already A6). The **`.tech` website** is repositioned as the **admin/org control panel**: synthetic, anonymized multi-employee sessions, org-wide anomaly/insider-threat detection, and an audit trail of trust-score changes, alerts, challenges and admin actions — not a second consumer front-end. See §2.4.
+> The source of truth for the product vision is `newGoal.txt` (root; untracked as of Sat 18:00, commit it). It is a strict superset of `goal.txt`: it adds the two audiences, the two-UI split, the one-class "find who they're NOT" framing, on-device learning, the safe update loop, and the question "how do we know who is truly who" (answered in §1.9). §1 restates it and it is paramount.
+> - **ADOPTED Sat 18:00 ET** (drafted 16:05): the Electron **overlay** is the product surface for the enrolled individual (pill → voice/MFA step-up → lock/unlock, A6). The **`.tech` website** is the **admin/org control panel**: synthetic, anonymized multi-employee sessions, org-wide anomaly/insider-threat detection, and an audit trail of trust-score changes, alerts, challenges and admin actions. See §2.4.
+>
+> **Status (audit, Sat 18:00 ET; details and the re-baselined critical path in §0.3):** strong, tested parts at every layer, not yet joined end to end, and nothing deployed. About **40% of newGoal and 45% of §0.1**.
+> - Codex 1 delivered `agent/`, `packages/features`, `packages/ml`, `presence.ts` and `/enroll` via PR #1 (e741e15, merged 17:16 → main 4dec05a). None of it is wired into the server.
+> - Main's web build is broken by the `/enroll` import.
+> - Voice on main is still the A0 stub, which VERIFYs any audio.
+> - 2bme.tech resolves to 127.0.0.1.
 
 ## 0. How to use this document
 - **Everyone** reads §0–§5. Then read only your own workstream: **§6 Claude**, **§7 Codex 1**, **§8 Codex 2**.
@@ -22,42 +28,139 @@
   - Renaming or removing anything needs a Claude commit prefixed `CONTRACT:` and a ping to the other agents.
 - **VERIFY** marks something that hasn't been confirmed. Run the §11.1 smoke test for it before you build on it.
 
-### 0.1 MVP (P0) is exactly this, and it is never cut
+### 0.1 MVP (P0) is exactly this, and it is never cut (re-baselined Sat 18:00 ET; live status per item in §0.3)
 1. The macOS agent captures keyboard, mouse, scroll, app/window events and chords. It builds privacy-safe evidence blocks, sends them over wss to Vultr for scoring, and 2bme.tech shows a live trust gauge, chart, per-modality bars and "why" chips.
-2. Enrollment works from the overnight class-level logs plus a structured top-up, and the dashboard has **Train** and **Retrain now** buttons. The identity model is versioned and shown on an identity card.
+2. Enrollment runs as a live, paced session on the stage laptop (Sat evening), plus the Sun 06:30 top-up. The dashboard has **Train** and **Retrain now** buttons. The identity model is versioned and shown on an identity card.
+   - *Sat 18:00:* the overnight-log path is cut, because no overnight logs exist on the demo laptop. `twobme-ml train --from-logs` stays for offline use.
 3. A takeover marker makes trust fall, and a proactive voice challenge appears. Behavior alone never blocks.
 4. Voice flow:
    - ElevenLabs speaks the prompt.
    - Scribe checks the spoken phrase.
    - Analysis: **DSP/FFT features**, ECAPA speaker match and DF_Arena anti-spoof.
-   - Outcomes: VERIFY, BLOCK_IMPOSTOR or BLOCK_SPOOF. A live clone-attack tool is included.
+   - Outcomes: VERIFY, BLOCK_IMPOSTOR or BLOCK_SPOOF.
+   - *Sat 18:00:* the live clone-attack tool (C2.7) is replaced by a recorded clone clip unless it lands by Sun 03:00.
+   - If real voice is no-go at Sun 01:00, the stub stays, **labelled "simulated"** in the UI, and TOTP is the live step-up (§8 C2).
 5. The `/shop` $2,000 checkout returns a 3DS-style result: Y (approved), C (challenge) or N (declined). It covers two stolen-session variants:
    - same laptop: behavior degrades trust;
    - remote cookie: the co-presence check fails and the 0.30 prior applies.
 6. Tiger: hypertables, columnstore compression, the `trust_1m` aggregate, `/history-min`, and `/tiger/stats`.
-7. Evidence for "the signals identify a person": per-modality and fused A-vs-B EER, a branch-ablation chart, an identification confusion matrix, and time-to-detection (TTD) over at least 5 live trials, all on `/lab`.
+7. Evidence that the signals **verify one person** (newGoal: find out who they're NOT, not who they are), all on `/lab` and all from real rows:
+   - per-modality and fused A-vs-not-A EER;
+   - FAR/FRR at the 0.40 threshold;
+   - a branch-ablation chart;
+   - TTD over at least 5 live takeover trials.
+
+   The identification confusion matrix moves to §0.2.
 8. A landing page, a "What left this laptop" viewer, and expo mode (reset, re-arm, 2-min script).
 9. Hearsay:
    - a zero-shot safety TSV submitted early;
    - C5-lite ranked fusion;
    - an amd64 Docker image;
    - a Hearsay README.
-10. TOTP as the MFA fallback. The goal says "voice / MFA".
+
+   *Sat 18:00:* human A makes a go/no-go call at Sat 20:00. Without the official materials and a machine by then, cut C1–C6 and present Hearsay only as the step-up voice layer (§9 cut order).
+10. TOTP as the MFA fallback. The goal says "voice / MFA". Includes the factor-enrollment rule (§5.3): enrolling or replacing a factor needs a fresh strong factor.
+11. **Admin/org panel floor (§2.4).** `/admin` is reachable by a judge, clearly labelled synthetic, with consistent level and %. The live roster (real hub + Tiger) is P1.
+12. **The Electron overlay (A6)** on A's Mac: pill → full-screen step-up → lock → unlock.
 
 ### 0.2 Pre-cut
 Start these only after CP4 (Sat 19:00) is green:
-- ~~Admin/org roster page~~ (§2.4, PROPOSED): first pass shipped at `/admin` (synthetic multi-employee roster,
-  org audit trail, per-employee drill-in) — still pending the direction sign-off itself
+- ~~Admin/org roster page~~: the floor was promoted to §0.1 #11 (Sat 18:00). The live roster is P1 (§2.4).
 - B6 browser behavioral scoring (the presence beacon itself is P0)
 - automatic B7 schedule
 - learned C4 team head
 - C5-train SSL head
 - extra Hearsay analyzers and the analyst agent
-- `identity_centroids` / pgvector identification
+- `identity_centroids` / pgvector identification, and the **identification confusion matrix** (moved from §0.1 #7 on Sat 18:00, since newGoal asks "is it still A?", not "which user?")
+- the C2.7 **live** attack tool (a recorded clone clip replaces it; Sat 18:00)
+- Backboard (§12)
+- overlay packaging/autostart and a real OS lock
 - hour-of-day chart
 - landing animations
 - the `/status` page (a footer strip is P0)
 - rumps menubar
+
+### 0.3 Status and re-baseline (audit, Sat 18:00 ET)
+**How this was measured:**
+- A 15-agent audit: 7 areas, each checked by an adversarial verifier, then a synthesis pass.
+- `scripts/gate.sh all` at b970ee2, plus live local runs on isolated TimescaleDB databases.
+- Spot checks at 4dec05a.
+- **Not verified:** real capture on the stage Mac, real voice models, a real mic, ElevenLabs, the VM, Tiger Cloud writes from a deployed server, and the Electron GUI.
+
+**Gate at b970ee2:**
+- **Passing:** privacy, contracts (15), server (16), hearsay (98), web (42), e2e 20/20.
+- **Failing:** `voice_test.sh`, only because there's no bare `python3.12` on PATH.
+- **Skipped:** overlay, because `node_modules` is missing in the main checkout. In ws-core it passes 6/6.
+
+**`gate.sh all` at 4dec05a (run 18:20 in ws-core): FAILED.**
+- **Passing:** privacy, contracts, ml (20), agent (9), hearsay (98), overlay.
+- **Failing:**
+  - **server:** `test_copresent_owner_frictionless_purchase`. Once `uv sync --all-packages` installs `twobme_ml`, the hub (`hub.py:598`) throws "Out-of-order tick must not be scored", which breaks the owner's frictionless purchase.
+  - **features:** `test_fixture_reproducibility` (committed `fixtures/expected` ≠ generator output).
+  - **web typecheck:** `enroll/page.tsx:4` imports the missing `VoiceEnroll`, plus two TS7053 errors at :162 and :427.
+  - **web tests:** `presence.test.ts` needs jsdom.
+  - **e2e:** `twobme_ml` refuses the 40-block enrollment ("Need 100 eligible blocks; have 40"), so trust stays "learning 0.97" and no challenge is issued.
+  - **`voice_test.sh`:** the known PATH issue.
+
+| §0.1 item | Status | Blocker |
+|---|---|---|
+| 1 agent → blocks → wss → live dashboard | partial | Agent built (PR #1: listen-only tap, classes on capture thread, `safe_tick` allowlist) and wire-compatible (fixture ticks: 0 bad_block), but never run from Terminal.app against a server. No VM or DNS. Agent reads `browser_live_recent` instead of `open_browser`. Late ticks are never acked, so the outbox never drains. |
+| 2 enrollment, Train / Retrain, identity card | partial | Works on FallbackUserModel. `twobme_ml` trains through the server only with paced enrollment (≥110 ticks over ≥5 min, verified). `/enroll` doesn't build. A failed train blanks ModelInfo, and Reset orphans the baseline (§5.3). |
+| 3 takeover → trust falls → proactive challenge | partial (synthetic only) | Fallback: 0.987 → 0.083, armed after 8 ticks. twobme_ml (paced): 0.99 → 0.07, armed in about 40 s. Never run with real people. |
+| 4 voice flow | stub | Main VERIFYs any audio (`voice/router.py:184`), and the real UI never sends `X-Fake-Decision`, so an attacker's $2,000 order ends **Y** through the UI. The real C2 lives only in ws-voice (23 uncommitted files, 124 tests on fakes). No torch or weights, no calibration, no ElevenLabs key, no clone. |
+| 5 `/shop` Y/C/N, both variants | partial | Owner Y 0.99, takeover C 0.05, remote cookie C 0.30, attacker order stays N. Presence is mounted only on `/enroll`, so A's real browser binds *remote*. Step-up bypasses reproduced (§5.3). |
+| 6 Tiger | **done** | 4 compressed hypertables, 3 real-time caggs, jobs Success, 18/18 server tests with `TEST_TIGER_URL`. `/history/drift` returns `[]`. |
+| 7 identity evidence | weak | `reports/eval.json` is real (3 A recordings, 1 B). Mouse AUC 0.55 (chance), scroll 0.64, fused EER 0.375 over 60 s bins. Keyboard, workflow and temporal disabled; 0/5 live trials; B used for model selection. The recordings exist only on Pranav's machine. |
+| 8 landing, "What left", expo mode | mostly | Landing is consumer-framed (no org pitch or stats). The drawer echoes rejected blocks. `demo_offline.sh` and `agent_loop.sh` missing. README says "Live". |
+| 9 Hearsay | mostly missing | Package 98 tests. No TSV, image or Dockerfile. `RULES.md` 10/10 unconfirmed. `rank_offset` +0.5 still on main. |
+| 10 TOTP | partial + hole | The REST path works. TOTP is accepted for any open challenge, and `/voice/totp/enroll` overwrites for any cookie holder, so a stolen session gets **Y**. The enroll UI (on `/enroll`) doesn't build. |
+| 11 admin floor | mock | `/admin` is browser `Math.random` (`admin-mock.ts`). About 31% of loads show a level/% mismatch. Anonymous judges hit "Admins only". |
+| 12 overlay | partial | The pill → prompt → lock → voice-unlock loop works live on fallback + stub. The lock fails open (offline or fresh profile), covers one display, and the default menu is probably not removed (⌘H, ⌥⌘I). Production `/overlay?mock=1` crashes (conditional hook). |
+
+**newGoal pillars (%):**
+- **Capture and features:** capture on device 55; features for the 27-leaf signature tree 80 (all computed from raw events, `test_signature_coverage` green).
+- **Model and trust:**
+  - one-class model 50 (built, not a server dependency);
+  - trains locally 30 (diverges, §2);
+  - safe update loop 35 (guardrails in `twobme_ml/update.py` unreachable; poisoning paths, §7 B7);
+  - continuous trust 70.
+- **Step-up and voice:** $2,000 step-up 55; voice challenge 25; ElevenLabs spoof testing 3.
+- **Platform and UIs:** Tiger 85; Vultr 15 (images build and pass the e2e in-container; no VM; explanations template-only); `.tech` admin 22; overlay 50.
+- **Cross-cutting:**
+  - privacy boundary 70 (client side enforced; 3 server-side defense-in-depth gaps, §2.2);
+  - Backboard 0;
+  - evidence that signals identify a person 25;
+  - real deployment 0.
+
+**Works today (verified):**
+- Contracts are wire-compatible across all three streams.
+- Hub invariants are tested: behavior never blocks, the attacker's order stays N, markers never reach the scorer.
+- The hub handles 20 concurrent agents at p95 11 ms.
+- Degraded mode: login and checkout keep working with Tiger down.
+- The real Tiger layer and `/history`.
+- Live single-device dashboard and stage view (TTD froze at 00:05.2 on the synthetic takeover).
+- The Docker images boot, migrate and pass the e2e.
+- The repo is public, and its history holds no secrets.
+
+**Critical path (owner, done-by ET):**
+1. VM + DNS step 0, replacing the 127.0.0.1 wildcard (B, 19:30).
+2. Main green and pushed (Claude, 20:00; Codex 1 regenerates or fixes `fixtures/expected` for `test_fixture_reproducibility`):
+   - take the `/enroll` import fix, plus the TS7053 fixes;
+   - add jsdom and hypothesis as dev deps;
+   - catch out-of-order ticks and engine errors in the hub;
+   - add a `MODEL_BACKEND` switch, pin the e2e to fallback and add a paced `twobme_ml` variant;
+   - ack late ticks.
+3. First deploy with real secrets and stub voice, then e2e against https://2bme.tech (Claude + B, 21:30).
+4. Wire `twobme_ml` into the server: deps, image, and `update.retrain` (Claude, 22:00).
+5. §5.3 security fixes with regression tests (Claude, 22:30).
+6. Real agent live on the stage Mac, presence in the root layout (Codex 1 + Claude + A, 23:00).
+7. Live paced enrollment plus at least 5 marked B takeovers, then a regenerated `eval.json` (A + B + Codex 1, Sun 01:00).
+8. Voice real-mode go/no-go (Codex 2 + Claude, Sun 01:00).
+9. Admin-lite roster (Claude, Sun 03:00).
+10. Backup video (A + B, Sun 02:00).
+11. 06:30 top-up → guarded Retrain → 07:30 freeze.
+
+**New tripwire:** a stream with nothing integrated by its checkpoint → Claude takes its P0 integration and cuts the rest. Updated cut order: §9.
 
 ## 1. Mission and non-negotiables (from goal.txt, paramount)
 1. **Continuous identity.** Instead of trusting a session because someone logged in correctly, keep asking whether the operator is still the authorized user, and output a **continuous trust score**. Credentials alone never buy high trust (§5.4).
@@ -83,6 +186,24 @@ Start these only after CP4 (Sat 19:00) is green:
    - Visa: a clearly labelled mock.
    - NSA Hearsay: TSV, Docker image and README.
    - Backboard: deferred (§12).
+8. **Audiences (newGoal).**
+   - **Individuals:** the overlay guards their own laptop against someone else using it.
+   - **Small companies:** a cyber admin on 2bme.tech gets real-time alerts, insider-threat flags and breach trace-back (§2.4).
+   - **Stakes for the pitch:** $2.9B lost to business email compromise (2023) and $3.4B lost by Americans over 60 to cybercrime.
+9. **"How do we know who is truly who?" (newGoal's closing question).** We never identify anyone. The system answers a 1:1 question continuously: *is this still the enrolled person?* That is continuous authentication with behavioral biometrics, feeding risk-based step-up in a zero-trust model. It is a calibrated probability, not a feeling of trust.
+   - **The chain:**
+     1. One-class typicality against A's own baseline, with no other users' data (§7 B3).
+     2. That becomes a per-block LLR against a fixed not-A prior, Beta(1,β).
+     3. The LLRs accumulate sequentially into L = logit P(same person), the trust score (§5.4).
+     4. Friction scales with the action tier.
+     5. Below threshold, step up to an **independent** factor (voice + anti-spoof, or TOTP), which alone verifies or blocks.
+   - **Behavior never blocks**, because every threshold trades FAR against FRR. EER is where they meet. Strong behavioral systems reach a few percent; our real data today gives fused EER ≈ 0.375 (§0.3). Say so.
+   - **What "truly A" rests on:**
+     - a password never raises trust; only enrollment or a fresh strong factor re-anchors it;
+     - the browser must be co-present with the device's live input;
+     - **enrolling a factor itself needs a fresh strong factor** (§5.3);
+     - only high-confidence genuine blocks update the model (the safe loop, §7 B7), so an attacker can't teach it their habits.
+   - **For organizations,** the same signal is UEBA-style insider-threat monitoring. Tiger keeps the audit trail for breach trace-back.
 
 ## 2. Architecture
 ```
@@ -93,9 +214,10 @@ Start these only after CP4 (Sat 19:00) is green:
  │   → twobme_features: non-overlapping EVIDENCE blocks per modality + 30 s TEMPORAL context (Welch PSD)
  │   → wss://2bme.tech/ws/agent  (SQLite outbox; HTTPS batch fallback)
  │   ← trust / challenge (opens https://2bme.tech/verify?c=…) / lock / unlock / mode
+ ├─ twobme-overlay (Electron 44, A6) → https://2bme.tech/overlay over /ws/live: pill · full-screen voice check · lock screen
  └─ Browser → https://2bme.tech (Next.js static export, same-origin /api + /ws)
-      landing · login · dashboard · enroll · shop · verify · history · lab  (+ presence beacon, P0; SDK blocks, P1)
-      [reframing to admin/org panel in progress — see §2.4; pages above unchanged for now]
+      landing · login · dashboard · enroll · shop · verify · history · lab · admin (org panel, §2.4)
+      (+ presence beacon, P0: mount in the root layout; SDK blocks, P1)
  Vultr VM vhp-8c-16gb-amd (ewr) — Docker Compose: Caddy (TLS, static web) → FastAPI (1 worker)
    ├─ DeviceHub (in-memory, persisted to devices.trust_state): TrustEngine, UserModel scorer, challenge/lock state machine
    ├─ voice (hearsay profile="stepup"): Silero VAD → Scribe STT ‖ ECAPA ‖ DF_Arena(1 window) ‖ DSP/FFT → decision
@@ -104,6 +226,22 @@ Start these only after CP4 (Sat 19:00) is green:
  Vultr batch box (temporary, Hearsay): hearsay profile="hearsay" → TSV, dev set, feature harvest, amd64 image
 ```
 **Hot path:** a tick every 5 s → score blocks in memory → TrustEngine → push to agent and dashboard → queue rows for Tiger, which a writer flushes every 1–2 s. Tiger is never on the hot path. It is the history, baseline, training and judge-panel store.
+
+**Built vs. diagram (Sat 18:00):**
+- ✓ built, not integrated: agent (PR #1), `twobme_ml` (not a server dependency; the server runs `FallbackUserModel`, median/MAD mean-|z|).
+- ✗ not done: VM, DNS.
+- Voice is the A0 stub on main.
+- ✓ locally: Tiger, hub, policy, web, overlay.
+- Vultr inference: template only, no key.
+
+**Model locality (decision, Sat 18:00).** newGoal contradicts itself:
+- "trains locally … only risk/events leave the device" (the architecture diagram);
+- "Vultr hosts … the behavioral inference model" (the stack diagram).
+
+For the demo, the model is **per-user and one-class**: trained only on this user's blocks, but scored and trained on Vultr from Tiger history.
+- On-device training exists offline (`twobme-ml train --from-logs`).
+- Live on-device scoring is roadmap. The same `twobme_ml` package could run inside the agent and send only `trust` + anomalies.
+- Say this plainly in the pitch. We send per-block aggregates, never content (§2.2).
 
 ### 2.2 Privacy boundary (enforced by `scripts/check_privacy.sh` in the merge gate)
 - **Keycodes stay on the capture thread.** The keycode is mapped immediately to a **hand-level key class** (§5.1.0) and a **chord kind**, then dropped. We don't use finger zones: an 8-zone letter sequence can be decoded like T9, so it counts as content.
@@ -116,6 +254,16 @@ Start these only after CP4 (Sat 19:00) is green:
 - **What the gate fails on:** `kCGWindowName`, `event.key`, `clipboardData`, `InputEvent.data`, `bundleIdentifier` or a keycode reaching any logger, serializer or transport.
 - **Voice disclosure (exact wording for `/privacy`):** "Our server deletes challenge audio after scoring and stores only embeddings and scores. ElevenLabs processes the prompt and STT audio and, on our plan, retains it in account history (Zero Retention is enterprise-only). `STT_BACKEND=local` avoids this."
 - **No audio in git:** a pre-push hook rejects `*.wav|*.mp3|*.webm` outside `tests/fixtures/synthetic/`.
+  - It misses audio committed on a brand-new branch (reproduced). Fix it to diff against the merge-base with `origin/main`.
+- **vs newGoal ("only risk/events leave the device"):** we send per-block aggregates (percentiles, rates, counts), because Tiger baselines, retraining and the org panel need them. Still no content, keycodes, titles or bundle IDs. Say so in the pitch.
+- **Client-side enforcement (PR #1, tested):**
+  - `agent/twobme_agent/capture.py` maps keycode → class inside the tap callback;
+  - `privacy.py` `safe_tick` allowlists every key that leaves the agent;
+  - bundle → category happens on device.
+- **Server-side defense in depth (P1, Claude). All three were reproduced in-process:**
+  - `transitions` keys must be `from>to` pairs of `contracts/app_categories.json` categories. Today arbitrary strings, including a bundle ID and a title, reach Tiger `extras` and the web.
+  - `last_tick_json` is built from validated blocks only. Today it echoes rejected ones.
+  - `MarkerMsg.text` is capped at 80 characters and never echoed.
 
 ### 2.3 Demo topology
 - **Demo laptop:** A's MacBook, trackpad only, Bluetooth off, a USB cardioid mic on a stand, on the phone hotspot.
@@ -128,7 +276,7 @@ Start these only after CP4 (Sat 19:00) is green:
 - **Backup video:** a tablet loops it.
 - **Caddy:** `www.` and `app.` get a 308 redirect to `https://2bme.tech`. Cookies are host-only on 2bme.tech, and every URL uses the apex domain.
 
-### 2.4 Two UIs (PROPOSED 2026-09-26 — draft for review, not yet pinged to Codex 1/2)
+### 2.4 Two UIs (ADOPTED Sat 18:00 ET; drafted 16:05)
 Per `newGoal.txt`: there are two front ends with different jobs, not one consumer app.
 - **The overlay is the product** for the enrolled individual: the always-on trust pill, full-screen voice/MFA
   step-up, and the lock/unlock screen (already built, A6). This is where an individual consumer's continuous
@@ -143,20 +291,40 @@ Per `newGoal.txt`: there are two front ends with different jobs, not one consume
   modality bars, why-chips, event feed and identity card (§6 A3) — that becomes the **per-employee drill-in**
   view an admin opens from the roster, unchanged in substance. `/history` and `/lab` keep their current jobs
   (per-device history; the A-vs-B identification evidence for the mission's §1.2 claim).
-- **Status: first pass shipped** at `web/src/app/admin/` (Claude-owned like the other core pages in §4;
-  `web/src/lib/admin-mock.ts` fabricates the roster, `web/src/components/admin/`). Admin-role gated, ~20 synthetic
-  sessions, org audit trail, click-to-drill-in reusing `TrustGauge`/`ModalityBars`/`WhyChips`/`EventFeed` directly
-  — **no real multi-tenant backend was built**, per newGoal.txt's own "synthetic sessions... first anonymized"
-  framing. Not yet linked from `/history`/`/lab`; the nav just gained an "Admin" link. Still needs the direction
-  itself signed off and a ping to Codex 1/2.
+- **Status (audit, Sat 18:00): the first pass is a placeholder, not the panel.**
+  - `web/src/lib/admin-mock.ts` generates about 20 employees with browser `Math.random` on every load. The feature names aren't in the spec.
+  - The level is computed from raw confidence but the % is shown rounded, so about 31% of loads show a mismatch like "40% SUSPICIOUS".
+  - The roster is unseeded: 2.9% of loads show 0 alerts, and the audit trail is 20 identical "Model refreshed" rows.
+  - No admin actions, no real-time updates, no insider-threat logic, and no link to real data. While a real device sat at 1% suspicious, `/admin` showed only the mock.
+  - Anonymous judges hit "Admins only" with no way in.
+  - **What the backend already has:**
+    - admin scoping of devices, sessions and anomalies;
+    - reset and rearm written as Tiger markers with an actor;
+    - `live.py` supports a `device_id=None` subscriber.
+  - **What it lacks:**
+    - `DeviceOut` has no trust field;
+    - the admin `/ws/live` is pinned to one device (`ws.py:83-89`), so org-wide anomalies are never delivered;
+    - no roster, audit-log or admin-action endpoints.
+- **Floor (§0.1 #11, Claude, 1 h):**
+  - a public "View org demo" entry to `/admin?mock=1`;
+  - seed the RNG;
+  - derive the level from the displayed %;
+  - a labelled "synthetic" banner;
+  - honour `?device_id=` in the drill-in.
+- **Admin-lite (P1, Claude, about 3–4 h, by Sun 03:00):**
+  - an org-wide admin `/ws/live` (`device_id=None`);
+  - `GET /api/admin/roster` (hub trust per device);
+  - `GET /api/history/markers` as the audit trail of admin actions;
+  - about 19 pseudonymous "Employee NN" devices streamed through the **real hub and Tiger** by `core_replay_ticks`, with 1 takeover and 1 insider credential-sharing scenario, next to A's real device;
+  - rows deep-link to `/dashboard?device_id=` and `/history?session_id=` for breach trace-back;
+  - minimal logged actions (force re-verify, lock, acknowledge) and a toast on a level drop.
+- **Overlay vs newGoal:** it shows trust %, level and a sparkline, not the user's own behavioral data. A pill-click "My behavior" panel (modality bars, "What left this laptop") is P1. Until it lands, the pill links to `/dashboard`.
 - **Not affected:** `/shop` and `/verify` stay exactly what they are — the Visa-style demo scenario and the
   voice/MFA step-up flow — since §1.5/§1.7 and `newGoal.txt` line 105 keep Visa as a labelled demo, not a
   product surface. `/enroll` (Codex 1) and the voice components (Codex 2) are unaffected; this only touches
   Workstream A's own pages plus one new page, so it doesn't require a `CONTRACT:` commit — file ownership in
   §4 doesn't change.
-- **Timeline:** hard stop for code is Sun Sep 27 08:00 ET (~16 h from this note). This is scoped as P1 —
-  attempt it after every §0.1 MVP item is solid, not instead of one. If time runs out, the current single-user
-  `/dashboard` plus the `admin@` observer role already tell a coherent story and are an acceptable fallback.
+- **Timeline:** the hard stop for code is Sun Sep 27 08:00 ET. The floor is P0; admin-lite is P1. Attempt it after the §0.3 critical path items 1–7, not instead of them. If time runs out, the floor plus `/dashboard?stage=1` as the admin's drill-in tell a coherent story.
 
 ## 3. Stack and pins (Sep 2026)
 - **Python 3.12** everywhere, via a `uv` workspace. scipy 1.18 and numpy 2.5 need ≥3.12, and torch has not been tested on the dev Mac's 3.14.
@@ -199,7 +367,7 @@ server/app/        FastAPI: main, config, auth, db/*, core/{hub,ports,events,pol
 server/app/voice/  router, issuer, service, startup  (Claude commits a STUB at A0; ownership → Codex 2 at CP0) [Codex 2]
 infra/             docker-compose.yml, docker-compose.dev.yml, Caddyfile, Dockerfile.base, Dockerfile.api, deploy.sh, migrations/ [Claude]
 web/               package.json, lockfile, next.config, tsconfig, layout, design system, src/lib/{api.ts,live.ts,contracts.ts(generated)} [Claude]
-web/src/app/{page(landing),login,dashboard,history,lab,overlay}                                  [Claude]
+web/src/app/{page(landing),login,dashboard,history,lab,overlay,admin} + components/admin, lib/admin-mock.ts [Claude]
 overlay/           Electron shell for the on-laptop overlay (loads /overlay; see §6 A6)                   [Claude]
 web/src/app/enroll/  + web/src/sdk/ (presence.ts, sdk blocks)                                    [Codex 1]
 web/src/app/{shop,verify}/ + web/src/components/voice/* + web/public/worklets/*                  [Codex 2]
@@ -209,6 +377,15 @@ scripts/   core_* [Claude], sig_* [Codex 1], voice_* [Codex 2], gate.sh + check_
 ops/       queue_<agent>.md, STATUS.md (humans + agents append)
 data/      (gitignored) models/, logs/, redteam/, hearsay/
 ```
+**After PR #1 (Sat 17:16).** Codex 1 (Pranav) delivered `agent/`, `packages/features`, `packages/ml`, `web/src/sdk/presence.ts`, `/enroll` and `reports/eval.json` straight to `origin/main`, bypassing the gate.
+- **Claude owns the integration:**
+  - server workspace deps and the Docker image;
+  - `models._fit` → `twobme_ml.update.retrain`;
+  - hub handling of late and out-of-order ticks;
+  - mounting presence in the root layout.
+- **Codex 1 keeps:** agent fixes (read `open_browser`) and eval regeneration.
+- **Work in flight in the shared primary checkout** (branch `ml-wider-gap-13wf`: EnsembleV2, the `/enroll` import fix, `feature_spec.yaml` workflow `enroll_gate` 20→13 with no CHANGELOG line) goes through a branch and Claude review. The contract change needs a CHANGELOG line, or a `CONTRACT:` commit if it changes meaning.
+
 **Dependencies:**
 - Each `packages/*/pyproject.toml` belongs to its package owner.
 - Agents run `uv lock` locally but never commit `uv.lock`; Claude regenerates it on each merge.
@@ -506,6 +683,24 @@ Everything is under `/api`. WebSockets are under `/ws`. `api.2bme.tech` is an al
 
 **Browser SDK (P1):** `POST /web/blocks`.
 
+**Factor, device and training security (adopted Sat 18:00; P0, Claude; voice routes via REQUESTS to Codex 2).** Every rule below closes a hole the audit **reproduced**. Until its regression test lands, treat it as an open hole.
+- **TOTP:**
+  - `/voice/totp/verify` counts only when the challenge status is `fallback_mfa`. Today `hub.on_totp` (hub.py:1137) accepts it for any open challenge.
+  - `/voice/totp/enroll` and `/voice/enroll` refuse when that factor already exists, unless there was a VERIFY in the last 5 min or an admin action. Today any cookie holder can overwrite the TOTP secret, then turn a remote $2,000 C into **Y**.
+- **Devices:** `POST /devices/register` needs a step-up (R3) or admin. Today a stolen cookie registers a device anchored at 0.97, which flips to monitor via `hello`, binds, and gets **Y at 0.969**.
+- **Training and mode:**
+  - `/enroll/mode → enroll`, `/enroll/train` and `/models/retrain` are R3 or admin.
+  - An agent `hello` may only request `monitor` once the user has an active model.
+  - A new device of an enrolled user starts in monitor.
+  - Today a mode flip gives 'learning' 0.995 with 0 challenges, and it stamps the attacker's blocks `baseline_eligible`. A v2 retrained on them kept the impostor at 0.98–0.995.
+- **Reset:**
+  - `/demo/reset` ends the session with reason `operator_reset`.
+  - Training eligibility is **row-level** and never keyed on the session end reason. Today `models.py:60` drops every block of a reset session, so one Reset makes Retrain fail.
+  - A failed train or retrain keeps the previous ready `ModelInfo`. Today `models.py:191` blanks the identity card.
+- **Decisions:** `GET /decisions/{id}` falls back to Tiger. Today it returns 404 after a restart.
+- **Secrets:** the API refuses to start with `COOKIE_SECURE=true` and an example or empty `SESSION_SECRET`, `ADMIN_TOKEN` or `SEED_PASSWORD_*`. Today `ADMIN_TOKEN=change-me` passes, and an empty seed password logs in. The repo is public.
+- **Voice outcome:** in stub mode, `X-Fake-Decision` is honoured only for admin, and every result is flagged `simulated` (§8 C2).
+
 ### 5.4 Trust contract (`contracts/trust_config.yaml`; engine = `twobme_ml.trust`, policy = server)
 **State:**
 - `L = logit P(same enrolled person)`, clamped to `[−logit(cap), logit(cap)]` with **cap = 0.995**.
@@ -520,7 +715,9 @@ Everything is under `/api`. WebSockets are under `/ws`. `api.2bme.tech` is an al
 - An OS `screen_unlocked` event sets `L = logit(0.80)`, but only if a `screen_locked` preceded it in the same `run_id` and the device isn't locked. A 0.80 anchor is still below the 0.90 R3 threshold, so a purchase needs about 5 genuine blocks before it is frictionless.
 - Neither a web login nor a WS or agent reconnect changes L. On `hello`, the idle hazard is applied over the disconnected interval.
 - **Server restart:** the hub restores L from `devices.trust_state`. If that is more than 10 min stale, it uses 0.30.
-- A new device starts at 0.97 in enroll mode and at 0.30 in monitor mode.
+- A new device starts at **0.30 in every mode** (Sat 18:00; was 0.97 in enroll mode, which is exploitable, §5.3).
+  - 0.97 applies only after a strong factor on that device, or first-ever enrollment for a user with no active model.
+  - Ticks with no scored blocks never raise or hold trust above 0.80.
 - **Binding.** A web session is bound to its user's most recent device when both hold:
   - the heartbeat is **< 30 s** old;
   - the session is co-present.
@@ -555,6 +752,12 @@ Everything is under `/api`. WebSockets are under `/ws`. `api.2bme.tech` is an al
   - a similar typist (AUC 0.75): about 1.5–2 min.
 - **Tuning:** B5 tunes β, κ, D and w on replay against FA/h(0.40) ≤ 1, R3 friction ≤ 5% on demo-context blocks, and median TTD ≤ 60 s.
 - **Rejected setting:** the first draft's C=0.5/D=1.5 clipped most genuine reward, giving about 12 FA/h and roughly 20% R3 friction.
+- **Measured (audit, Sat 18:00, synthetic only):**
+  - **`twobme_ml` Monte Carlo:** 97.2% of genuine ticks ≥0.90, and 84.5% of runs never arm. That misses the 85% target; `test_trust.py:131` relaxed the assertion to 0.84, pending Claude review.
+  - **Paced server run:** takeover 0.98 → 0.07, armed in about 40 s.
+  - **Fallback model:** the impostor LLR floors at about −1.73. 5% genuine drift causes false challenges in about half of 30-minute runs.
+  - **Subtle impostor (0.1× effect):** median TTD 170–237 s.
+  - None of this is evidence about real people (§0.3).
 - **Checkout rule:** A clicks Pay only when the shop's confidence badge shows ≥ 0.95.
 
 **Levels:**
@@ -724,6 +927,12 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
   - `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5`, `ELEVENLABS_STT_MODEL=scribe_v2`
   - `STT_BACKEND=elevenlabs|local`
 - **Voice thresholds:** `VOICE_T_ASV_HIGH`, `VOICE_T_ASV_LOW`, `VOICE_T_CM`, `VOICE_T_SPEC`. These are set by the C0.5 and C4 calibration.
+  - *Sat 18:00:* the ws-voice (uncommitted) replaces these with `VOICE_MODE=stub|real`, `VOICE_CALIBRATION_PATH` and model revision pins. Real mode refuses to start without a measured calibration JSON.
+- **Deploy traps (Sat 18:00):**
+  - `ELEVENLABS_MODE` is `stub|live` in code; the documented `prod` fails validation.
+  - `DEMO_MODE=false` forces real voice. Without warm models, every $2,000 step-up then returns **503** (reproduced).
+  - The VM pins `VOICE_MODE=stub`, `ELEVENLABS_MODE=stub`, `DEMO_MODE=1` until the real-mode smoke passes.
+- **Model backend (Sat 18:00):** `MODEL_BACKEND=fallback|twobme_ml`. Without it, whichever package happens to be installed silently decides. `uv sync --all-packages` flips the server to `twobme_ml`.
 - **Vultr inference:** `VULTR_SERVERLESS_INFERENCE_API_KEY`, `VULTR_INFERENCE_BASE_URL=https://api.vultrinference.com/v1`, `VULTR_INFERENCE_MODEL`.
 - **Paths:** `MODEL_DIR=/app/data/models`, `HF_HOME=/models/hf`.
 - **Agent:** `TWOBME_API=https://2bme.tech`. The agent calls `${TWOBME_API}/api/…` and `wss://…/ws/agent`, and keeps its token in the Keychain.
@@ -820,11 +1029,21 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
 - **Static export rules:** no dynamic route segments (use query params), and everything is same-origin.
 
 **A4 — Deploy.** Humans do step 0 in hour 1, with no app code. Claude does the rest.
+- **NOT DONE as of Sat 18:00.**
+  - The authoritative DNS answers **127.0.0.1** for 2bme.tech and a wildcard (TTL 60). Ports 80/443 refuse, and crt.sh shows no certificate ever issued. No VM exists.
+  - **Step 0 owner:** human B, by 19:30. Replace the 127.0.0.1 A records for @/www/app/api with the VM IP and delete the wildcard.
+  - **deploy.sh owner:** Claude, by 21:30.
+  - `deploy.sh` pulls from origin, so push main first.
+  - Images are verified locally: `Dockerfile.base`/`api` build (1.67 GB), boot, migrate and pass the synthetic e2e in-container.
+- **Server image deps (Sat 18:00):**
+  - `server/pyproject.toml` lists `twobme-features`, `twobme-ml` and `hearsay[server]` only in a comment, and `Dockerfile.api` installs only `twobme-server`. Add them as workspace deps (hearsay at the ws-voice merge), then `deploy.sh --rebuild-base`.
+  - Until then, a deploy runs `FallbackUserModel` and cannot run real voice.
 - **VM:** `vhp-8c-16gb-amd` in `ewr` from the Docker marketplace image (app 1125), with a Firewall Group allowing 22 from team IPs, 80/443 tcp and 443 udp.
 - **DNS:** A records for @, www, app and api, checked with `dig`.
 - **TLS and mic check:** Caddy serves a static `index.html` and `mictest.html`. Start with the Let's Encrypt staging CA, then switch to production. It passes when the mic works at https://2bme.tech/mictest.
 - **Base image:** `infra/Dockerfile.base` is built **once on the VM**, and rebuilt only when `uv.lock` changes. It contains python:3.12-slim, ffmpeg, libsndfile1, CPU torch and every server and voice dependency.
 - **Model weights:** `docker compose run --rm api python -m hearsay download-models` fills the `hf` volume.
+  - *Sat 18:00:* this command doesn't exist in the hearsay CLI. Replace it with ws-voice's pinned-revision fetch step when it merges.
 - **API image:** `Dockerfile.api` is `FROM twobme-base` and copies the code last, so a deploy takes seconds.
 - **Web build:** never uses the VM's own Node. Build inside `node:22`, or rsync a local `web/out`.
 - **Compose:**
@@ -839,9 +1058,12 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
 
 **A5 — P1.**
 - `core/explain.py`: on each anomaly, a background call to Vultr Serverless Inference. The input is trust before and after plus the top 5 `(label, z)` — never content. The output is 2 sentences, falling back to a template.
-- `ContextStore` protocol plus `NoopContextStore` (§12).
-- The `drift_30m` panel.
-- `core_e2e_local.sh` (§11.2).
+  - *Sat 18:00:* wired, but there's no key or model, so it always uses the template. Don't say "Vultr-generated" until `/status` shows `explanations=vultr` (human B gets the key).
+- `ContextStore` protocol plus `NoopContextStore` (§12). *Sat 18:00:* dead code, imported nowhere.
+- The `drift_30m` panel. *Sat 18:00:* not done; `/history/drift` returns `[]`. Cut 4 in §9: say `trust_1m` covers "changes over time".
+- `core_e2e_local.sh` (§11.2). *Sat 18:00:* done, 20/20, and in the gate.
+  - It must pin `MODEL_BACKEND=fallback`, plus a paced `twobme_ml` variant (≥110 ticks over ≥5 min), or the gate goes red at 4dec05a.
+  - Its synthetic impostor is ×1.3–2.4 separable by construction. It proves the plumbing, not discrimination.
 
 **A6 — On-laptop overlay (P0; added 2026-09-26 by user decision).** An Electron app (`overlay/`) on A's Mac:
 - One transparent, always-on-top window that loads `https://2bme.tech/overlay` (`web/src/components/overlay/`) and resizes per mode.
@@ -852,6 +1074,19 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
   notification (no `open verify_url`). Operator escape hatch ⌃⌥⌘⇧Q. `--hard-lock` adds macOS kiosk presentation while locked.
 - Demo impact (§13): after "Mark takeover", the overlay takes over A's screen when the challenge arms; the clone beat runs in
   the overlay's voice check (or via /shop → C as before); BLOCK_SPOOF → lock screen; A unlocks from the lock screen.
+- **Status (audit, Sat 18:00):**
+  - Tests pass 6/6 (shell) + 16/16 (web overlay/voice).
+  - The loop pill 99% → prompt at 18% → BLOCK_SPOOF lock → sign in → voice unlock → 97% works live on fallback + stub.
+  - **The lock is presentation + session revocation only.** No code path runs pmset or CGSession in any mode; §7 wording implying an OS lock is wrong.
+  - **Hardening (P1, Claude, about 1.5 h, by Sun 00:30):**
+    1. Hoist `useDevFlag`; the conditional hook crashes production `/overlay?mock=1`, the offline fallback.
+    2. `Menu.setApplicationMenu(null)` and devTools only under `--dev`. The default menu's ⌘H and ⌥⌘I are a likely lock bypass (not GUI-verified).
+    3. Offline, loading, or a fresh profile plus a remembered or server-reported lock must mean lock. Today it fails open to a "2bME offline" / "Sign in" pill.
+    4. Resnapshot when the device first appears. Today it sticks at "1% RECONNECTING" if the overlay connects first.
+    5. `refreshMe` on the 4401 close.
+    6. Suppress the transient prompt → pill → lock resize.
+    7. One lock window per display (P1).
+  - Human A does a GUI smoke on the demo Mac: a full-screen app, ⌘H, ⌘Tab, ⌥⌘I, a second display.
 
 ## 7. Workstream B: Codex 1 (signals and models)
 **B0 — Probe (P0, 30 min or less, hour 0).** Write the findings to `agent/PROBE.md`:
@@ -892,7 +1127,8 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
   - `challenge` → an `osascript` notification only. `/shop`, `/dashboard` and `/verify` listen for `challenge` on `/ws/live` and open the modal in place. The agent runs `open <verify_url>` only if no browser bound to this device has had a `/ws/live` connection in the last 15 s.
   - `lock` → a notification
   - `unlock` → a notification
-  - With `DEMO_MODE=1`, lock never runs `pmset displaysleepnow`.
+  - With `DEMO_MODE=1`, lock never runs `pmset displaysleepnow`. *Sat 18:00:* no code path runs pmset or locks macOS in any mode. The lock is the overlay's lock screen plus session revocation (§6 A6).
+  - *Sat 18:00:* `runtime.py:133` reads `browser_live_recent`, but the contract and server send `open_browser`, so the agent never opens `/verify`. Codex 1 fixes this.
 - **Transport fallback:** while the WS is down, POST ticks over HTTPS (`/api/agent/ticks`).
 - **Stage mode:** `twobme-agent doctor --stage` runs before every judge block and fails loudly unless all of these hold:
   - Input Monitoring is granted, the tap is enabled, and events arrived in the last 5 s
@@ -916,7 +1152,17 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
 - `scripts/sig_make_fixtures.py` generates `contracts/fixtures/events/{genuine_A,impostor_B}.jsonl` with realistic, distinct timing distributions for every modality, plus `fixtures/expected/*.json`, by CP1.
 - Tests: fixture tests, property tests (a constant +30 ms flight delay shifts `kb.dd_p50` by about 30), and `test_signature_coverage.py`.
 
+**Delivery status (audit, Sat 18:00).** B0–B4, B5-min (real but weak), B6 presence and the `/enroll` page arrived in PR #1 (e741e15, 17:16), bypassing the gate.
+- **Tests:** 35/36 pass. `features/test_features.py` needs hypothesis, and `presence.test.ts` needs jsdom; neither is a dependency.
+- **Capture** has only author-reported runs: 60 s in a Codex PTY per `agent/PROBE.md`.
+- **Not yet integrated.** Owners are in §4.
+  - `twobme_ml` isn't a server dependency.
+  - It refuses the 40-block synthetic e2e ("Need 100 eligible blocks"; "Insufficient chronological coverage for five folds with 60s purge").
+  - The hub doesn't catch `trust.py:53` "Out-of-order tick".
+- **Enrollment implication for the stage:** A needs about 2,000 keys (keyboard ≥100 blocks) and ≥60 mouse blocks, spread over enough time for the purged 5-fold calibration, **on the stage laptop**. The existing real recordings live only on Pranav's machine.
+
 **B3 — Models (P0).**
+- *B3-fallback (what the server actually runs when `twobme_ml` is absent or `MODEL_BACKEND=fallback`):* `server/app/core/fallback_model.py`. It is median/MAD mean-|z| with MIN_BLOCKS=20, uses all temporal windows, and ignores transitions (`markov_ll` unused).
 - **Per modality:** `RobustScaler`, then ensemble members chosen by n_train:
   - under 20: the modality is disabled (zero evidence);
   - 20–60: scaled-Manhattan + `IsolationForest(n_estimators=300, max_samples=min(64, n))`;
@@ -969,7 +1215,23 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
 - **P1:** TS keyboard and mouse block features. Names come from the spec; map `event.code` → class, never `event.key` or values; skip `type=password` and `autocomplete^=cc-` fields. Parity with Python must be within 1% on `fixtures/expected`.
   - Web blocks count only when the bound device has **no** fresh agent heartbeat; otherwise the evidence would be double-counted.
 
-**B7-min — Continuous identity update (P0 by CP4).**
+**B7-min — Continuous identity update (P0 by CP4). This is newGoal's safe loop:**
+
+| newGoal step | Where it lives |
+|---|---|
+| New behavior → current model evaluates it | `score_block` per tick (`hub.py:577-598`) |
+| "High-confidence legitimate?" → yes → may update the baseline | `update_candidate` (`hub.py:669-684`), then the 10-minute quarantine in `TRAIN_SQL` |
+| No → don't train on it | `baseline_eligible=false` plus the exclusions below |
+| → challenge / alert | §5.4 arming, an anomaly row, the admin feed |
+
+- **Status (Sat 18:00): exists only in pieces, and is unsafe until the fixes land (P0, Claude):**
+  - The guarded entry point `twobme_ml.update.retrain(current, training, anchor_holdout, impostor_holdout, candidates, cfg)` has anchor share ≥30%, ≤10% replaced, regression rejection and a `CONTINUOUS_UPDATE` freeze. It is **never called**: `models.py:228` looks for a `UserModel.retrain` classmethod that doesn't exist, so "Retrain now" is a full refit. Fix: call the module function with anchor and impostor holdouts.
+  - **Poisoning paths (reproduced):**
+    - Enroll-mode rows are eligible without evaluation.
+    - New devices default to enroll.
+    - `hello` can request enroll on an enrolled device.
+    - Candidates aren't revoked after an arming. Revoke `update_candidate` for the 120 s before any arming or BLOCK_*.
+  - There is no automatic refinement. The footer must say "manual retrain", not "continuous update on".
 - `update_candidate` rule (Claude stamps it at ingest using this definition): confidence ≥ 0.95 over the preceding 60 s, llr ≥ +1, no open or failed challenge, label is not impostor, **or** the block falls within 60 s after a voice VERIFY.
 - **Retrain now:**
   - Keep an enrollment anchor of at least 30%, change at most 10% of the data per update, and use a 10-minute quarantine.
@@ -978,11 +1240,11 @@ Claude's A0 commits a **stub** `server/app/voice/`. The router returns canned `V
 - An automatic 15-minute schedule is P1.
 - **Excluded from baseline and candidates:**
   - every block between a `takeover_start` marker and the next VERIFY;
-  - every block in a session ended by `/demo/reset`;
+  - every block in a session ended by `/demo/reset`. *Sat 18:00, corrected:* exclude the takeover rows of a reset session (label impostor, actor b, or inside a `takeover_start`…VERIFY window), not the whole session. Eligibility is row-level, never keyed on the session end reason. Otherwise one Reset orphans A's whole baseline (§5.3).
   - every block in `sandbox` or `ephemeral` sessions.
 - **`CONTINUOUS_UPDATE=false` from DEMO FREEZE.** The Sunday 06:30 top-up is the last training run: tag it `demo-final` by 06:45. After that there are no retrains, deploys or migrations.
 
-**Enroll page (P0 by CP2): `web/src/app/enroll`.**
+**Enroll page (P0 by CP2): `web/src/app/enroll`.** *Sat 18:00:* the four-stage wizard shipped in PR #1, but `page.tsx:4` imports the non-existent `components/voice/VoiceEnroll`, which breaks tsc and `next build`. The fix, `{ VoiceEnroll } from '../../components/voice/voice-enroll'`, is uncommitted on `ml-wider-gap-13wf`. It is the only TOTP-enrollment UI (an otpauth link, no QR). `startPresence` is mounted only here.
 - A wizard showing live gate progress (`enroll_progress`).
 - A typing textarea whose content is **discarded client-side** and never sent; the agent captures timing system-wide.
 - Voice enrollment (Codex 2's `<VoiceEnroll/>`), TOTP enrollment, and a Train button.
@@ -1034,7 +1296,7 @@ Also set `VOICE_T_CM` v0 and record the clone's ASV cosine. If the clone falls b
 - **Resumable:** append to `predictions.partial.tsv` every 50 files.
 - **TSV writer (reused later):**
   - Read the **official template** and keep its header and row order byte-for-byte, matching rows by basename. Overwrite only column 2.
-  - Score = `(rankdata(llr, 'average') + 0.5)/N`, written as `%.8f`. It is monotone and never saturates.
+  - Score = `(rankdata(llr, 'average') − 0.5)/N` ∈ (0, 1), written as `%.8f`. It is monotone and never saturates. *Erratum applied Sat 18:00, per the 02:15 REQUESTS answer; `+0.5` emits 1.125.* Main's `hearsay/config.yaml` still has +0.5; the fix is uncommitted in ws-voice.
   - Assert the row count, that no 0.006 placeholder is left, and that every file was attempted. Unreadable files go to the **real end**.
   - `--direction synth_high|bona_high` is applied last.
   - Before every submission, run a **direction smoke test** on 20 real + 20 ElevenLabs clips.
@@ -1090,10 +1352,13 @@ Also set `VOICE_T_CM` v0 and record the clone's ASV cosine. If the clone falls b
 - **The DSP/FFT analysis is P0 and never cut.**
   - Input: STFT (n_fft = 512, hop = 160) → 64-band log mel LTAS, MFCC-20 mean/std, spectral centroid/rolloff/flatness, HF-energy ratio above 4 kHz (0–7.2 kHz guard), F0 median.
   - `spec_sim` = cosine([LTAS ‖ MFCC-mean], `profile.spectral_summary`).
+    - *Sat 18:00:* this is 84-d on both sides, with `profile.mfcc_mean`, migration 005.
+    - Raw dB LTAS with MFCC c0 compresses every score into about [0.9, 1.0]: same voice 0.993–0.997, different voices up to 0.992, speech vs white noise **0.906**, which passes T_SPEC 0.80.
+    - Use a mean-centered LTAS ‖ MFCC[1:20], and calibrate T_SPEC on A, B and the clone.
   - It also produces human-readable `findings[]`, such as "energy 4–8 kHz −9 dB vs your profile".
 - **Confidence:** `voice_confidence = clip(0.6·asv_norm + 0.25·(1−cm_p_spoof) + 0.15·spec_sim, 0, 1)`.
 - **CM serialization:** one dedicated executor with `torch.set_num_threads(6)`, serialized by a lock. Target: under 1.5 s for the CM and under 6 s end to end.
-- **Decision precedence**, where spoof detection always wins and is checked regardless of timing or words:
+- **Decision precedence**, where spoof detection always wins and is checked regardless of timing or words. *Erratum Sat 18:00, per the 02:15 REQUESTS answer: when a valid CM score exists, step 2 runs before step 1. Silence or no usable speech with no CM evidence → RETRY. Missing required evidence never VERIFYs → FALLBACK_MFA.*
   1. VAD speech under 1.0 s → RETRY.
   2. `cm_p_spoof ≥ T_CM` → **BLOCK_SPOOF**.
   3. Phrase check fails (fewer than 4/5 words) → RETRY. This catches replays.
@@ -1105,6 +1370,22 @@ Also set `VOICE_T_CM` v0 and record the clone's ASV cosine. If the clone falls b
   RETRY on attempt 3 becomes FALLBACK_MFA. Gray-zone results never lock the owner (§5.4).
 - **Side effects:** delete the audio after scoring. Call `challenge_status` and `voice_decided`, and return `{result, outcome, next?}`.
 - **Enrollment:** 5 phrases (20–30 s net) on the **demo USB mic**, storing the centroid, utterance embeddings and spectral summary. Reject if intra-cosine is below about 0.5.
+  - *Sat 18:00:* 20 s is unreachable. Five 6 s captures of 5-word phrases give about 10–15 s of net speech (TTS renders a phrase in 2.0–3.1 s). Use **≥8 s net VAD speech**, configurable in the calibration JSON.
+- **Status (audit, Sat 18:00):**
+  - **Main** is the A0 stub (`voice/router.py:184`: `x_fake_decision or "VERIFY"`), with a fixed phrase and a beep prompt.
+    - It reports "speaker match 0.72" for users with zero profiles, and `/healthz` says `voice_warm=true`.
+    - The real ChallengeFlow never sends `X-Fake-Decision`, so **through the UI every upload VERIFYs, and an attacker's $2,000 order ends Y** (reproduced).
+  - **The real C2** (VAD → faster-whisper/Scribe ‖ DF_Arena ‖ ECAPA ‖ DSP/FFT → calibrated decide) is 23 **uncommitted** files in `.worktrees/ws-voice`, with 124 tests on fake models, and textually mergeable. It has never run a model:
+    - torch, speechbrain, transformers, silero-vad, faster-whisper and elevenlabs are absent from the venv, server deps and base image;
+    - no weights, no SHAs, no calibration JSON, no ElevenLabs key;
+    - no IVC clone, red-team corpus or attack tool on any branch.
+  - **UI:** users see three scores and a spectrogram. The FFT/DSP values and `findings[]` aren't rendered yet.
+- **Stub honesty (P0, Sat 18:00):**
+  - In `VOICE_MODE=stub`, every `VoiceResult` carries `simulated=true`, and the UI shows a "Simulated voice result" badge.
+  - `X-Fake-Decision` is honoured only for admin, via a labelled demo-decision control on the observer screen, so the Block beat stays demoable and honest.
+  - Canned stage numbers are never narrated as live analysis.
+  - The hub degrades an issuer failure to a TOTP-only challenge, never a 503.
+- **Go/no-go on real mode: Sun 01:00** (Codex 2 + Claude + B). Requires weights on the VM, the smoke passing, and a consented calibration session (C0.5 / C4-lite). If no-go: stub + badge, with TOTP as the live step-up.
 - **Startup:** preload the models and run a warm-up before `/healthz` reports ok.
 
 **C2.7 — Live attack tool (P0 by CP3).** `hearsay redteam attack --voice-id $ELEVENLABS_REDTEAM_VOICE_A --api https://2bme.tech --admin-token …` runs on B's laptop.
@@ -1239,6 +1520,37 @@ Also set `VOICE_T_CM` v0 and record the clone's ASV cosine. If the clone falls b
 
 **Never cut:** the §0.1 MVP.
 
+### 9.1 Actuals and re-baseline (Sat 18:00 ET)
+| Checkpoint | Planned | Actual |
+|---|---|---|
+| CP0 | 02:30 | ✓ 01:33 (`cp0-contracts`) |
+| CP1 | 06:30 | ✗ no VM/DNS, no night EER, no TSV |
+| CP2 | 10:30 | ✗ |
+| CP3 | 14:00 | ✗ local synthetic e2e only; agent/ml arrived 17:16, unintegrated |
+| CP4 | 19:00 | at risk |
+
+- There was a commit gap from 01:54 to 13:39.
+- The 06:30, 11:30 and 15:00 tripwires fired with no recorded response.
+- Off-plan work went ahead first (the overlay and `/admin`), before CP3.
+- **Re-baselined critical path:** §0.3.
+- **New tripwire:** a stream with nothing integrated by its checkpoint → Claude takes its P0 integration and cuts the rest.
+- **Hearsay go/no-go:** Sat 20:00 (human A).
+- **Real-voice go/no-go:** Sun 01:00.
+
+**Cut order from Sat 18:00** (replaces the list above; §0.2 still goes first):
+1. Hearsay challenge submission, unless it's a go at 20:00.
+2. The C2.7 live attack tool (use a recorded clone clip).
+3. Backboard.
+4. drift_30m (say `trust_1m` covers "changes over time").
+5. The identification matrix.
+6. The automatic B7 schedule (keep the guarded manual Retrain).
+7. Admin actions beyond audit markers and a toast.
+8. Overlay packaging and the OS lock.
+9. The `/lab` voice sandbox.
+10. Landing animations.
+
+**Never cut:** deploy, the real agent live, the §5.3 security fixes, and honest voice labelling.
+
 ## 10. Human protocol (2 people)
 **Roles:**
 - **A (owner):** the enrolled user and demo-laptop owner. Supervises Codex 1, is the consented clone subject, and handles the Hearsay rules.
@@ -1280,6 +1592,10 @@ Also set `VOICE_T_CM` v0 and record the clone's ASV cosine. If the clone falls b
 - **Tiger jobs:** `timescaledb_information.jobs` shows the columnstore jobs at 15 min.
 - **ElevenLabs quota:** `GET /v1/user/subscription` is shown in `/status` and turns amber at 80%.
 - **Hearsay:** `RULES.md` answered.
+- *Sat 18:00:* `ops/SMOKE.md` has 2 of 12 rows filled. Owners:
+  - DNS/TLS/Mic, Vultr inference, Tiger jobs on the VM: human B, by Sat 21:00.
+  - Agent `doctor`: human A, on the stage Mac.
+  - ElevenLabs: human B, once a key exists.
 
 ### 11.2 Automated tests
 - **Codex 1:** features (fixtures, properties, signature coverage), trust properties (§7 B4) and TS↔Python parity.
@@ -1297,6 +1613,21 @@ Also set `VOICE_T_CM` v0 and record the clone's ASV cosine. If the clone falls b
   - an attacker-created order stays N after the owner's later VERIFY;
   - degraded mode: with Tiger unreachable, login, decisions and voice still work;
   - co-presence (remote cookie → 0.30 → C).
+- **Added Sat 18:00.** Every bug the audit found was invisible to the gate:
+  - **Security probes (§5.3):**
+    - a stolen session can't re-enroll TOTP or voice and get Y;
+    - a newly registered device starts at 0.30;
+    - an enroll-mode flip needs R3/admin.
+  - **Model and training:**
+    - reset → retrain still finds the baseline;
+    - a failed retrain keeps the prior `ModelInfo`;
+    - `update_candidate` is revoked before an arming;
+    - out-of-order and late ticks never raise, and are acked.
+  - **Web and overlay:**
+    - an `OverlayView` render test, plus a production `/overlay?mock=1` build check;
+    - `admin-mock` is deterministic, with level matching %.
+  - **Privacy (§2.2):** transitions, `last_tick_json` and marker probes.
+  - **Gate:** `gate.sh` must **fail**, not skip, when overlay `node_modules` is missing, and must run `next build`, not just tsc.
 - **`core_e2e_local.sh`:**
   1. Bring up the dev compose stack and run migrations.
   2. `agent replay` of `genuine_A`, then `impostor_B`.
@@ -1319,7 +1650,14 @@ Also set `VOICE_T_CM` v0 and record the clone's ASV cosine. If the clone falls b
 - **Hearsay:** dev minDCF_a/b reported in the README; the release check passes.
 
 ## 12. Deferred: Backboard.io
-The user deprioritized it. Keep only the `ContextStore` protocol (`record(user_id, kind, text)`, `recall(user_id, query)`) with `NoopContextStore`. A future `BackboardContextStore` would:
+The user deprioritized it. Keep only the `ContextStore` protocol (`record(user_id, kind, text)`, `recall(user_id, query)`) with `NoopContextStore`.
+- *Sat 18:00:* newGoal lists Backboard twice ("store/retrieve the contextual history to model how a specific person behaves digitally over time").
+- **Decision:** it stays deferred for the hackathon.
+  - Tiger already holds the per-person behavior history, so it is the only history store we claim.
+  - Devpost and the landing page say "roadmap", never "uses".
+  - `server/app/core/context.py` is dead code, imported nowhere.
+
+A future `BackboardContextStore` would:
 - call `https://app.backboard.io/api` with an `X-API-Key` header, using one assistant per user;
 - **always pass the memory mode explicitly**;
 - store only categories and hashed IDs, never plaintext app names;
@@ -1342,6 +1680,17 @@ The user deprioritized it. Keep only the `ContextStore` protocol (`record(user_i
 | **1:30** | B clicks Pay → **C, step-up**. B presses Start voice check, the prompt plays, and the attack tool plays **A's ElevenLabs clone** of the fresh phrase. Stages: Words ✓ · Speaker 0.58 (would pass alone, if measured) · Synthetic 0.93 ✗ → **BLOCK_SPOOF**, order **N**, device locked. Spectrogram, FFT and DSP findings shown. |
 | **2:10** | A returns, logs in, and unlocks with voice on a new phrase → **VERIFY**, 97%. **The attacker's order stays declined.** A places their own order → **Y**. |
 | **2:40** | Close on the anomaly row with the Vultr-generated explanation, plus one number chosen for this judge. |
+
+**Script changes (Sat 18:00, from the audit):**
+- **0:20:** A's frictionless Y needs presence mounted on `/shop` and the agent heartbeat live. Otherwise A's own browser binds *remote* (0.30) and gets C.
+- **0:40–1:30:** when the challenge arms, the **overlay** covers A's screen. B then tries Pay → C.
+- **1:30 voice beat:** real BLOCK_* only if real voice is a go at Sun 01:00. Otherwise say "simulated" out loud (the badge shows it) or use TOTP. **Never narrate stub numbers as live.**
+- **2:10:** A unlocks on the overlay's lock screen.
+- **New 2:25 admin beat:** the observer flips to `/admin`. A's live row and one synthetic employee turn red, with the audit trail and trace-back into `/history`. Show only once admin-lite lands; otherwise use the labelled mock or skip it.
+- **2:40:** "template explanation" unless a Vultr key is set.
+- **Replay lane:** `twobme-agent replay` or `core_replay_ticks`, always announced as a replay.
+- **Rule:** never press Reset between the top-up and Retrain. Until the §5.3 row-level fix lands, Reset orphans the baseline.
+- **Evidence claims:** quote the real one-class numbers from `/lab` (§0.3 #7), never the synthetic AUC 0.997.
 
 **Deep dives, 45 s or less, chosen per judge:**
 - **Tiger:** `/history` timeline and anomalies, compression (`compress-now`), and "the identity model updated itself v1→v7".
@@ -1384,3 +1733,10 @@ The user deprioritized it. Keep only the `ContextStore` protocol (`record(user_i
 - **expo.hexlabs.org:** the Devpost link.
 - **Hearsay:** the TSV through the official path, the image on GHCR, the repo, and `hearsay_submission/README.md`.
 - **Repo:** public; README with the architecture, privacy promise and judge boxes; no secrets (run `gitleaks` or a grep before making it public).
+  - *Sat 18:00:* public ✓, and the history scan is clean at 4dec05a.
+  - `README.md:5` says "Live". Keep that only after TLS passes, and state the model and voice modes.
+  - Remove the Vultr-scorer, red-team and anti-spoof claims until they're true.
+  - Add `.pnpm-store/` to `.gitignore`.
+- **Hearsay:** go/no-go at Sat 20:00 (§9.1). If no-go, the README says the voice layer is Hearsay-inspired and the challenge submission was not made.
+- **No Backboard claim** (§12). Tracks: .tech, Tiger, Vultr (after the deploy), ElevenLabs (only if real prompts are deployed), NSA Hearsay (if go), Visa optional.
+- **Missing as of Sat 18:00:** Devpost draft (target Sun 01:00), backup video (Sun 02:00), `demo_offline.sh`, `agent_loop.sh`.

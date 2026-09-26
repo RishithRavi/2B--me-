@@ -16,3 +16,29 @@ Ordered. Done-criteria in brackets. If blocked → note in `contracts/REQUESTS.m
 11. [ ] **CP4**: promote `trust_config.tuned.yaml` after review; VM snapshot
 
 Rules: never deploy Sun 09:00–11:30; after any API restart run one `sandbox` challenge; `CONTINUOUS_UPDATE=false` + `TRAINING_FROZEN=1` from demo freeze.
+
+## Re-baselined Sat 18:30 (audit; IMPLEMENTATION.md §0.3). Ordered; supersedes open items above.
+12. [ ] **Main green + pushed (by 20:00).**
+    - Review `ml-wider-gap-13wf`: take the `/enroll` import fix. The workflow `enroll_gate` 20→13 needs a CHANGELOG line or a CONTRACT review. Hold EnsembleV2 until it's evaluated.
+    - Add jsdom and hypothesis as dev deps. Fix the enroll TS7053 errors.
+    - Ask Codex 1 via REQUESTS to fix `test_fixture_reproducibility`.
+    - Hub: catch out-of-order ticks and engine errors; ack late ticks.
+    - Add `MODEL_BACKEND`. The e2e pins fallback, plus a paced `twobme_ml` variant.
+    - Run `gate.sh all`, then push main and the tags.
+13. [ ] **First deploy with B (by 21:30).**
+    - Real secrets, plus a startup guard against example or empty values.
+    - Stub voice pinned.
+    - `deploy.sh`, then the e2e against https://2bme.tech; fill SMOKE.md; VM snapshot.
+14. [ ] **Wire `twobme_ml` (by 22:00).**
+    - Server deps and image; `models._fit` → `twobme_ml.update.retrain` with holdouts; fallback on failure.
+    - Show `model_backend` on the identity card.
+15. [ ] **§5.3 security fixes + regression tests (by 22:30).**
+    - TOTP only in `fallback_mfa`, with factor re-enroll gated (voice routes via REQUESTS to Codex 2).
+    - New device at 0.30; register, enroll-mode and train gated to R3/admin.
+    - Row-level eligibility across a reset; keep `ModelInfo` on failure; revoke candidates before an arming.
+16. [ ] **Presence in the root layout (by 23:00)**, then the real agent run with A.
+17. [ ] **Voice:** merge ws-voice after the gate; add `hearsay[server]`; stub honesty (`simulated` flag + badge, admin-only fake decision); issuer failure → TOTP, not 503. Go/no-go Sun 01:00.
+18. [ ] **Privacy defense in depth (by 23:30):** transitions validated against `app_categories.json`, `last_tick_json` from validated blocks, marker text capped.
+19. [ ] **Overlay hardening (by Sun 00:30):** hoist `useDevFlag`, remove the default menu, fail-closed lock, resnapshot on device appear, `refreshMe` on 4401.
+20. [ ] **Admin floor (1 h), then admin-lite (P1, by Sun 03:00):** see §2.4.
+21. [ ] **README and landing truth pass:** two audiences and the stats; no unsupported claims; "Live" only after TLS passes.

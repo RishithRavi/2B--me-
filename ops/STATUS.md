@@ -152,3 +152,23 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   backend endpoints. Verified with tsc, vitest, a static export build and a headless-Chrome screenshot of the
   rendered page. Gate green (core). §2.4 direction is still PROPOSED — needs sign-off and a ping to Codex 1/2
   before this is anything more than a Workstream-A draft.
+- 18:30 · Claude · **Audit vs `newGoal.txt` + IMPLEMENTATION.md re-baseline.** 15-agent audit: 7 areas, each with an adversarial
+  verifier, then a synthesis pass. Full `gate.sh all` at b970ee2: all PASS except `voice_test.sh` (no bare python3.12);
+  e2e 20/20. Live runs on isolated local DBs. **About 40% of newGoal, 45% of §0.1.** Grade C+: strong tested parts, not joined.
+  - **Codex 1 delivered** (PR #1, e741e15, merged 17:16 → main 4dec05a) but none of it is integrated.
+  - **main 4dec05a is red** (confirmed by `gate.sh all` at 18:20; `test_copresent_owner_frictionless_purchase` and
+    `test_fixture_reproducibility` also fail):
+    - `/enroll` imports a missing `VoiceEnroll`;
+    - `presence.test.ts` needs jsdom;
+    - `uv sync --all-packages` flips the server to `twobme_ml`, which refuses the e2e, and the hub throws "Out-of-order tick".
+  - **Voice on main VERIFYs any audio.** Through the UI, an attacker's $2,000 order ends Y.
+  - **Reproduced step-up and update-loop holes:** TOTP re-enroll, a new device at 0.97, the enroll-mode flip, Reset orphaning the baseline,
+    and a failed retrain blanking the card.
+  - **2bme.tech resolves to 127.0.0.1.** No VM exists.
+  - Plan updated on ws-core: header, §0.1–0.3 status and critical path, §1.8–1.9 (audiences; "who is truly who"), §2
+    model locality, §2.2, §2.4 ADOPTED, §4, §5.3 security rules, §5.4 anchors, §5.7, §6, §7 (PR #1, safe loop), §8
+    errata, §9.1, §11, §12–14.
+  - **Not merged to main,** because main's gate is red for pre-existing reasons.
+  - **Humans:** B does step 0 (VM + DNS) now; A makes the Hearsay go/no-go by 20:00.
+  - **Codex 1:** read `open_browser`.
+  - **Codex 2:** commit ws-voice.
