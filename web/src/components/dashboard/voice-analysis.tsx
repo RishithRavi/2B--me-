@@ -125,7 +125,8 @@ export function VoiceAnalysis({
   const meta = r ? DECISION_META[r.decision] : null;
   const simulated = isSimulated(r, voiceMode);
   const rows = dspRows(r?.dsp);
-  const ms = scoringMs(r?.stage_ms);
+  const total = scoringMs(r?.stage_ms);
+  const ms = total !== null && total >= 100 ? total : null; // a canned stub result "scores" in ~0 ms: don't show it
   const BannerIcon = !meta ? Loader2 : meta.tone === "ok" ? ShieldCheck : meta.tone === "block" ? ShieldX : TriangleAlert;
 
   return (

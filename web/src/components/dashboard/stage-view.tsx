@@ -107,26 +107,29 @@ export function StageView({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Button
-            size="lg"
-            className={open ? "h-16 bg-muted text-lg text-foreground hover:bg-muted/80" : "h-16 bg-trust-suspicious text-lg text-white hover:bg-trust-suspicious/85"}
-            onClick={() => void actions.setTakeover(!open)}
-            disabled={busy === "takeover"}
-          >
-            {busy === "takeover" ? <Loader2 className="size-5 animate-spin" /> : open ? <FlagOff className="size-5" /> : <Flag className="size-5" />}
-            {open ? "End takeover" : "Mark takeover"}
-          </Button>
-          <Button size="lg" variant="outline" className="h-16 text-lg" onClick={() => void actions.reset()} disabled={busy === "reset"}>
-            {busy === "reset" ? <Loader2 className="size-5 animate-spin" /> : <RotateCcw className="size-5" />}
-            Reset demo
-          </Button>
-          <Button size="lg" variant="outline" className="h-16 text-lg" onClick={() => void actions.rearm()} disabled={busy === "rearm"}>
-            {busy === "rearm" ? <Loader2 className="size-5 animate-spin" /> : <Target className="size-5" />}
-            Re-arm (31%)
-          </Button>
+        {/* operator controls stay on screen (sticky) however tall the voice beat makes the page */}
+        <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-auto space-y-2.5 border-t bg-background/88 px-6 py-3.5 backdrop-blur-md">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Button
+              size="lg"
+              className={open ? "h-14 bg-muted text-lg text-foreground hover:bg-muted/80" : "h-14 bg-trust-suspicious text-lg text-white hover:bg-trust-suspicious/85"}
+              onClick={() => void actions.setTakeover(!open)}
+              disabled={busy === "takeover"}
+            >
+              {busy === "takeover" ? <Loader2 className="size-5 animate-spin" /> : open ? <FlagOff className="size-5" /> : <Flag className="size-5" />}
+              {open ? "End takeover" : "Mark takeover"}
+            </Button>
+            <Button size="lg" variant="outline" className="h-14 text-lg" onClick={() => void actions.reset()} disabled={busy === "reset"}>
+              {busy === "reset" ? <Loader2 className="size-5 animate-spin" /> : <RotateCcw className="size-5" />}
+              Reset demo
+            </Button>
+            <Button size="lg" variant="outline" className="h-14 text-lg" onClick={() => void actions.rearm()} disabled={busy === "rearm"}>
+              {busy === "rearm" ? <Loader2 className="size-5 animate-spin" /> : <Target className="size-5" />}
+              Re-arm (31%)
+            </Button>
+          </div>
+          {isAdmin && voiceMode === "stub" && <VoiceOutcomeControl deviceId={state.device?.id ?? state.focus} mock={mock} bare />}
         </div>
-        {isAdmin && voiceMode === "stub" && <VoiceOutcomeControl deviceId={state.device?.id ?? state.focus} mock={mock} />}
       </div>
     </div>
   );

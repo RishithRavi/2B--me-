@@ -21,7 +21,18 @@ const CHOICES: { value: Choice; label: string; color: string; hint: string }[] =
   { value: "FALLBACK_MFA", label: "FALLBACK_MFA", color: "var(--trust-watch)", hint: "gray zone → authenticator code" },
 ];
 
-export function VoiceOutcomeControl({ deviceId, mock, className }: { deviceId: string | null; mock: boolean; className?: string }) {
+export function VoiceOutcomeControl({
+  deviceId,
+  mock,
+  bare = false,
+  className,
+}: {
+  deviceId: string | null;
+  mock: boolean;
+  /** no panel chrome (inside the stage view's sticky control bar) */
+  bare?: boolean;
+  className?: string;
+}) {
   const [choice, setChoice] = useState<Choice>("AUTO");
   const [busy, setBusy] = useState<Choice | null>(null);
 
@@ -43,7 +54,7 @@ export function VoiceOutcomeControl({ deviceId, mock, className }: { deviceId: s
   }
 
   return (
-    <div className={cn("panel flex flex-col gap-2.5 px-4 py-3 lg:flex-row lg:items-center", className)}>
+    <div className={cn("flex flex-col gap-2.5 lg:flex-row lg:items-center", !bare && "panel px-4 py-3", className)}>
       <div className="flex shrink-0 items-center gap-2">
         <FlaskConical className="size-4 text-trust-watch" />
         <div className="leading-tight">

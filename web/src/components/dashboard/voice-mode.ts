@@ -1,7 +1,10 @@
 "use client";
 
-// Which voice pipeline the server runs (StatusOut.voice_mode): "stub" results are canned or operator-chosen and
-// every screen that shows one badges it "Simulated voice result" (§8 C2 stub honesty). Fetched once per page load.
+// What the server actually runs, from GET /api/status (fetched once per page load):
+//  - voice_mode: "stub" results are canned or operator-chosen, and every screen that shows one badges it
+//    "Simulated voice result" (§8 C2 stub honesty);
+//  - the behavior scorer (StatusOut.model_backend, else inference.model_backend): the identity card's fallback when
+//    ModelInfo.backend isn't filled in by the server yet.
 import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
@@ -9,13 +12,27 @@ import type { StatusOut } from "@/lib/contracts";
 
 export type VoiceMode = StatusOut["voice_mode"];
 
-let known: VoiceMode | undefined;
-let inflight: Promise<VoiceMode | undefined> | null = null;
+export interface ServerInfo {
+  voiceMode: VoiceMode;
+  modelBackend: string | null;
+}
 
-function load(): Promise<VoiceMode | undefined> {
+const UNKNOWN: ServerInfo = { voiceMode: null, modelBackend: null };
+const MOCK: ServerInfo = { voiceMode: "stub", modelBackend: "twobme_ml" };
+
+let known: ServerInfo | undefined;
+let inflight: Promise<ServerInfo | undefined> | null = null;
+
+/** Pure: StatusOut → ServerInfo. */
+export function serverInfoFrom(s: StatusOut): ServerInfo {
+  const inf = s.inference?.model_backend;
+  return { voiceMode: s.voice_mode ?? null, modelBackend: s.model_backend ?? (typeof inf === "string" ? inf : null) };
+}
+
+function load(): Promise<ServerInfo | undefined> {
   inflight ??= api
     .status()
-    .then((s) => (known = s.voice_mode ?? null))
+    .then((s) => (known = serverInfoFrom(s)))
     .catch(() => undefined) // offline: unknown, retried on the next mount
     .finally(() => {
       inflight = null;
@@ -23,31 +40,35 @@ function load(): Promise<VoiceMode | undefined> {
   return inflight;
 }
 
-/** "stub" | "real" | null (unknown / older server). Mock mode is always "stub". */
-export function useVoiceMode(mock: boolean): VoiceMode {
-  const [mode, setMode] = useState<VoiceMode>(mock ? "stub" : (known ?? null));
+export function useServerInfo(mock: boolean): ServerInfo {
+  const [info, setInfo] = useState<ServerInfo>(mock ? MOCK : (known ?? UNKNOWN));
   useEffect(() => {
     if (mock) {
-      setMode("stub");
+      setInfo(MOCK);
       return;
     }
     if (known !== undefined) {
-      setMode(known);
+      setInfo(known);
       return;
     }
     let alive = true;
-    void load().then((m) => {
-      if (alive && m !== undefined) setMode(m);
+    void load().then((i) => {
+      if (alive && i !== undefined) setInfo(i);
     });
     return () => {
       alive = false;
     };
   }, [mock]);
-  return mode;
+  return info;
 }
 
-/** Test hook: forget the cached mode. */
-export function resetVoiceModeCache() {
+/** "stub" | "real" | null (unknown / older server). Mock mode is always "stub". */
+export function useVoiceMode(mock: boolean): VoiceMode {
+  return useServerInfo(mock).voiceMode;
+}
+
+/** Test hook: forget the cached status. */
+export function resetServerInfoCache() {
   known = undefined;
   inflight = null;
 }

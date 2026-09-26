@@ -96,8 +96,98 @@ describe("OverlayView (mock mode)", () => {
     expect(iPrompt).toBeGreaterThanOrEqual(0);
     expect(iLock).toBeGreaterThan(iPrompt);
     expect(modes.slice(iPrompt, iLock)).not.toContain("pill");
-    // the lock is remembered (fails closed across a restart), under the mock-only key
-    expect(window.localStorage.getItem("2bme:overlay:locked:mock")).toBe("1");
+    // the lock is remembered with its reason (fails closed across a restart), under the mock-only key
+    expect(JSON.parse(window.localStorage.getItem("2bme:overlay:locked:mock") ?? "null")).toMatchObject({ reason: "voice_spoof" });
     expect(window.localStorage.getItem("2bme:overlay:locked")).toBeNull();
   }, 20_000);
+
+  it("server event order (terminal challenge, then voice_result, then lock) never flashes the pill", async () => {
+    await mount();
+    const { getLiveStore } = await import("@/lib/live");
+    const { MOCK_DEVICE_ID } = await import("@/lib/live-mock");
+    const store = getLiveStore(true);
+    const t = () => new Date().toISOString();
+    const ch = { challenge_id: "srv-1", trigger: "proactive" as const, status: "issued" as const, attempt: 1, expires_at: null, verify_url: null };
+    await act(async () => store.dispatch({ type: "challenge", device_id: MOCK_DEVICE_ID, t: t(), data: ch }));
+    expect(mode()).toBe("prompt");
+    const from = modes.length;
+    // 1. the challenge turns terminal first (open_challenge → null)
+    await act(async () => store.dispatch({ type: "challenge", device_id: MOCK_DEVICE_ID, t: t(), data: { ...ch, status: "blocked_spoof" } }));
+    expect(mode()).toBe("prompt"); // held full screen, outcome unknown
+    // 2. then the voice result
+    await act(async () =>
+      store.dispatch({
+        type: "voice_result",
+        device_id: MOCK_DEVICE_ID,
+        t: t(),
+        data: {
+          challenge_id: "srv-1", decision: "BLOCK_SPOOF", voice_confidence: 0.31, asv_cos: 0.58, cm_p_spoof: 0.93, spec_sim: 0.61,
+          phrase_wer: 0, onset_ms: 610, dsp: {}, findings: [], stage_ms: {}, simulated: true,
+        },
+      }),
+    );
+    expect(mode()).toBe("lock");
+    expect(JSON.parse(window.localStorage.getItem("2bme:overlay:locked:mock") ?? "null")).toMatchObject({ reason: "voice_spoof" });
+    // 3. then the lock event
+    await act(async () => store.dispatch({ type: "lock", device_id: MOCK_DEVICE_ID, t: t(), data: { reason: "voice_spoof" } }));
+    expect(mode()).toBe("lock");
+    expect(host.textContent).toContain("synthetic (cloned) voice");
+    expect(modes.slice(from)).not.toContain("pill");
+  });
+
+});
+
+describe("OverlayView (real mode, no live stream): the lock fails closed", () => {
+  async function mountReal(fetchImpl: (url: string) => Promise<Response>) {
+    window.history.replaceState({}, "", "/overlay");
+    vi.stubGlobal("fetch", vi.fn((u: RequestInfo | URL) => fetchImpl(String(u))));
+    window.localStorage.setItem("2bme:overlay:locked", JSON.stringify({ reason: "voice_impostor", label: "A's MacBook Pro" }));
+    const [react, { createRoot }, { OverlayView }, { TooltipProvider }] = await Promise.all([
+      import("react"),
+      import("react-dom/client"),
+      import("./overlay-view"),
+      import("@/components/ui/tooltip"),
+    ]);
+    act = react.act;
+    await act(async () => {
+      root = createRoot(host);
+      root.render(react.createElement(TooltipProvider, null, react.createElement(OverlayView)));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+  }
+  const json = (status: number, body: unknown) =>
+    Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("restarted and signed out (session revoked) with a remembered lock → lock screen with its reason, sign-in to unlock", async () => {
+    await mountReal((u) => (u.includes("/api/me") ? json(401, { detail: "login required" }) : json(404, { detail: "nope" })));
+    expect(mode()).toBe("lock");
+    expect(modes).not.toContain("pill");
+    const text = host.textContent ?? "";
+    expect(text).toContain("A's MacBook Pro is locked");
+    expect(text).toContain("didn't match the owner");
+    expect(text).toContain("Sign in as the owner");
+  });
+
+  it("offline with a remembered lock → lock screen that says the network being down never opens it", async () => {
+    await mountReal(() => Promise.reject(new TypeError("fetch failed")));
+    expect(mode()).toBe("lock");
+    expect(modes).not.toContain("pill");
+    expect(host.textContent).toContain("Can't reach 2bME");
+  });
+});
+
+describe("parseLockMemory", () => {
+  it("fails closed on anything it can't read", async () => {
+    const { parseLockMemory } = await import("./overlay-view");
+    expect(parseLockMemory(null)).toBeNull();
+    expect(parseLockMemory("1")).toEqual({ reason: null, label: null });
+    expect(parseLockMemory("{oops")).toEqual({ reason: null, label: null });
+    expect(parseLockMemory(JSON.stringify({ reason: "voice_spoof", label: 3 }))).toEqual({ reason: "voice_spoof", label: null });
+  });
 });

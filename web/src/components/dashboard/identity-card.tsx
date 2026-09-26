@@ -70,11 +70,14 @@ export function IdentityCard({
   enroll,
   lastTick,
   context,
+  serverBackend = null,
 }: {
   model: ModelInfo | null;
   enroll: EnrollProgress | null;
   lastTick: Record<string, unknown> | null;
   context: ContextLive | null;
+  /** fallback when ModelInfo.backend is empty: the scorer the server runs (StatusOut) */
+  serverBackend?: string | null;
 }) {
   const axes = useMemo<Axis[]>(() => {
     if (!model) return [];
@@ -101,6 +104,7 @@ export function IdentityCard({
     }));
 
   const status = model?.status ?? "none";
+  const backend = model?.backend ?? serverBackend;
   const showEnroll = !model || status !== "ready" || enroll?.mode === "enroll";
 
   return (
@@ -126,12 +130,12 @@ export function IdentityCard({
         )}
       </div>
 
-      {model && (status === "ready" || status === "training") && modelBackendLabel(model.backend) && (
+      {model && (status === "ready" || status === "training") && modelBackendLabel(backend) && (
         <div
           className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground"
-          title={model.backend === "fallback" ? "Median/MAD mean-|z| fallback scorer (twobme_ml unavailable)" : "One-class model trained only on this user's own blocks"}
+          title={backend === "fallback" ? "Median/MAD mean-|z| fallback scorer (twobme_ml unavailable)" : "One-class model trained only on this user's own blocks"}
         >
-          <Cpu className="size-3" /> scored by <span className="font-medium text-foreground">{modelBackendLabel(model.backend)}</span>
+          <Cpu className="size-3" /> scored by <span className="font-medium text-foreground">{modelBackendLabel(backend)}</span>
         </div>
       )}
 

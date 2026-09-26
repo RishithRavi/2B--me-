@@ -65,6 +65,7 @@ export function DashboardView({
   actions,
   isAdmin,
   voiceMode,
+  serverBackend = null,
 }: {
   state: LiveState;
   store: LiveStore | null;
@@ -72,6 +73,8 @@ export function DashboardView({
   actions: DashboardActions;
   isAdmin: boolean;
   voiceMode: VoiceMode;
+  /** the server's scorer (StatusOut) — the identity card's fallback when ModelInfo.backend is empty */
+  serverBackend?: string | null;
 }) {
   const learning = !state.model || state.model.status !== "ready" || state.device?.mode === "enroll";
   const now = useNow(5000);
@@ -158,7 +161,13 @@ export function DashboardView({
             <WhyChips blocks={state.blocks} />
           </Panel>
           <Panel title="Identity" icon={Fingerprint} hint="what 2bME has learned about you">
-            <IdentityCard model={state.model} enroll={state.enroll} lastTick={state.last_tick_json} context={state.context} />
+            <IdentityCard
+              model={state.model}
+              enroll={state.enroll}
+              lastTick={state.last_tick_json}
+              context={state.context}
+              serverBackend={serverBackend}
+            />
           </Panel>
           <Panel title="Rhythm spectrum (FFT)" icon={AudioWaveform} hint="input-event timing, 0–25 Hz">
             <SpectrumPanel context={state.context} enrolledPsd={state.enrolled_psd} />

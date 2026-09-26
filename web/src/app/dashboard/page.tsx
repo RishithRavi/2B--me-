@@ -9,7 +9,7 @@ import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { useRefreshMeOnAuthClose, useResnapshotOnFirstDevice } from "@/components/dashboard/live-hooks";
 import { StageView } from "@/components/dashboard/stage-view";
 import { useDashboardActions } from "@/components/dashboard/use-actions";
-import { useVoiceMode } from "@/components/dashboard/voice-mode";
+import { useServerInfo } from "@/components/dashboard/voice-mode";
 import { EmptyState } from "@/components/site/empty-state";
 import { Button } from "@/components/ui/button";
 import { useLive } from "@/lib/live";
@@ -23,7 +23,7 @@ function Dashboard() {
   const me = useMe();
   const { state, store, mock } = useLive({ enabled: authSettled(me.status) });
   const actions = useDashboardActions(store, state.device?.id ?? state.focus);
-  const voiceMode = useVoiceMode(mock);
+  const server = useServerInfo(mock);
 
   useEffect(() => {
     if (store && !mock && deviceParam) store.setFocus(deviceParam);
@@ -73,9 +73,17 @@ function Dashboard() {
         </div>
       )}
       {stage ? (
-        <StageView state={state} mock={mock} actions={actions} isAdmin={isAdmin} voiceMode={voiceMode} />
+        <StageView state={state} mock={mock} actions={actions} isAdmin={isAdmin} voiceMode={server.voiceMode} />
       ) : (
-        <DashboardView state={state} store={store} mock={mock} actions={actions} isAdmin={isAdmin} voiceMode={voiceMode} />
+        <DashboardView
+          state={state}
+          store={store}
+          mock={mock}
+          actions={actions}
+          isAdmin={isAdmin}
+          voiceMode={server.voiceMode}
+          serverBackend={server.modelBackend}
+        />
       )}
     </>
   );

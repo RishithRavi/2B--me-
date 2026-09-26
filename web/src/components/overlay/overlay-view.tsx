@@ -37,17 +37,35 @@ import { type MeStatus, challengeKey, fullScreen, overlayMode, promptable, settl
 // The simulated stream never shares the real lock memory (a mock lock must not lock the real overlay).
 const lockKey = (mock: boolean) => (mock ? "2bme:overlay:locked:mock" : "2bme:overlay:locked");
 
-function readLocked(mock: boolean): boolean {
+/** What the overlay remembers about a lock (so a revoked, restarted or offline overlay still explains it). */
+export interface LockMemory {
+  reason: string | null;
+  label: string | null;
+}
+
+/** null = not locked. Any unreadable value counts as locked (fail closed). */
+export function parseLockMemory(raw: string | null): LockMemory | null {
+  if (!raw) return null;
   try {
-    return window.localStorage.getItem(lockKey(mock)) === "1";
+    const v: unknown = JSON.parse(raw);
+    const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+    return { reason: typeof o.reason === "string" ? o.reason : null, label: typeof o.label === "string" ? o.label : null };
   } catch {
-    return false;
+    return { reason: null, label: null };
   }
 }
 
-function writeLocked(mock: boolean, v: boolean) {
+function readLock(mock: boolean): LockMemory | null {
   try {
-    if (v) window.localStorage.setItem(lockKey(mock), "1");
+    return parseLockMemory(window.localStorage.getItem(lockKey(mock)));
+  } catch {
+    return null;
+  }
+}
+
+function writeLock(mock: boolean, v: LockMemory | null) {
+  try {
+    if (v) window.localStorage.setItem(lockKey(mock), JSON.stringify(v));
     else window.localStorage.removeItem(lockKey(mock));
   } catch {
     /* storage unavailable: the lock screen still follows live state */
@@ -82,7 +100,7 @@ export function OverlayView() {
   const { state, store, mock } = useLive({ enabled: signedIn });
   const voiceMode = useVoiceMode(mock);
   const now = useNow(1000);
-  const [lockMemo, setLockMemo] = useState<boolean | null>(null);
+  const [lockMemo, setLockMemo] = useState<LockMemory | null | undefined>(undefined); // undefined = not read yet
   const [snoozedKey, setSnoozedKey] = useState<string | null>(null);
   const [wantPanel, setWantPanel] = useState(false);
   const [wantDetails, setWantDetails] = useState(false);
@@ -96,24 +114,27 @@ export function OverlayView() {
   const meStatus: MeStatus = me.mock ? "ok" : me.status;
   const serverLocked = !!(state.device?.locked || state.trust?.locked || state.trust?.level === "locked");
   const synced = signedIn && state.device !== null;
-  const lastKnownLocked = lockMemo ?? (mounted && readLocked(mock));
+  const memo = lockMemo !== undefined ? lockMemo : mounted ? readLock(mock) : null;
+  const lastKnownLocked = memo !== null;
   const remember = useCallback(
-    (v: boolean) => {
-      writeLocked(mock, v);
+    (v: LockMemory | null) => {
+      writeLock(mock, v);
       setLockMemo(v);
     },
     [mock],
   );
 
-  // The owner's live device is authoritative: remember its lock state across revocations, restarts and outages.
-  useEffect(() => {
-    if (synced && serverLocked !== lastKnownLocked) remember(serverLocked);
-  }, [synced, serverLocked, lastKnownLocked, remember]);
-
   const challenge = state.open_challenge;
   const decisionFor = (id: string): VoiceDecision | null =>
     replies[id] ?? state.voiceResults.find((r) => r.challenge_id === id)?.decision ?? null;
-  const settling = closed ? settleAfterPrompt(closed, decisionFor(closed.challenge_id)) : null;
+  // A prompt we were showing just closed (terminal challenge event): hold full screen until the outcome is known,
+  // so the shell goes prompt → lock directly instead of prompt → pill → lock. Derived during render (not in an
+  // effect) so the very render that loses the challenge never reports "pill" to the shell.
+  const shownPrompt = useRef<ChallengeLive | null>(null);
+  const prevPrompt = shownPrompt.current; // the previous render's prompt (read during render on purpose)
+  const justClosed = prevPrompt && (!challenge || challenge.challenge_id !== prevPrompt.challenge_id) ? prevPrompt : null;
+  const closedCh = justClosed ?? closed;
+  const settling = closedCh ? settleAfterPrompt(closedCh, decisionFor(closedCh.challenge_id)) : null;
 
   const mode = overlayMode({
     meStatus,
@@ -127,23 +148,35 @@ export function OverlayView() {
     settling,
   });
 
-  // A prompt we were showing just closed (terminal challenge event): hold full screen until the outcome is known,
-  // so the shell goes prompt → lock directly instead of prompt → pill → lock.
-  const shownPrompt = useRef<ChallengeLive | null>(null);
   useEffect(() => {
-    const prev = shownPrompt.current;
-    if (prev && (!challenge || challenge.challenge_id !== prev.challenge_id)) setClosed(prev);
+    if (justClosed) setClosed(justClosed);
     shownPrompt.current = mode === "prompt" && promptable(challenge) ? challenge : null;
-  }, [challenge, mode]);
+  });
   useEffect(() => {
     if (!closed) return;
     const id = setTimeout(() => setClosed(null), SETTLE_MS);
     return () => clearTimeout(id);
   }, [closed]);
-  // BLOCK_* on a proactive/step-up check locks the device (§5.4): remember it now, before the session is revoked.
+
+  // Lock memory. BLOCK_* on a proactive/step-up check locks the device (§5.4): remember it right away, before the
+  // session is revoked. Otherwise the owner's live device is authoritative: remember its lock state across
+  // revocations, restarts and outages.
+  const deviceLabel = state.device?.label ?? null;
+  const deviceReason = state.device?.lock_reason ?? null;
+  const settledReason = settling === "lock" && closedCh ? blockReason(decisionFor(closedCh.challenge_id)) : null;
   useEffect(() => {
-    if (settling === "lock" && !lastKnownLocked) remember(true);
-  }, [settling, lastKnownLocked, remember]);
+    if (settling === "lock") {
+      if (!memo) remember({ reason: settledReason, label: deviceLabel });
+      return;
+    }
+    if (!synced) return;
+    if (!serverLocked) {
+      if (memo) remember(null);
+      return;
+    }
+    const want = { reason: deviceReason ?? memo?.reason ?? null, label: deviceLabel ?? memo?.label ?? null };
+    if (!memo || memo.reason !== want.reason || memo.label !== want.label) remember(want);
+  }, [settling, settledReason, synced, serverLocked, deviceReason, deviceLabel, memo, remember]);
 
   useEffect(() => {
     if (mounted) overlayBridge()?.setMode(mode);
@@ -256,14 +289,14 @@ export function OverlayView() {
         <FullScreen tone="lock">
           <LockScreen
             meStatus={meStatus}
-            reason={state.device?.lock_reason ?? (settling === "lock" && closed ? blockReason(decisionFor(closed.challenge_id)) : null)}
-            deviceLabel={state.device?.label ?? "This Mac"}
+            reason={deviceReason ?? settledReason ?? memo?.reason ?? null}
+            deviceLabel={deviceLabel ?? memo?.label ?? "This Mac"}
             backend={backend}
             devControls={devControls}
             voiceMode={voiceMode}
             onSignedIn={onSignedIn}
             onNotLocked={() => {
-              remember(false);
+              remember(null);
               store?.reconnect();
             }}
           />
@@ -334,11 +367,12 @@ function Sparkline({ history, color }: { history: TrustPoint[]; color: string })
     if (recent.length < 2) return "";
     return recent.map((p, i) => `${(i / (recent.length - 1)) * 88 + 1},${27 - p.confidence * 26}`).join(" ");
   }, [history]);
-  if (!pts) return <div className="h-7 w-[90px]" />;
+  if (!pts) return <div className="h-7 min-w-0 flex-1" />;
   return (
-    <svg width="90" height="28" viewBox="0 0 90 28" className="shrink-0" aria-hidden>
-      <line x1="0" x2="90" y1={27 - 0.4 * 26} y2={27 - 0.4 * 26} stroke="currentColor" strokeOpacity="0.15" strokeDasharray="2 3" />
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
+    <svg viewBox="0 0 90 28" preserveAspectRatio="none" className="h-7 min-w-0 flex-1" aria-hidden>
+      <line x1="0" x2="90" y1={27 - 0.8 * 26} y2={27 - 0.8 * 26} stroke="var(--trust-normal)" strokeOpacity="0.22" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+      <line x1="0" x2="90" y1={27 - 0.4 * 26} y2={27 - 0.4 * 26} stroke="var(--trust-suspicious)" strokeOpacity="0.22" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
@@ -425,7 +459,7 @@ function Pill({
           ) : (
             <Sparkline history={history} color={color} />
           )}
-          {!waiting && <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />}
+          {!waiting && <ChevronDown className="size-4 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />}
         </button>
         {waiting && (
           <Button size="sm" variant="destructive" className="overlay-no-drag ml-auto" onClick={waiting}>
