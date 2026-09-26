@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,9 +26,11 @@ N_FOLDS = 5
 
 
 def _fit_scale(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    med = np.nanmedian(X, axis=0)
-    mad = np.nanmedian(np.abs(X - med), axis=0) * 1.4826
-    iqr_fallback = np.nanstd(X, axis=0)
+    with warnings.catch_warnings():  # all-NaN columns (never-observed features) are expected
+        warnings.simplefilter("ignore", RuntimeWarning)
+        med = np.nanmedian(X, axis=0)
+        mad = np.nanmedian(np.abs(X - med), axis=0) * 1.4826
+        iqr_fallback = np.nanstd(X, axis=0)
     scale = np.where((mad > 1e-9) & np.isfinite(mad), mad, np.where(iqr_fallback > 1e-9, iqr_fallback, 1.0))
     med = np.where(np.isfinite(med), med, 0.0)
     return med, scale
@@ -36,7 +39,8 @@ def _fit_scale(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def _scores(X: np.ndarray, med: np.ndarray, scale: np.ndarray) -> np.ndarray:
     Z = np.abs((X - med) / scale)
     Z = np.minimum(Z, 10.0)
-    with np.errstate(invalid="ignore"):
+    with warnings.catch_warnings(), np.errstate(invalid="ignore"):
+        warnings.simplefilter("ignore", RuntimeWarning)
         s = np.nanmean(Z, axis=1)
     return np.where(np.isfinite(s), s, 0.0)
 
