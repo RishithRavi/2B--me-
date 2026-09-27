@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useNow } from "@/lib/hooks";
 import type { LiveState } from "@/lib/live";
 import { takeoverOpen } from "@/lib/ttd";
+import { scoredModalities } from "@/lib/ui";
 
 import { ChallengeBanner } from "./banners";
 import { ConnectionBadge, liveLevel, stageLink } from "./dashboard-view";
@@ -51,6 +52,7 @@ export function StageView({
   const view = currentVoiceView(state, now);
   const voice = view && `${view.challengeId}:${view.result?.t ?? "scoring"}` !== hidden ? view : null;
   const level = liveLevel(state);
+  const scored = scoredModalities(state.model?.enabled_modalities);
 
   return (
     <div className="bg-console-grid fixed inset-0 z-50 flex flex-col overflow-auto bg-background">
@@ -97,7 +99,7 @@ export function StageView({
                 <div className="eyebrow mb-3 text-xs">Why</div>
                 <WhyChips blocks={state.blocks} level={level} large limit={6} />
                 <div className="mt-5">
-                  <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} level={level} large />
+                  <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} level={level} enabled={scored} large />
                 </div>
               </div>
               <div className="panel flex flex-col p-5">

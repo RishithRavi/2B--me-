@@ -4,9 +4,9 @@ import { AudioLines, Gauge, HeartPulse, KeyboardOff, Link2, Radio, Zap } from "l
 import type { ReactNode } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { HealthLive, PresenceLive } from "@/lib/contracts";
+import type { HealthLive, Modality, PresenceLive } from "@/lib/contracts";
 import { useNow } from "@/lib/hooks";
-import { MODALITIES, modalityColor, modalityIcon, modalityLabel } from "@/lib/ui";
+import { modalityColor, modalityIcon, modalityLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 type Tone = "ok" | "warn" | "bad" | "off";
@@ -50,7 +50,18 @@ export function SecureInputBanner({ health }: { health: HealthLive | null }) {
   );
 }
 
-export function HealthPills({ health, healthAt, presence }: { health: HealthLive | null; healthAt: number | null; presence: PresenceLive | null }) {
+export function HealthPills({
+  health,
+  healthAt,
+  presence,
+  enabled,
+}: {
+  health: HealthLive | null;
+  healthAt: number | null;
+  presence: PresenceLive | null;
+  /** the modalities the model scores (scoredModalities): the others get no last-block pill */
+  enabled: readonly Modality[];
+}) {
   const now = useNow(1000);
   if (!health) {
     return (
@@ -79,7 +90,7 @@ export function HealthPills({ health, healthAt, presence }: { health: HealthLive
       >
         {health.tap_events_per_s === null ? "—" : health.tap_events_per_s.toFixed(1)} ev/s
       </Pill>
-      {MODALITIES.map((m) => {
+      {enabled.map((m) => {
         const a = age(health.last_block_age_s[m] ?? null, extra);
         const Icon = modalityIcon(m);
         const tone: Tone = a === null ? "off" : a < 30 ? "ok" : a < 120 ? "warn" : "off";

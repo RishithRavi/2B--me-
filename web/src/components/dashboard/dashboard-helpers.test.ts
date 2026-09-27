@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { presenceWanted } from "@/components/site/presence-mount";
 import { initialLiveState } from "@/lib/live";
-import { modelBackendLabel } from "@/lib/ui";
+import { modelBackendLabel, scoredModalities, unscoredLabel } from "@/lib/ui";
 
 import { liveLevel, stageLink } from "./dashboard-view";
 import { needsResnapshot } from "./live-hooks";
@@ -80,5 +80,17 @@ describe("why-chip alarm color follows the trust level", () => {
     expect(liveLevel(s)).toBeNull();
     const device = { id: "d1", label: "Mac", pointer: "trackpad" as const, mode: "monitor" as const, locked: true, lock_reason: null, last_seen: null };
     expect(liveLevel({ ...s, device })).toBe("locked");
+  });
+});
+
+describe("scored modalities (workflow and temporal are captured, not scored)", () => {
+  it("follows the model's enabled set, else keyboard/mouse/scroll", () => {
+    expect(scoredModalities(["mouse", "keyboard"])).toEqual(["keyboard", "mouse"]);
+    expect(scoredModalities([])).toEqual(["keyboard", "mouse", "scroll"]);
+    expect(scoredModalities(null)).toEqual(["keyboard", "mouse", "scroll"]);
+  });
+  it("names what is captured but not scored", () => {
+    expect(unscoredLabel(["keyboard", "mouse", "scroll"])).toBe("Workflow, temporal");
+    expect(unscoredLabel(["keyboard", "mouse", "scroll", "workflow", "temporal"])).toBeNull();
   });
 });

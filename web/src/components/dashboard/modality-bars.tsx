@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BlockScored, Level, Modality, TrustLive } from "@/lib/contracts";
-import { MODALITIES, alarmLevel, fmtAgo, fmtSigned, modalityColor, modalityIcon, modalityLabel } from "@/lib/ui";
+import { alarmLevel, fmtAgo, fmtSigned, modalityColor, modalityIcon, modalityLabel, unscoredLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,21 +15,25 @@ export function ModalityBars({
   trust,
   lastBlocks,
   level,
+  enabled,
   large = false,
 }: {
   trust: TrustLive | null;
   lastBlocks: Partial<Record<Modality, BlockScored>>;
   /** current trust level (locked when the device is locked): negative bars are red only when it is not Normal */
   level: Level | null | undefined;
+  /** the modalities the model scores (scoredModalities); the rest get one "captured, not scored" line */
+  enabled: readonly Modality[];
   large?: boolean;
 }) {
   const alarm = alarmLevel(level);
   const per = trust?.per_modality ?? {};
-  const maxAbs = Math.max(0.25, ...MODALITIES.map((m) => Math.abs(per[m]?.delta ?? 0)));
+  const maxAbs = Math.max(0.25, ...enabled.map((m) => Math.abs(per[m]?.delta ?? 0)));
+  const unscored = unscoredLabel(enabled);
 
   return (
     <div className={cn("space-y-2.5", large && "space-y-4")}>
-      {MODALITIES.map((m) => {
+      {enabled.map((m) => {
         const c = per[m];
         const Icon = modalityIcon(m);
         const delta = c?.delta ?? null;
@@ -93,6 +97,7 @@ export function ModalityBars({
         <span>← against owner</span>
         <span>for owner →</span>
       </div>
+      {unscored && <p className={cn("text-[11px] text-muted-foreground/70", large && "text-xs")}>{unscored}: captured, not scored by this model</p>}
     </div>
   );
 }

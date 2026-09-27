@@ -163,6 +163,25 @@ export function modalityLabel(m: Modality | string, short = false): string {
   return MODALITY_LABEL[m as Modality] ?? m;
 }
 
+const DEFAULT_SCORED: readonly Modality[] = ["keyboard", "mouse", "scroll"];
+
+/**
+ * The modalities the identity model scores: ModelInfo.enabled_modalities when non-empty, else keyboard, mouse and
+ * scroll (twobme_ml's active set; workflow and temporal are still captured but no longer scored).
+ */
+export function scoredModalities(enabled: readonly Modality[] | null | undefined): Modality[] {
+  const on = MODALITIES.filter((m) => enabled?.includes(m));
+  return on.length ? on : [...DEFAULT_SCORED];
+}
+
+/** "Workflow, temporal" for the modalities that are captured but not scored (null when every one is scored). */
+export function unscoredLabel(scored: readonly Modality[]): string | null {
+  const rest = MODALITIES.filter((m) => !scored.includes(m)).map((m) => modalityLabel(m, true).toLowerCase());
+  if (!rest.length) return null;
+  const s = rest.join(", ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 // ---------------------------------------------------------------------------
 // Feature lookup by spec name ("kb.hold_p50") or DB column ("kb_hold_p50").
 // ---------------------------------------------------------------------------

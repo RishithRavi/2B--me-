@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import type { Level } from "@/lib/contracts";
 import { useNow } from "@/lib/hooks";
 import type { LiveState, LiveStore } from "@/lib/live";
-import { fmtAgo, shortId } from "@/lib/ui";
+import { fmtAgo, scoredModalities, shortId } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 import { ChallengeBanner, DevicePicker, LockedBanner } from "./banners";
@@ -88,6 +88,7 @@ export function DashboardView({
   const voice = currentVoiceView(state, now);
   const stageHref = stageLink(mock, state.focus);
   const level = liveLevel(state);
+  const scored = scoredModalities(state.model?.enabled_modalities);
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-4 px-4 py-5 sm:px-6">
@@ -144,7 +145,7 @@ export function DashboardView({
       <div className="panel space-y-3 px-4 py-3">
         <Controls device={state.device} model={state.model} label={state.label} actions={actions} isAdmin={isAdmin} />
         <div className="border-t pt-3">
-          <HealthPills health={state.health} healthAt={state.healthAt} presence={state.presence} />
+          <HealthPills health={state.health} healthAt={state.healthAt} presence={state.presence} enabled={scored} />
         </div>
       </div>
 
@@ -163,7 +164,7 @@ export function DashboardView({
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="grid gap-4 lg:col-span-8 lg:grid-cols-2">
           <Panel title="Per-modality contribution" icon={Fingerprint} hint="last tick, ΔL">
-            <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} level={level} />
+            <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} level={level} enabled={scored} />
           </Panel>
           <Panel title="Why" icon={Sparkles} hint="largest deviations from your profile">
             <WhyChips blocks={state.blocks} level={level} />

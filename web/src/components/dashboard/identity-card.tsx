@@ -16,6 +16,7 @@ import {
   modalityIcon,
   modalityLabel,
   modelBackendLabel,
+  scoredModalities,
   type FeatureMeta,
 } from "@/lib/ui";
 
@@ -106,6 +107,8 @@ export function IdentityCard({
   const status = model?.status ?? "none";
   const backend = model?.backend ?? serverBackend;
   const showEnroll = !model || status !== "ready" || enroll?.mode === "enroll";
+  // workflow and temporal are captured but not scored: only the scored modalities get chips and gates
+  const scored = scoredModalities(model?.enabled_modalities);
 
   return (
     <div className="space-y-4">
@@ -156,7 +159,7 @@ export function IdentityCard({
 
       {model && status === "ready" && (
         <div className="flex flex-wrap gap-1.5">
-          {MODALITIES.map((m) => {
+          {scored.map((m) => {
             const Icon = modalityIcon(m);
             const on = model.enabled_modalities.includes(m);
             return (
@@ -216,7 +219,7 @@ export function IdentityCard({
             <span className="font-medium">Enrollment evidence</span>
             <span className={enroll.ready ? "text-trust-normal" : "text-muted-foreground"}>{enroll.ready ? "ready to train" : "collecting…"}</span>
           </div>
-          {MODALITIES.map((m) => {
+          {scored.map((m) => {
             const n = enroll.counts[m] ?? 0;
             const gate = enroll.gates[m] ?? 0;
             if (!gate) return null;
