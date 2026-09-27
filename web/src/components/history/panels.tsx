@@ -27,14 +27,25 @@ function ConfCell({ v }: { v: number | null }) {
   );
 }
 
-export function SessionsTable({ rows, selected, onSelect }: { rows: SessionRow[]; selected: string | null; onSelect: (id: string) => void }) {
+export function SessionsTable({
+  rows,
+  selected,
+  onSelect,
+  deviceLabel,
+}: {
+  rows: SessionRow[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+  /** Employee or device name for a session's device_id (null when unknown to this viewer). */
+  deviceLabel?: (deviceId: string | null) => string | null;
+}) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Started</TableHead>
-          <TableHead>Duration</TableHead>
-          <TableHead className="text-right">Ticks</TableHead>
+          <TableHead className="hidden sm:table-cell">Duration</TableHead>
+          <TableHead className="hidden text-right sm:table-cell">Ticks</TableHead>
           <TableHead>Avg</TableHead>
           <TableHead>Min</TableHead>
           <TableHead className="text-right">Anomalies</TableHead>
@@ -45,6 +56,7 @@ export function SessionsTable({ rows, selected, onSelect }: { rows: SessionRow[]
           const start = Date.parse(s.started_at);
           const end = s.ended_at ? Date.parse(s.ended_at) : Date.now();
           const active = s.session_id === selected;
+          const who = deviceLabel?.(s.device_id) ?? null;
           return (
             <TableRow
               key={s.session_id}
@@ -56,13 +68,14 @@ export function SessionsTable({ rows, selected, onSelect }: { rows: SessionRow[]
                 <div className="flex flex-col">
                   <span className="text-sm">{fmtAgo(s.started_at)}</span>
                   <span className="font-mono text-[10px] text-muted-foreground">
+                    {who && <span className="font-sans text-foreground/80">{who} · </span>}
                     {shortId(s.session_id)} · {s.channel}
                     {s.status === "active" ? " · live" : ""}
                   </span>
                 </div>
               </TableCell>
-              <TableCell className="tnum font-mono text-xs">{fmtDuration((end - start) / 1000)}</TableCell>
-              <TableCell className="tnum text-right font-mono text-xs">{s.n_ticks.toLocaleString()}</TableCell>
+              <TableCell className="tnum hidden font-mono text-xs sm:table-cell">{fmtDuration((end - start) / 1000)}</TableCell>
+              <TableCell className="tnum hidden text-right font-mono text-xs sm:table-cell">{s.n_ticks.toLocaleString()}</TableCell>
               <TableCell>
                 <ConfCell v={s.avg_confidence} />
               </TableCell>
