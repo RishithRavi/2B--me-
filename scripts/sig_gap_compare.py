@@ -6,14 +6,12 @@ Real recordings (the run directory written by sig_train_recordings.py):
 Synthetic development check (seeded pairs from sig_sim_pair.py; never real evidence):
     uv run python scripts/sig_gap_compare.py --synthetic --seeds 8 --similarity 0.35 0.6 1.0
 
-Arms share rows, splits and folds; only the model differs:
-    baseline  detector v1, workflow gate 20   (behavior before this change)
-    v1@13     detector v1, workflow gate 13   (the gate change alone)
-    v2        detector v2, workflow gate 13   (new default)
+Arms share rows, splits and folds; only the detector differs:
+    baseline  detector v1
+    v2        detector v2 (new default)
 Evaluations:
     heldout   official evaluate() split: chronological 70/30 A with 60s purge; B held out
     oof       full-A model: A's purged out-of-fold typicality vs B scored by that model
-              (sig_gap_experiment's view; the only one that scores workflow at 13 blocks)
     window60  each evaluation's block scores averaged per actor/session per 60s window
 Decide from real recordings, never from synthetic pairs, and use a fresh B recording for
 any final claim: the existing B session already informed earlier branch choices.
@@ -37,10 +35,9 @@ for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
 
 import pandas as pd
 
-MODALITIES = ["keyboard", "mouse", "scroll", "workflow", "temporal"]
+MODALITIES = ["keyboard", "mouse", "scroll"]
 ARMS = {
-    "baseline": {"detector": "v1", "experimental_gates": {"workflow": 20}},
-    "v1@13": {"detector": "v1"},
+    "baseline": {"detector": "v1"},
     "v2": {"detector": "v2"},
 }
 

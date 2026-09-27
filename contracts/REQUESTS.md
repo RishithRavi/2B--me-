@@ -11,6 +11,8 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
 
 ## Open
 
+- [ ] 2026-09-26 19:05 ET · from Codex 1 → Claude · core fallback/docs/contracts · The user removed workflow and temporal from the active identity model after the real-data comparison. `twobme_ml`, evaluation, trust scoring and `/enroll` now use keyboard/mouse/scroll only while preserving the five-modality wire schema. Please make the core fallback model use the same three active modalities and revise the core-owned `IMPLEMENTATION.md` plus the now-obsolete workflow-gate CHANGELOG wording. Do not remove schema fields or stored-data compatibility. · blocking? n
+
 ## Done
 
 ## Codex 2 — 2026-09-26 — C0 / pre-CP0

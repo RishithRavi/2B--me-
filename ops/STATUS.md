@@ -240,3 +240,4 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
     - web-admin;
     - web-landing (+ /lab, README);
     - web-overlay (+ stage view, presence mount).
+- 19:05 · Codex 1 · **Real-data follow-up on `ml-wider-gap-13wf`:** processed the three local A recordings and one B recording without Tiger or upload. With all signals, v2 held-out fused AUC/EER was .830/.273 versus v1 .761/.375; OOF AUC improved for all five groups, but temporal remained below chance (.418) and workflow had only 13 A blocks. At the user's direction, the active model is now keyboard/mouse/scroll only: training, loaded artifacts, trust contributions, evaluation, gap comparison and the enroll UI exclude workflow/temporal while the frozen wire schema continues to accept them. Requested the same restriction in Claude-owned fallback/docs; fresh B validation is still required for a final claim.

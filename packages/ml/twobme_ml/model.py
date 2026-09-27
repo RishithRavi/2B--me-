@@ -15,10 +15,14 @@ from twobme_common.types import BlockScore, Deviation
 from twobme_features.accumulators import names
 from .config import model_config
 
-# Fallback only: `enroll_gate` in feature_spec.yaml is the source of truth (see enrollment_gates).
+# The wire contract still accepts every historical modality, but identity models use only
+# the three signals that separated the real owner/impostor recordings reliably.
+ACTIVE_MODALITIES = ("keyboard", "mouse", "scroll")
+# Fallback values for the full schema. `enroll_gate` in feature_spec.yaml remains the
+# source of truth when reading old artifacts and diagnostic data.
 GATES = {"keyboard": 100, "mouse": 60, "scroll": 30, "workflow": 13, "temporal": 60}
 HEADLINES = set(
-    "kb_hold_p50 kb_dd_p50 kb_ud_p50 kb_speed_kps kb_bksp_rate ms_v_p50 ms_curv_p50 ms_straightness_p50 ms_click_hold_p50 sc_v_mean_p50 wf_switch_rate tp_rate tp_b tp_idle_frac tp_peak_hz".split()
+    "kb_hold_p50 kb_dd_p50 kb_ud_p50 kb_speed_kps kb_bksp_rate ms_v_p50 ms_curv_p50 ms_straightness_p50 ms_click_hold_p50 sc_v_mean_p50".split()
 )
 CATEGORIES = ["browser", "ide", "terminal", "chat", "docs", "media", "system", "other"]
 # v2 view: fractions, ratios, scores, entropies and log-likelihoods stay linear. Every other
@@ -310,14 +314,18 @@ class UserModel:
     def train(cls, df, cfg):
         cfg = model_config(cfg)
         spec_gates = enrollment_gates(cfg["spec"])
-        gate_overrides = cfg.get("experimental_gates", {})
+        gate_overrides = {
+            m: n
+            for m, n in cfg.get("experimental_gates", {}).items()
+            if m in ACTIVE_MODALITIES
+        }
         lowered = {m: n for m, n in gate_overrides.items() if n < spec_gates.get(m, n)}
         if lowered and not cfg.get("allow_experimental_gate_override"):
             raise ValueError(
                 "Lower enrollment gates require allow_experimental_gate_override=true: "
                 + str(lowered)
             )
-        gates = dict(spec_gates)
+        gates = {m: spec_gates[m] for m in ACTIVE_MODALITIES}
         gates.update(gate_overrides)
         min_fold_train = {m: fold_minimum(g) for m, g in gates.items()}
         min_fold_train.update(cfg.get("experimental_min_fold_train", {}))
@@ -328,27 +336,16 @@ class UserModel:
         calibration = cfg.get("calibration") or ("cv+" if detector == "v2" else "full")
         if calibration not in ("cv+", "full"):
             raise ValueError(f"Unknown calibration {calibration!r}; expected 'cv+' or 'full'")
-        # Gate and evaluation always count non-overlapping temporal windows (every 6th).
-        # v2 fits on every window: the 60s fold purge exceeds the 30s window, so
-        # out-of-fold references never overlap the windows their model trained on.
-        temporal_windows = cfg.get("temporal_windows") or (
-            "all" if detector == "v2" else "nonoverlapping"
-        )
-        if temporal_windows not in ("all", "nonoverlapping"):
-            raise ValueError(
-                f"Unknown temporal_windows {temporal_windows!r}; expected 'all' or 'nonoverlapping'"
-            )
         self = cls()
         self.cfg = cfg
         self.detector = detector
         self.calibration = calibration
-        self.temporal_windows = temporal_windows
         self.spec = cfg["spec"]
         self.schema_version = cfg.get("schema_version", 1)
         if len(df) and not df.schema_version.eq(self.schema_version).all():
             raise ValueError("Mixed or unsupported feature schema")
         base = eligible(df, cfg.get("now"), actor=cfg.get("training_actor", "a"))
-        d = temporal_subset(base)
+        d = base[base.modality.isin(ACTIVE_MODALITIES)].sort_values("time").reset_index(drop=True)
         self.models = {}
         self.disabled = {}
         self.n_blocks = {}
@@ -375,18 +372,9 @@ class UserModel:
                 )
                 continue
             fold_train_min = min_fold_train[modality]
-            evidence = None
-            if modality == "temporal" and temporal_windows == "all":
-                windows = base[base.modality == "temporal"].sort_values("time").reset_index(drop=True)
-                key = ["session_id", "time"]
-                evidence = pd.MultiIndex.from_frame(windows[key]).isin(
-                    pd.MultiIndex.from_frame(rows[key])
-                )
-                rows = windows
-                fold_train_min *= 6  # overlapping windows per non-overlapping one
             columns = names(self.spec, modality)
             x = np.array([self._vector(f, columns) for f in rows.features], float)
-            matrix = transition_matrix(rows.extras) if modality == "workflow" else None
+            matrix = None
             folds = np.array_split(np.arange(len(rows)), 5)
             raw_oof = []
             test_ids = []
@@ -465,10 +453,7 @@ class UserModel:
                     {"train": tr.tolist(), "test": te.tolist()}
                     for tr, te in train_splits
                 ],
-                # Aligned with the non-overlapping evidence rows, as consumers expect.
-                "oof_typicality": (
-                    oof_typicality if evidence is None else oof_typicality[evidence]
-                ).tolist(),
+                "oof_typicality": oof_typicality.tolist(),
             }
             if calibration == "cv+":
                 # Cross-conformal scoring: a new block is compared, fold by fold, only with
@@ -562,7 +547,6 @@ class UserModel:
                 else "five chronological folds, 60s purged; OOF references saved"
             ),
             "detector": getattr(self, "detector", "v1"),
-            "temporal_windows": getattr(self, "temporal_windows", "nonoverlapping"),
             "experimental": getattr(self, "experimental", {
                 "gate_overrides": {}, "min_fold_train": {}, "warning": None
             }),
@@ -575,4 +559,10 @@ class UserModel:
         obj = joblib.load(Path(d) / "model.joblib")
         if not isinstance(obj, cls):
             raise ValueError("Not a UserModel artifact")
+        # Loading an older artifact must not silently reactivate signals removed from the
+        # production identity model.
+        for modality in list(obj.models):
+            if modality not in ACTIVE_MODALITIES:
+                del obj.models[modality]
+                obj.disabled[modality] = "Removed from the active identity model"
         return obj

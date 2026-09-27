@@ -24,7 +24,7 @@ def main():
     os.umask(0o077)
     run, out = Path(args.run_dir), Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
-    from twobme_ml.model import UserModel
+    from twobme_ml.model import ACTIVE_MODALITIES, UserModel
     from twobme_ml.evaluation import block_from_row
     from app.core.models import ModelManager
     from twobme_common.spec import load_spec
@@ -37,6 +37,8 @@ def main():
 
     full = UserModel.load(run / "full-a-candidate")
     candidate = copy.deepcopy(full)
+    if not set(args.modalities) <= set(ACTIVE_MODALITIES):
+        raise ValueError("Only keyboard, mouse and scroll are active identity modalities")
     if not set(args.modalities) <= set(candidate.models):
         raise ValueError("Cannot enable a modality that did not qualify for training")
     for m in list(candidate.models):
@@ -53,18 +55,10 @@ def main():
             "keyboard": "Supplementary 100-block-prefix test gives useful separation; retained for fresh validation.",
             "scroll": "Modest held-out separation; retained as supporting evidence.",
             "mouse": "Global holdout AUC 0.549, EER 0.481, weak beta fit; omitted.",
-            "temporal": "No qualifying holdout; even optimistic full-A fit diagnostics favor B (AUC 0.427); omitted.",
-            "workflow": "13 eligible A blocks; meets the 13-block gate and trains, but too few for a reliable claim.",
         },
-        "rationale_detector": "Figures above come from the detector v1 evaluation; rerun sig_gap_compare.py "
-                              "and revisit these choices before packaging a v2 model.",
+        "rationale_detector": "Workflow and temporal are not active identity signals. Figures above come "
+                              "from the detector v1 evaluation; rerun sig_gap_compare.py before packaging v2.",
     }
-    if (run / "all-signals-experimental").is_dir():
-        selection["alternate_model"] = {
-            "path": "all-signals-experimental",
-            "enabled": ["keyboard", "mouse", "scroll", "workflow", "temporal"],
-            "warning": "Workflow trained at the 13-block gate; temporal remains unreliable.",
-        }
     (run / "selection.json").write_text(json.dumps(selection, indent=2) + "\n")
 
     # Exercise the actual core loading path without inventing an authenticated user
@@ -92,8 +86,6 @@ def main():
     (out / "real-eval.json").write_text(json.dumps(report, indent=2) + "\n")
     for name in ("keyboard-prefix-eval.json", "selection.json", "coverage.json", "split.json"):
         shutil.copyfile(run / name, out / name)
-    if (run / "gap-experiment.json").is_file():
-        shutil.copyfile(run / "gap-experiment.json", out / "gap-experiment.json")
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), layout="constrained")
     mods = [("Keyboard*", prefix["metrics"]), ("Mouse", report["modalities"]["mouse"]),
@@ -114,15 +106,11 @@ def main():
 
     with zipfile.ZipFile(out / "behavior-models.zip", "w", compression=zipfile.ZIP_DEFLATED) as z:
         folders = ["demo-model", "full-a-candidate", "holdout-model", "keyboard-prefix-model"]
-        if (run / "all-signals-experimental").is_dir():
-            folders.append("all-signals-experimental")
         for folder in folders:
             for path in (run / folder).iterdir():
                 z.write(path, path.relative_to(run))
         for name in ("selection.json", "eval.json", "keyboard-prefix-eval.json", "feature_spec.json"):
             z.write(run / name, name)
-        if (run / "gap-experiment.json").is_file():
-            z.write(run / "gap-experiment.json", "gap-experiment.json")
         if (out / "REAL-MODEL-RESULTS.md").is_file():
             z.write(out / "REAL-MODEL-RESULTS.md", "README.md")
     print(json.dumps(selection, indent=2))
