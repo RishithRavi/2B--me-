@@ -189,6 +189,8 @@ class TickCounts(_Wire):
     clicks: int = 0
     scroll_events: int = 0
     app_switches: int = 0
+    # ⌥⌫ word deletes this tick (a correction-style habit); None = the agent doesn't report it (Sat 22:50, additive)
+    word_deletes: int | None = Field(default=None, ge=0)
 
 
 class Tick(_Wire):

@@ -107,6 +107,7 @@ export interface TickCounts {
   clicks: number;
   scroll_events: number;
   app_switches: number;
+  word_deletes: number | null;
 }
 
 export interface Tick {

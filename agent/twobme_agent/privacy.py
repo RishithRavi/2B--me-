@@ -23,13 +23,17 @@ FIELDS = {
     "os": {"t_ns", "ev", "event"},
     "secure_input": {"t_ns", "ev", "on"},
     "label": {"t_ns", "ev", "label", "actor"},
+    "habit": {"t_ns", "ev", "kind"},
 }
+HABIT_KINDS = {"word_delete"}
 
 
 def local_event(e):
     kind = e.get("ev")
     if kind not in FIELDS or set(e) - FIELDS[kind]:
         raise ValueError("Unexpected local event fields")
+    if kind == "habit" and e.get("kind") not in HABIT_KINDS:
+        raise ValueError("Unexpected habit kind")
     return e
 
 
@@ -108,6 +112,7 @@ def safe_tick(tick, spec):
         "clicks",
         "scroll_events",
         "app_switches",
+        "word_deletes",
     }:
         raise ValueError("Unexpected counts")
     if any(not isinstance(v, int) or v < 0 for v in tick["counts"].values()):

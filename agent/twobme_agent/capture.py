@@ -160,6 +160,15 @@ class Capture:
                 if cls == "CAPS":
                     down = True
             chord = self._chord(k, flags) if down and not repeat else None
+            # ⌥⌫ (delete word) is a correction-style habit. The runtime turns it into a per-tick count; the key
+            # itself still flows as an ordinary BKSP class event below, so feature statistics don't change.
+            word_delete = (
+                kind == Q.kCGEventKeyDown
+                and not repeat
+                and cls == "BKSP"
+                and bool(flags & Q.kCGEventFlagMaskAlternate)
+                and not flags & (Q.kCGEventFlagMaskCommand | Q.kCGEventFlagMaskControl)
+            )
             if chord in ("marker", "reset"):
                 self.excluded.add(k)
                 if chord == "marker":
@@ -208,6 +217,8 @@ class Capture:
             if not down:
                 self.slots.pop(k, None)
                 self.held_at.pop(k, None)
+            if word_delete:
+                self.emit({"t_ns": t, "ev": "habit", "kind": "word_delete"})
             if chord:
                 if chord == "app_switch_kbd":
                     self.cmdtab_at = t
