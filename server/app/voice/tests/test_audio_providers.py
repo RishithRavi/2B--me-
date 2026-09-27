@@ -89,6 +89,8 @@ def test_calibration_is_bound_to_model(tmp_path):
                 "thresholds": {"asv_low": 0.35, "asv_high": 0.6, "cm": 0.5, "spectral": 0.8},
                 "cm_scale": 1,
                 "cm_bias": 0,
+                "enrollment_min_speech_s": 8,
+                "enrollment_min_cos": 0.55,
             }
         )
     )
@@ -97,6 +99,8 @@ def test_calibration_is_bound_to_model(tmp_path):
     calibration = Calibration.load(path, model="detector", revision="a" * 40)
     assert calibration.probability(0) == 0.5
     assert calibration.probability(-1) < calibration.probability(1)
+    assert calibration.enrollment_min_speech_s == 8
+    assert calibration.enrollment_min_cos == 0.55
 
 
 @pytest.mark.asyncio

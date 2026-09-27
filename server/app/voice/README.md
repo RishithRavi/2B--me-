@@ -22,7 +22,8 @@ scripts/voice_setup_box.sh --preflight-only
 scripts/voice_setup_box.sh --resolve-only
 scripts/voice_setup_box.sh --skip-smoke
 scripts/voice_setup_box.sh \
-  --real-dir /private/consented/real \
+  --real-dir /private/consented/owner \
+  --impostor-dir /private/consented/human-impostor \
   --synth-dir /private/consented/elevenlabs
 ```
 
@@ -36,7 +37,12 @@ The preflight command makes no changes. The resolve-only command installs the
 locked workspace dependencies and resolves the current model refs to full
 commit SHAs without downloading weights. The next command downloads and warms
 the pinned models. The final command runs the required 20+20 consented direction
-and timing smoke test. Artifacts are written under ignored
+and timing smoke test, then fits calibration from three disjoint sets: at least
+20 owner clips, at least 10 clips from a different consenting human speaker,
+and at least 20 authorized synthetic-clone clips. Owner-vs-clone data calibrates
+spoof detection but cannot calibrate the human-impostor gate; setup therefore
+refuses to create production calibration without the third set. Artifacts are
+written under ignored
 `data/voice-runtime/`: `model-revisions.json`, `voice-runtime.env`, and reports.
 Later runs reuse the recorded revisions; `--refresh-revisions` is required to
 resolve mutable `main` refs again. The environment file contains no API keys.
@@ -70,7 +76,12 @@ Required real-mode settings:
 
 Calibration JSON contains `model`, `revision`, `speaker_revision`,
 `thresholds: {asv_low, asv_high, cm, spectral}`, `cm_scale`, and `cm_bias`.
-All values must come from calibration; no production thresholds are supplied.
+It also records measured evidence, corpus filenames, and calibrated enrollment
+quality gates. Audio is never embedded in the report. All values must come from
+calibration; no production thresholds are supplied. Speaker and spectral owner
+scores use leave-one-out references so a clip is never compared with a centroid
+containing itself. Spectral identity uses mean-centered LTAS plus MFCC 1–19;
+absolute level and MFCC c0 are deliberately excluded.
 CM probability is `sigmoid(cm_scale * synthetic_high_margin + cm_bias)` with a
 strictly positive scale. Changing a model revision requires matching calibration.
 Official Hearsay score direction/range still need organizer confirmation; its

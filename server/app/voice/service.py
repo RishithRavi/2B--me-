@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 from hearsay.audio import mono_16k
 from hearsay.decision import Thresholds, decide
-from hearsay.dsp import analyze, spectral_similarity
+from hearsay.dsp import analyze, spectral_similarity, spectral_vector
 from hearsay.models import speaker_match, unit_embedding
 from hearsay.phrases import phrase_match
 from twobme_common.types import CMResult, VoiceResult
@@ -35,7 +35,7 @@ class Calibration:
             or not math.isfinite(self.cm_bias)
         ):
             raise ValueError("CM calibration must be finite and synthetic-high")
-        if not 20 <= self.enrollment_min_speech_s <= 30 or not 0.5 <= self.enrollment_min_cos < 1:
+        if not 8 <= self.enrollment_min_speech_s <= 30 or not 0.5 <= self.enrollment_min_cos < 1:
             raise ValueError("invalid enrollment quality thresholds")
 
     @classmethod
@@ -46,7 +46,11 @@ class Calibration:
         if speaker_revision is not None and data.get("speaker_revision") != speaker_revision:
             raise ValueError("calibration does not match the configured speaker encoder")
         return cls(
-            Thresholds(**data["thresholds"]), float(data["cm_scale"]), float(data["cm_bias"])
+            Thresholds(**data["thresholds"]),
+            float(data["cm_scale"]),
+            float(data["cm_bias"]),
+            float(data.get("enrollment_min_speech_s", 20.0)),
+            float(data.get("enrollment_min_cos", 0.5)),
         )
 
     def probability(self, margin: float) -> float:
@@ -157,7 +161,7 @@ class Pipeline:
                 m["errors"].append("speaker profile")
         if m["dsp"] and profiles:
             scores = []
-            current = m["dsp"]["ltas_db"] + m["dsp"]["mfcc_mean"]
+            current = spectral_vector(m["dsp"]["ltas_db"], m["dsp"]["mfcc_mean"])
             for profile in profiles:
                 if profile.get("mfcc_mean") is None:
                     continue  # old profiles cannot silently become 64-d verification
@@ -165,7 +169,7 @@ class Pipeline:
                     scores.append(
                         spectral_similarity(
                             current,
-                            np.concatenate([profile["spectral_summary"], profile["mfcc_mean"]]),
+                            spectral_vector(profile["spectral_summary"], profile["mfcc_mean"]),
                         )
                     )
                 except (ValueError, TypeError):
@@ -240,7 +244,10 @@ class Pipeline:
                 raise ValueError("Enrollment take failed phrase, speech or authenticity checks")
             measurements.append(m)
         if sum(m["speech_s"] for m in measurements) < self.calibration.enrollment_min_speech_s:
-            raise ValueError("Enrollment requires at least 20 seconds of net speech")
+            raise ValueError(
+                "Enrollment requires at least "
+                f"{self.calibration.enrollment_min_speech_s:g} seconds of net speech"
+            )
         embeddings = np.stack([unit_embedding(m["embedding"]) for m in measurements])
         pairwise = embeddings @ embeddings.T
         intra = float(np.min(pairwise[np.triu_indices(5, k=1)]))
