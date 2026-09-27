@@ -66,7 +66,7 @@ export function Nav() {
           <Wordmark />
         </Link>
 
-        <nav aria-label="Main" className="scrollbar-thin -mx-1 hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 py-1 sm:ml-4 sm:flex">
+        <nav aria-label="Main" className="scrollbar-thin -mx-1 hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 py-1 md:ml-4 md:flex">
           {LINKS.map((l) => {
             const active = isActive(l.href);
             return (
@@ -85,24 +85,25 @@ export function Nav() {
             );
           })}
         </nav>
-        <div className="flex-1 sm:hidden" />
+        <div className="flex-1 md:hidden" />
 
         <div className="flex shrink-0 items-center gap-1.5">
           {mock && (
             <>
-              {/* Phones: a compact badge that opens the menu, where Exit demo lives. */}
+              {/* Below md: a compact badge that opens the menu, where Exit demo lives. */}
               <button
                 type="button"
                 onClick={() => setMenuOpen(true)}
                 aria-label="Mock data (open the menu to exit the demo)"
                 title="Mock data"
-                className="inline-flex h-6 items-center rounded-4xl border border-trust-watch/40 bg-trust-watch/8 px-1.5 text-trust-watch outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:hidden"
+                className="inline-flex h-6 items-center rounded-4xl border border-trust-watch/40 bg-trust-watch/8 px-1.5 text-trust-watch outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:hidden"
               >
                 <FlaskConical className="size-3.5" />
               </button>
-              <span className="hidden h-6 items-center overflow-hidden rounded-4xl border border-trust-watch/40 text-trust-watch sm:inline-flex">
-                <span className="inline-flex items-center gap-1 px-2 font-mono text-[10px] tracking-wider uppercase">
-                  <FlaskConical className="size-3" /> Mock data
+              <span className="hidden h-6 items-center overflow-hidden rounded-4xl border border-trust-watch/40 text-trust-watch md:inline-flex">
+                <span className="inline-flex items-center gap-1 px-2 font-mono text-[10px] tracking-wider uppercase" title="Mock data">
+                  <FlaskConical className="size-3" />
+                  <span className="hidden lg:inline">Mock data</span>
                 </span>
                 <a
                   href={exitHref}
@@ -126,8 +127,8 @@ export function Nav() {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1.5" aria-label="Account menu">
                   <UserRound />
-                  <span className="hidden max-w-[10rem] truncate sm:inline">{mock ? "Demo observer" : me.handle}</span>
-                  {me.role === "admin" && !mock && <span className="hidden font-mono text-[10px] text-muted-foreground uppercase sm:inline">obs</span>}
+                  <span className={cn("hidden max-w-[10rem] truncate", mock ? "lg:inline" : "md:inline")}>{mock ? "Demo observer" : me.handle}</span>
+                  {me.role === "admin" && !mock && <span className="hidden font-mono text-[10px] text-muted-foreground uppercase md:inline">obs</span>}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-52">
@@ -174,13 +175,13 @@ export function Nav() {
               </Link>
             </Button>
           )}
-          <Button variant="ghost" size="icon-sm" className="sm:hidden" aria-label="Open menu" onClick={() => setMenuOpen(true)}>
+          <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Open menu" onClick={() => setMenuOpen(true)}>
             <Menu />
           </Button>
         </div>
       </div>
 
-      {/* Phones: the page links (and the demo switch) in a sheet. */}
+      {/* Below md: the page links (and the demo switch) in a sheet, so none hides behind the strip's overflow. */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="right" className="w-72 gap-0 p-0">
           <SheetHeader className="border-b px-4 pt-4 pb-3">
