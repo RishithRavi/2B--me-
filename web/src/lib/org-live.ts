@@ -347,9 +347,11 @@ export function sortRoster(rows: readonly RosterRow[], by: RosterSort = "risk"):
     if (by === "risk") {
       const d = severityRank(a) - severityRank(b);
       if (d) return d;
-      const ca = a.confidence ?? 1;
-      const cb = b.confidence ?? 1;
-      if (ca !== cb) return ca - cb;
+      // The DISPLAYED percentage, not the raw confidence: 0.99 vs 0.995 jitter must not reshuffle the roster every
+      // tick. Rows move only when the % the admin sees (or the level) changes.
+      const da = a.display ?? 100;
+      const db = b.display ?? 100;
+      if (da !== db) return da - db;
     }
     return byName(a, b);
   });

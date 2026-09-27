@@ -27,6 +27,7 @@ function Row({ row, lastAlert, now, selected, onSelect }: { row: RosterRow; last
       layout="position"
       transition={{ type: "spring", stiffness: 420, damping: 38 }}
       type="button"
+      data-roster-row={row.handle}
       onClick={onSelect}
       className={cn(
         "group relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 rounded-lg px-3 py-2.5 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",

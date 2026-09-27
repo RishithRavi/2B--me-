@@ -316,6 +316,18 @@ describe("derived views", () => {
     expect(sortRoster(rows, "name").map((r) => r.device_id)).toEqual(["a", "n", "off", "w", "l", "s"]);
   });
 
+  it("orders equal displayed trust by name, whatever the raw confidence jitter", () => {
+    const rows = [
+      row({ device_id: "x", handle: "Employee 09", confidence: 0.9949, display: 99 }),
+      row({ device_id: "y", handle: "Employee 02", confidence: 0.9951, display: 99 }),
+      row({ device_id: "z", handle: "Employee 05", confidence: 0.97, display: 97 }),
+    ];
+    expect(sortRoster(rows).map((r) => r.device_id)).toEqual(["z", "y", "x"]);
+    // The same rows a tick later with the jitter flipped: the order doesn't move.
+    const flipped = rows.map((r) => (r.device_id === "x" ? { ...r, confidence: 0.9951 } : r.device_id === "y" ? { ...r, confidence: 0.9949 } : r));
+    expect(sortRoster(flipped).map((r) => r.device_id)).toEqual(["z", "y", "x"]);
+  });
+
   it("reports level drops only after the first load", () => {
     const rows = [row({ device_id: "x", level: "suspicious" }), row({ device_id: "y", level: "locked" }), row({ device_id: "z", level: "suspicious" })];
     expect(levelDrops(null, rows)).toEqual([]);
