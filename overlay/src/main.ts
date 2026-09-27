@@ -13,13 +13,15 @@ import * as path from "node:path";
 
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, session, shell, systemPreferences } from "electron";
 
-import { boundsFor, isMode, type Mode, parseArgs, sameOrigin, shellPolicy } from "./geometry";
+import { boundsFor, type Mode, ModeSync, parseArgs, sameOrigin, shellPolicy } from "./geometry";
 
 const args = parseArgs(process.argv, process.env);
 const policy = shellPolicy(args, process.argv);
 const PARTITION = "persist:twobme-overlay"; // keeps the cookie session across restarts
 let win: BrowserWindow | null = null;
-let mode: Mode = "pill";
+// The page's mode. A request that arrives before ready-to-show (a remembered lock at startup) is kept and applied
+// when the window is first shown, never overwritten by a default pill (the page doesn't resend an unchanged mode).
+const sync = new ModeSync("pill");
 let allowQuit = false;
 
 if (!app.requestSingleInstanceLock()) {
@@ -34,7 +36,6 @@ function currentDisplay(): Electron.Display {
 
 function applyMode(next: Mode): void {
   if (!win) return;
-  mode = next;
   const d = currentDisplay();
   const full = next === "prompt" || next === "lock";
   if (args.hardLock && !full) win.setKiosk(false);
@@ -101,16 +102,16 @@ function createWindow(): void {
   });
 
   win.on("close", (e) => {
-    if (mode === "lock" && !allowQuit) e.preventDefault();
+    if (sync.mode === "lock" && !allowQuit) e.preventDefault();
   });
   win.on("blur", () => {
-    if (mode === "lock") setTimeout(() => win?.focus(), 150);
+    if (sync.mode === "lock") setTimeout(() => win?.focus(), 150);
   });
   win.webContents.on("render-process-gone", () => setTimeout(load, 1000));
   win.webContents.on("did-fail-load", (_e, _code, _desc, _url, isMainFrame) => {
     if (isMainFrame) setTimeout(load, 3000);
   });
-  win.once("ready-to-show", () => applyMode("pill"));
+  win.once("ready-to-show", () => applyMode(sync.markReady()));
   load();
   if (policy.openDevToolsOnStart) win.webContents.openDevTools({ mode: "detach" });
 }
@@ -128,15 +129,16 @@ function setupSession(): void {
 
 ipcMain.on("overlay:mode", (e, next: unknown) => {
   if (!e.senderFrame || !sameOrigin(e.senderFrame.url, args.url)) return;
-  if (isMode(next) && next !== mode) applyMode(next);
+  const apply = sync.request(next);
+  if (apply) applyMode(apply);
 });
 
 app.on("before-quit", (e) => {
-  if (mode === "lock" && !allowQuit) e.preventDefault();
+  if (sync.mode === "lock" && !allowQuit) e.preventDefault();
 });
 
 app.on("second-instance", () => {
-  if (win && mode !== "pill") win.focus();
+  if (win && sync.mode !== "pill") win.focus();
 });
 
 app.whenReady().then(async () => {
@@ -152,7 +154,10 @@ app.whenReady().then(async () => {
   setupSession();
   createWindow();
   for (const ev of ["display-added", "display-removed", "display-metrics-changed"] as const) {
-    screen.on(ev as "display-added", () => applyMode(mode));
+    screen.on(ev as "display-added", () => {
+      const again = sync.reapply();
+      if (again) applyMode(again);
+    });
   }
   globalShortcut.register("Control+Alt+Command+Shift+Q", () => {
     allowQuit = true;

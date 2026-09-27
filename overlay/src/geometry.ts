@@ -52,6 +52,38 @@ export function boundsFor(mode: Mode, display: Rect, workArea: Rect): Rect {
   }
 }
 
+/**
+ * The page's mode as the shell knows it. The page can ask for a mode (a remembered "lock", say) before the window
+ * is ready to show; the shell must then show that mode, never a hard-coded pill: the page sends each mode once
+ * (on change) and would never correct a shell that shrank the lock screen to a pill.
+ */
+export class ModeSync {
+  private ready = false;
+  constructor(private current: Mode = "pill") {}
+
+  get mode(): Mode {
+    return this.current;
+  }
+
+  /** An IPC request from the page → the mode to apply now, or null (invalid, unchanged, or kept until ready). */
+  request(next: unknown): Mode | null {
+    if (!isMode(next) || next === this.current) return null;
+    this.current = next;
+    return this.ready ? next : null;
+  }
+
+  /** ready-to-show → the mode to apply first: the page's latest request, else the pill. */
+  markReady(): Mode {
+    this.ready = true;
+    return this.current;
+  }
+
+  /** Display changes re-apply the current mode, but only once the window has been shown. */
+  reapply(): Mode | null {
+    return this.ready ? this.current : null;
+  }
+}
+
 export interface OverlayArgs {
   url: string;
   dev: boolean;

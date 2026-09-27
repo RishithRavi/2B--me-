@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { boundsFor, isMode, parseArgs, sameOrigin, shellPolicy } from "./geometry";
+import { boundsFor, isMode, ModeSync, parseArgs, sameOrigin, shellPolicy } from "./geometry";
 
 const display = { x: 0, y: 0, width: 1512, height: 982 };
 const work = { x: 0, y: 25, width: 1512, height: 890 };
@@ -58,4 +58,26 @@ test("shellPolicy: no app menu ever; DevTools only with --dev", () => {
   const dev = parseArgs(["--dev", "--devtools"], {});
   assert.deepEqual(shellPolicy(dev, ["--dev", "--devtools"]), { devTools: true, openDevToolsOnStart: true, applicationMenu: null });
   assert.equal(shellPolicy(parseArgs(["--dev"], {}), ["--dev"]).openDevToolsOnStart, false);
+});
+
+test("startup race: a lock the page asks for before ready-to-show is what the window first shows", () => {
+  const s = new ModeSync("pill");
+  assert.equal(s.request("lock"), null); // not shown yet: kept, not applied
+  assert.equal(s.mode, "lock"); // close / blur / quit guards already treat it as locked
+  assert.equal(s.reapply(), null); // a display change before the first show doesn't show the window either
+  assert.equal(s.markReady(), "lock"); // never the hard-coded pill
+  assert.equal(s.request("lock"), null); // unchanged: nothing to do
+  assert.equal(s.request("pill"), "pill");
+  assert.equal(s.reapply(), "pill");
+});
+
+test("no request before ready-to-show → the pill; bad or foreign requests are ignored", () => {
+  const s = new ModeSync("pill");
+  assert.equal(s.markReady(), "pill");
+  assert.equal(s.request("fullscreen"), null);
+  assert.equal(s.request(42), null);
+  assert.equal(s.request("pill"), null);
+  assert.equal(s.request("prompt"), "prompt");
+  assert.equal(s.request("lock"), "lock");
+  assert.equal(s.mode, "lock");
 });

@@ -8,13 +8,16 @@ The on-laptop face of 2bME. A single transparent, frameless, always-on-top windo
 | **pill** | normal use | 320×84, top-right, never steals focus; trust %, level, sparkline; red **Verify** when a voice check is waiting. Click it → **details** |
 | **details** | "My behavior" (the pill expanded) | 400×700 (clamped to the work area), top-right, doesn't pull the app forward: trust + 10-min sparkline, per-modality ΔL bars, why-chips, identity model and scorer, the literal last payload that left the laptop (collapsed), recent events, link to the full dashboard. × collapses it |
 | **prompt** | a proactive (or step-up) challenge is armed — someone else may be at the keyboard | full display, dimmed, voice check inside; **Not now** snoozes to the red pill (behavior alone never blocks; high-risk actions keep stepping up) |
-| **lock** | the device was locked by a failed voice check (BLOCK_SPOOF / BLOCK_IMPOSTOR / failed TOTP) | full display, opaque, refocuses on blur, can't be closed; the owner signs in again and unlocks with a fresh phrase. **Fails closed:** the lock (and its reason) is remembered in the overlay's own storage, so offline, loading, signed out or before the first live snapshot it still shows the lock screen; only the owner's live snapshot saying "unlocked" releases it |
+| **lock** | the device was locked by a failed voice check (BLOCK_SPOOF / BLOCK_IMPOSTOR / failed TOTP) | full display, opaque, refocuses on blur, can't be closed; the owner signs in again and unlocks with a fresh phrase. **Fails closed:** the lock (its device, reason and whether the voice result was simulated) is remembered in the overlay's own storage, so offline, loading, signed out, before this connection's snapshot, or signed in as anyone else (b@, an admin) it still shows the lock screen ("Signed in as b@…: only the owner can unlock it"). Only a snapshot received on the current connection, for the remembered device, saying "unlocked" releases it; a 409 from the unlock request only triggers a re-check |
 | **panel** | signing in | centered card |
 
 The page decides the mode from `/ws/live` (see `web/src/components/overlay/`); the shell only sizes the
-window (`overlay/src/geometry.ts`) and enforces the lock. A prompt that closes with a BLOCK_* goes straight to
+window (`overlay/src/geometry.ts`) and enforces the lock. A mode the page asks for before the window is ready to
+show (a remembered lock at startup) is kept and applied on `ready-to-show` (`ModeSync`), never replaced by a
+default pill. A prompt that closes with a BLOCK_* goes straight to
 the lock screen (the page holds full screen until the outcome is known, so the window never flashes back to
-the pill). Voice checks show a **Simulated voice result** badge when the server runs stub voice. It captures no input — behavior capture is the
+the pill). Voice checks show a **Simulated voice result** badge when the server runs stub voice (`/api/status` is retried
+until it answers) or a result arrives flagged `simulated`; a lock caused by a simulated result says so. It captures no input — behavior capture is the
 macOS agent's job — and it talks only to the 2bME origin (other links open in the default browser;
 microphone permission is granted to the 2bME origin only).
 
