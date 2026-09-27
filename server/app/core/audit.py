@@ -106,10 +106,13 @@ DRIFT_SUMMARY = "Insider drift: most of the last 5 min below 80% with no takeove
 
 
 def drift_points(drt: Any) -> list[Any]:
-    """The trust points of the last DRIFT_WINDOW_S (learning/locked points excluded)."""
+    """This session's trust points of the last DRIFT_WINDOW_S, oldest first (learning/locked points excluded):
+    /demo/reset starts a new session, so the flag clears with the loop reset."""
     now = utcnow()
+    since = getattr(drt, "session_started_at", None)
     return [p for p in list(drt.history)
-            if 0 <= (now - p.t).total_seconds() <= DRIFT_WINDOW_S and p.level not in ("learning", "locked")]
+            if 0 <= (now - p.t).total_seconds() <= DRIFT_WINDOW_S and p.level not in ("learning", "locked")
+            and (since is None or p.t >= since)]
 
 
 def insider_drift(drt: Any, level: str, takeover: bool) -> bool:
@@ -286,7 +289,7 @@ class AuditLog:
     def _check_drift(self, drt: Any, t: DevTrack, level: str) -> None:
         """Insider drift raises one alert per episode: evaluated at most every DRIFT_CHECK_S per device; on the
         rising edge an anomaly goes through the hub (Tiger row, live event, explainer), so the roster's last alert
-        can be acknowledged; the falling edge re-arms it."""
+        can be acknowledged; the falling edge (e.g. the new session a /demo/reset starts) re-arms it."""
         now = time.monotonic()
         if now - t.drift_checked < DRIFT_CHECK_S:
             return

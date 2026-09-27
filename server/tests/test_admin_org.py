@@ -130,10 +130,15 @@ def test_roster_shape_order_and_flags(client):
 
     drt = rt().hub.devices[uuid.UUID(dev_a)]
     now = utcnow()
+    session_started = drt.session_started_at
     for i in range(40):
         drt.history.append(TrustPoint(t=now - timedelta(seconds=5 * (40 - i)), confidence=0.62, level="watch"))
+    # only this session's points count: back-dated points from before the session never raise the flag
+    assert "insider_drift" not in row_for(roster(client), dev_a)["flags"]
+    drt.session_started_at = now - timedelta(seconds=300)
     flags = row_for(roster(client), dev_a)["flags"]
     assert "insider_drift" in flags and "takeover_suspected" not in flags
+    drt.session_started_at = session_started
 
     # takeover: impostor blocks -> suspicious -> proactive challenge armed
     for _ in range(10):
@@ -557,9 +562,10 @@ def test_audit_unit_voice_alert_text(monkeypatch):
     monkeypatch.setattr(voice_demo, "voice_mode", lambda: "real")
     assert alert("voice_spoof") == "Synthetic voice blocked"
 
+
 def test_insider_drift_raises_one_acknowledgeable_alert_per_episode(client):
     """Sustained watch-band trust with no takeover raises ONE org alert (a Tiger/live anomaly the roster's last alert
-    shows, so it can be acknowledged); it re-arms only after the episode ends."""
+    shows, so it can be acknowledged); it re-arms only after the episode ends, e.g. the new session of a reset."""
     import asyncio
 
     from app.core.audit import DRIFT_SUMMARY
@@ -607,9 +613,18 @@ def test_insider_drift_raises_one_acknowledgeable_alert_per_episode(client):
     ack = act(client, dev_a, "ack_alert", anomaly_id=la["id"])
     assert ack.status_code == 200 and ack.json()["summary"] == "Alert acknowledged (insider drift)"
 
+    # a reset starts a new session: the old points no longer count, the flag clears and the alert re-arms
+    assert client.post("/api/demo/reset", json={"device_id": dev_a}, headers=ADMIN).status_code == 200
+    agent.welcome["session_id"] = str(drt.session_id)  # the agent follows the reset's welcome
+    tick_and_settle()
+    assert tr.drift_on is False and "insider_drift" not in row_for(roster(client), dev_a)["flags"]
+    drift_history()
+    tick_and_settle()
+    assert len(drift_alerts()) == 2
+
     # a takeover (marker) is never an insider drift
     tr.drift_on = False
     client.post("/api/demo/marker", json={"device_id": dev_a, "label": "takeover_start"}, headers=ADMIN)
     tick_and_settle()
-    assert tr.drift_on is False and len(drift_alerts()) == 1
+    assert tr.drift_on is False and len(drift_alerts()) == 2
     agent.close()
