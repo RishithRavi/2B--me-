@@ -13,6 +13,7 @@ from starlette.websockets import WebSocketDisconnect
 from test_flows import Agent, setup_monitored
 
 ADMIN = {"X-Admin-Token": ADMIN_TOKEN}
+BOT = "automation (API token)"  # token callers are never recorded as the human admin the token resolves to
 WAV = {"wav": ("a.wav", b"RIFF0000", "audio/wav")}
 CHECKOUT = {"amount_cents": 200000, "card_last4": "1111"}
 
@@ -174,7 +175,7 @@ def test_audit_trail_for_a_takeover_flow(client, monkeypatch):
     assert [r["t"] for r in rows] == sorted((r["t"] for r in rows), reverse=True)  # newest first
     assert all(r["device_id"] == dev_a and r["handle"] == "A" for r in rows)
     mk = next(r for r in rows if r["kind"] == "marker" and "takeover" in r["summary"])
-    assert mk["actor"] == "Observer"  # the admin who pressed Mark takeover
+    assert mk["actor"] == BOT  # a token call (a script), not the admin person
     tc = [r for r in rows if r["kind"] == "trust_change"]
     assert any("→ suspicious" in r["summary"] for r in tc) and len(tc) < 8  # level changes, not every tick
     ch = [r["summary"] for r in rows if r["kind"] == "challenge"]
@@ -184,10 +185,21 @@ def test_audit_trail_for_a_takeover_flow(client, monkeypatch):
     assert any(r["kind"] == "lock" and r["severity"] == 5 for r in rows)
     alerts = [r for r in rows if r["kind"] == "alert"]
     assert alerts and all(r["ref_id"] for r in alerts)
-    # the operator reset is attributed as well
-    client.post("/api/demo/reset", json={"device_id": dev_a}, headers=ADMIN)
+    # the operator reset is attributed as well: a named script via X-Actor, then a person's cookie session
+    client.post("/api/demo/reset", json={"device_id": dev_a}, headers={**ADMIN, "X-Actor": "org-demo engine"})
+    newest = audit(client, device_id=dev_a, limit=5)
+    assert any(r["kind"] == "marker" and "reset" in r["summary"] and r["actor"] == "org-demo engine (API token)"
+               for r in newest)
+    login(client, "admin")
+    assert client.post("/api/demo/reset", json={"device_id": dev_a}).status_code == 200
     newest = audit(client, device_id=dev_a, limit=5)
     assert any(r["kind"] == "marker" and "reset" in r["summary"] and r["actor"] == "Observer" for r in newest)
+    # a reset that clears a lock says so in the trace-back trail
+    assert act(client, dev_a, "lock").status_code == 200
+    assert client.post("/api/demo/reset", json={"device_id": dev_a}).status_code == 200
+    newest = audit(client, device_id=dev_a, limit=5)
+    assert any(r["kind"] == "lock" and r["summary"] == "Lock cleared by operator reset (was admin lock)"
+               and r["actor"] == "Observer" for r in newest)
     agent.close()
 
 
@@ -199,7 +211,7 @@ def test_admin_lock_unlock_force_reverify_ack_note(client):
     r = act(client, dev_a, "lock")
     assert r.status_code == 200, r.text
     row = r.json()
-    assert row["kind"] == "admin_action" and row["actor"] == "Observer" and row["summary"] == "Admin lock"
+    assert row["kind"] == "admin_action" and row["actor"] == BOT and row["summary"] == "Admin lock"
     assert act(client, dev_a, "lock").status_code == 409
     t = agent.tick("a")
     assert t["locked"] is True and t["confidence"] < 0.01
@@ -249,7 +261,11 @@ def test_admin_lock_unlock_force_reverify_ack_note(client):
     assert act(client, dev_a, "note").status_code == 422
     assert act(client, str(uuid.uuid4()), "note", text="hi").status_code == 404
     acts = [r for r in audit(client, device_id=dev_a) if r["kind"] == "admin_action"]
-    assert len(acts) >= 5 and all(r["actor"] == "Observer" for r in acts)
+    assert len(acts) >= 5 and all(r["actor"] == BOT for r in acts)
+    # a person's admin cookie session is recorded by handle
+    login(client, "admin")
+    r = client.post("/api/admin/actions", json={"device_id": dev_a, "action": "note", "text": "by hand"})
+    assert r.status_code == 200 and r.json()["actor"] == "Observer"
     agent.close()
 
 
@@ -337,6 +353,115 @@ def test_stub_voice_header_stripping_override_and_simulated(client, monkeypatch)
     r = client.post("/api/demo/voice-outcome", json={"device_id": dev_a, "decision": "VERIFY"}, headers=ADMIN)
     assert r.status_code == 409
     agent.close()
+
+
+def test_fake_header_stripped_on_every_uuid_spelling(client):
+    """Regression (review): FastAPI accepts 32-hex, uppercase, braced and urn:uuid: challenge ids. A user's
+    X-Fake-Decision is stripped whatever spelling reaches the voice router, and the operator override applies."""
+    from app.core import voice_demo
+
+    _uid, dev_a, agent = setup_monitored(client)
+    for _ in range(3):
+        agent.tick("a")
+    assert client.post("/api/demo/voice-outcome", json={"device_id": dev_a, "decision": "BLOCK_IMPOSTOR"},
+                       headers=ADMIN).status_code == 200
+    spellings = {"hex": lambda u: u.hex, "HEX": lambda u: u.hex.upper(), "DASHED": lambda u: str(u).upper(),
+                 "braced": lambda u: "{" + str(u) + "}", "urn": lambda u: f"urn:uuid:{u}"}
+    for name, spell in spellings.items():  # every spelling reaches the router (200), none carries VERIFY through
+        ch = client.post("/api/voice/challenges", json={"reason": "sandbox"}).json()
+        r = client.post(f"/api/voice/challenges/{spell(uuid.UUID(ch['challenge_id']))}/response", files=WAV,
+                        headers={"X-Fake-Decision": "VERIFY"})
+        assert r.status_code == 200, (name, r.text)
+        assert r.json()["result"]["decision"] == "BLOCK_IMPOSTOR", (name, r.text)
+
+    # the reviewer's probe: the attacker (a@'s session) answers the step-up at the undashed id with VERIFY
+    order = client.post("/api/checkout/authorize", json=CHECKOUT).json()
+    assert order["trans_status"] == "C"
+    r = client.post(f"/api/voice/challenges/{uuid.UUID(order['challenge_id']).hex}/response", files=WAV,
+                    headers={"X-Fake-Decision": "VERIFY"})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["result"]["decision"] == "BLOCK_IMPOSTOR" and out["outcome"]["device_locked"] is True
+    assert out["outcome"]["resolved_decisions"][0]["trans_status"] == "N"
+    # the BLOCK preset did its job (it locked the device): consumed, so it cannot hit the owner's next check
+    assert voice_demo.get_override(uuid.UUID(dev_a)) is None
+    assert any("cleared (used" in r["summary"] for r in audit(client, device_id=dev_a) if r["kind"] == "admin_action")
+    agent.close()
+
+
+def test_override_never_blocks_an_unlock_and_reset_clears_it(client):
+    from app.core import voice_demo
+
+    _uid, dev_a, agent = setup_monitored(client)
+    for _ in range(3):
+        agent.tick("a")
+    order = client.post("/api/checkout/authorize", json=CHECKOUT).json()
+    r = client.post(f"/api/voice/challenges/{order['challenge_id']}/response", files=WAV,
+                    headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
+    assert r.json()["outcome"]["device_locked"] is True
+    # a BLOCK preset left behind (set while locked, so nothing consumed it) never applies to the owner's unlock
+    assert client.post("/api/demo/voice-outcome", json={"device_id": dev_a, "decision": "BLOCK_IMPOSTOR"},
+                       headers=ADMIN).status_code == 200
+    login(client, "a")
+    u = client.post("/api/voice/challenges", json={"reason": "unlock"})
+    assert u.status_code == 200, u.text
+    r = client.post(f"/api/voice/challenges/{u.json()['challenge_id']}/response", files=WAV)
+    assert r.json()["result"]["decision"] == "VERIFY" and r.json()["outcome"]["device_locked"] is False
+    # it is still set for the next step-up (and visible on the roster); the operator's Reset demo clears it
+    assert voice_demo.get_override(uuid.UUID(dev_a)) == "BLOCK_IMPOSTOR"
+    assert "sim_voice_block_impostor" in row_for(roster(client), dev_a)["flags"]
+    assert client.post("/api/demo/reset", json={"device_id": dev_a}, headers=ADMIN).status_code == 200
+    assert voice_demo.get_override(uuid.UUID(dev_a)) is None
+    assert not any(f.startswith("sim_voice_") for f in row_for(roster(client), dev_a)["flags"])
+    rows = audit(client, device_id=dev_a, limit=10)
+    assert any("BLOCK_IMPOSTOR cleared (demo reset)" in r["summary"] and r["actor"] == BOT for r in rows)
+    agent.close()
+
+
+def test_admin_lock_cannot_be_cleared_by_the_user(client):
+    """An admin lock is a human decision: the locked user's fresh login + (simulated) voice cannot clear it."""
+    from app.core.runtime import rt
+
+    _uid, dev_a, agent = setup_monitored(client)
+    for _ in range(3):
+        agent.tick("a")
+    assert act(client, dev_a, "lock").status_code == 200
+    login(client, "a")  # a session created after the lock
+    u = client.post("/api/voice/challenges", json={"reason": "unlock"})
+    assert u.status_code == 409 and "admin" in u.json()["detail"], u.text
+    assert "admin_locked" in row_for(roster(client), dev_a)["flags"]
+    assert act(client, dev_a, "unlock").status_code == 200
+
+    # an unlock challenge that already exists cannot clear a lock that is (now) an admin lock either
+    order = client.post("/api/checkout/authorize", json=CHECKOUT).json()
+    r = client.post(f"/api/voice/challenges/{order['challenge_id']}/response", files=WAV,
+                    headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
+    assert r.json()["outcome"]["device_locked"] is True
+    login(client, "a")
+    u = client.post("/api/voice/challenges", json={"reason": "unlock"})
+    assert u.status_code == 200, u.text
+    rt().hub.devices[uuid.UUID(dev_a)].dev.lock_reason = "admin_lock"
+    r = client.post(f"/api/voice/challenges/{u.json()['challenge_id']}/response", files=WAV)
+    assert r.json()["result"]["decision"] == "VERIFY" and r.json()["outcome"]["device_locked"] is True
+    rr = row_for(roster(client), dev_a)
+    assert rr["locked"] and "admin_locked" in rr["flags"]
+    assert act(client, dev_a, "unlock").status_code == 200
+    agent.close()
+
+
+def test_admin_default_live_device_is_the_real_one(client):
+    """With the org demo running, the observer's /dashboard (no ?device_id=) still opens on A's laptop."""
+    _uid, dev_a, agent = setup_monitored(client)
+    agent.tick("a")
+    emps = seed(client, 2)
+    emp = Agent(client, emps[0]["device_token"])
+    emp.tick("a")  # an employee ticked after A
+    login(client, "admin")
+    with client.websocket_connect("/ws/live") as ws:
+        m = ws.receive_json()
+        assert m["type"] == "snapshot" and m["device_id"] == dev_a, m.get("device_id")
+    agent.close()
+    emp.close()
 
 
 @pytest.mark.skipif(not os.environ.get("TEST_TIGER_URL"), reason="needs TEST_TIGER_URL")

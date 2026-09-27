@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import time
 from datetime import timedelta
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.auth import AdminPrincipal
-from app.core.audit import AuditLog, acting, is_synthetic_email, model_backend
+from app.auth import AdminPrincipal, CurrentPrincipal
+from app.core import voice_demo
+from app.core.audit import AuditLog, acting, actor_name, is_synthetic_email, model_backend
 from app.core.hub import DeviceRuntime
 from app.core.runtime import rt
 from app.db import history as H
@@ -45,6 +46,15 @@ DRIFT_MAX_SUSPICIOUS = 0.10    # a window that was mostly < 0.40 is a (past) tak
 REMOTE_WINDOW = timedelta(minutes=10)
 SPARK_N = 60
 LEVEL_RANK = {"locked": 0, "suspicious": 1, "watch": 2, "normal": 3, "learning": 4}
+
+
+async def request_actor(request: Request, p: CurrentPrincipal) -> str:
+    """The audit actor for this request (see audit.actor_name): an X-Admin-Token caller is never recorded as the
+    human admin the token resolves to."""
+    return actor_name(p.user.handle, via_token=p.session is None, x_actor=request.headers.get("x-actor"))
+
+
+Actor = Annotated[str, Depends(request_actor)]
 
 
 def audit_log() -> AuditLog:
@@ -107,6 +117,9 @@ def roster_row(drt: DeviceRuntime) -> RosterRow:
         flags.append("admin_locked")
     if oc is not None:
         flags.append("challenge_open")
+    ov = voice_demo.get_override(dev.id)
+    if ov:  # the operator's stub-voice preset stays visible until it is used, cleared or reset
+        flags.append(f"sim_voice_{ov.lower()}")
     mi = r.models.model_info(dev.user_id)
     age = drt.heartbeat_age()
     return RosterRow(
@@ -218,9 +231,8 @@ async def ack_alert(drt: DeviceRuntime, anomaly_id: UUID | None) -> tuple[str, U
 
 
 @router.post("/actions", response_model=AuditRow)
-async def actions(body: AdminActionIn, p: AdminPrincipal) -> AuditRow:
+async def actions(body: AdminActionIn, p: AdminPrincipal, by: Actor) -> AuditRow:
     drt = _drt(body.device_id)
-    by = p.user.handle
     a = audit_log()
     ref: Any = None
     with acting(by):

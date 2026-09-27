@@ -92,6 +92,7 @@ CHALLENGE_FEED = {
     "cancelled": ("Voice challenge cancelled ({trigger})", 1),
 }
 TERMINAL = {"verified", "blocked_spoof", "blocked_impostor", "expired", "cancelled"}
+ADMIN_LOCK = "admin_lock"  # lock_reason of an /admin/actions lock (only an admin unlock or /demo/reset clears it)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1166,7 +1167,8 @@ class DeviceHub:
                         via: str) -> list[ResolvedDecision]:
         now = utcnow()
         if drt is not None:
-            if row["trigger"] == "unlock" and drt.dev.locked:
+            # an admin lock is an explicit human decision: only /admin/actions unlock (or /demo/reset) clears it
+            if row["trigger"] == "unlock" and drt.dev.locked and drt.dev.lock_reason != ADMIN_LOCK:
                 drt.dev.locked, drt.dev.locked_at, drt.dev.lock_reason = False, None, None
                 self.registry.save_device(drt.dev)
                 await self.send_agent(drt, AgentUnlock())
@@ -1220,6 +1222,8 @@ class DeviceHub:
 
     def can_request_unlock(self, device_id: UUID, session_created_at: datetime | None) -> bool:
         drt = self.rt_by_id(device_id)
+        if drt is not None and drt.dev.locked and drt.dev.lock_reason == ADMIN_LOCK:
+            raise HubError(409, "locked by your admin: only an admin can unlock this device")
         if drt is None or not drt.dev.locked or session_created_at is None or drt.dev.locked_at is None:
             return False
         return session_created_at > drt.dev.locked_at

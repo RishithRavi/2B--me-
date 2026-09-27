@@ -9,7 +9,9 @@ Each row goes to an in-memory ring (the degraded-mode fallback), to Tiger `audit
 the batch writer, and to `/ws/live` as type `audit` for admin subscribers (never to device owners).
 
 `actor` is "system" unless the row was caused inside an admin/operator request, which sets `current_actor`
-(a ContextVar) to that principal's handle via `acting()`.
+(a ContextVar) via `acting()` to `actor_name()`: the handle of a person with a cookie session, or, for an
+`X-Admin-Token` caller (scripts, the e2e, the attack tool), "<X-Actor or 'automation'> (API token)" — never the
+human admin that token resolves to.
 """
 
 from __future__ import annotations
@@ -44,6 +46,18 @@ def acting(handle: str | None) -> Iterator[None]:
         yield
     finally:
         current_actor.reset(tok)
+
+
+TOKEN_ACTOR_MAX = 40
+
+
+def actor_name(handle: str, *, via_token: bool, x_actor: str | None = None) -> str:
+    """Who an audit row names: a cookie session is that person; a token caller is automation, named by its
+    optional X-Actor header and always marked as token-authenticated."""
+    if not via_token:
+        return handle
+    name = " ".join("".join(ch for ch in (x_actor or "") if ch.isprintable()).split())[:TOKEN_ACTOR_MAX]
+    return f"{name or 'automation'} (API token)"
 
 
 def is_synthetic_email(email: str | None) -> bool:

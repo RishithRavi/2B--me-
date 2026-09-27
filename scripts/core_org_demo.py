@@ -7,7 +7,10 @@ a per-employee persona), enrolled quickly from back-dated `late` ticks and train
 /api/enroll/train path (admin token), then streamed in real time (one tick per --interval seconds).
 
 Scenarios, repeated every --loop-min minutes (each loop starts with an admin /api/demo/reset of the scenario
-devices, and of any synthetic device an admin locked, so the story repeats):
+devices and of any locked synthetic device, so the story repeats). A device a person admin-LOCKED is left alone for
+--admin-lock-hold loop(s) before it is recycled: the engine never silently undoes a human decision within a judge's
+visit. Every call carries `X-Actor: org-demo engine`, so the audit trail says "org-demo engine (API token)" and never
+attributes the engine's resets to the human admin.
   * Employee 07 — takeover: impostor-style blocks from T+60 s → trust falls → suspicious → the hub arms a
     proactive voice challenge, which is left for the admin to act on (Lock / Force re-verify / Acknowledge).
   * Employee 13 — insider drift (intermittent credential sharing): over ~4 min a growing share of ticks is
@@ -44,6 +47,7 @@ import websockets
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core_replay_ticks import FakeAgent, Synth, _scale  # noqa: E402
 
+ACTOR = "org-demo engine"  # audit actor for every call (X-Actor; recorded as "org-demo engine (API token)")
 CATEGORIES = ["browser", "ide", "terminal", "chat", "docs", "media", "system", "other"]
 
 
@@ -177,6 +181,7 @@ class Employee:
     drift: float = 0.0
     last: dict = field(default_factory=dict)
     connected: bool = False
+    held_loops: int = 0                # loop resets skipped while a person's admin lock stands
 
 
 @dataclass
@@ -190,7 +195,7 @@ class Ctx:
 
     @property
     def admin(self) -> dict[str, str]:
-        return {"X-Admin-Token": self.args.admin_token}
+        return {"X-Admin-Token": self.args.admin_token, "X-Actor": ACTOR}
 
     def t(self) -> float:
         return time.monotonic() - self.loop_start
@@ -333,15 +338,25 @@ async def coordinator(ctx: Ctx) -> None:
     while not ctx.stop.is_set():
         ctx.loop_no += 1
         locked: list[Employee] = []
+        admin_locked: set[str] = set()
         with contextlib.suppress(Exception):
             rows = (await ctx.http.get("/api/admin/roster", headers=ctx.admin)).json()
             ids = {r["device_id"] for r in rows if r.get("locked")}
+            admin_locked = {r["device_id"] for r in rows if r.get("lock_reason") == "admin_lock"}
             locked = [e for e in ctx.emps if e.device_id in ids and e not in scenario]
+        todo, held = [], []
         for emp in scenario + locked:
+            if emp.device_id in admin_locked and emp.held_loops < ctx.args.admin_lock_hold:
+                emp.held_loops += 1
+                held.append(emp)
+                continue
+            emp.held_loops = 0
+            todo.append(emp)
+        for emp in todo:
             await reset_device(ctx, emp)
         ctx.loop_start = time.monotonic()
-        extra = f" + {', '.join(e.handle for e in locked)} (locked)" if locked else ""
-        log(f"loop {ctx.loop_no}: reset {', '.join(e.handle for e in scenario)}{extra}; "
+        extra = f"; left {', '.join(e.handle for e in held)} admin-locked (a person's decision)" if held else ""
+        log(f"loop {ctx.loop_no}: reset {', '.join(e.handle for e in todo) or 'nothing'}{extra}; "
             f"takeover at T+{ctx.args.takeover_at:.0f}s, drift from T+10s")
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(ctx.stop.wait(), ctx.args.loop_min * 60)
@@ -444,6 +459,8 @@ def main() -> int:
     ap.add_argument("--away-from", type=float, default=120.0)
     ap.add_argument("--away-until", type=float, default=300.0)
     ap.add_argument("--seed", type=int, default=42, help="persona seed (same seed = same employees)")
+    ap.add_argument("--admin-lock-hold", type=int, default=1,
+                    help="loop resets to skip for a device a person admin-locked before recycling it")
     args = ap.parse_args()
     if not args.admin_token:
         ap.error("--admin-token (or ADMIN_TOKEN) is required")

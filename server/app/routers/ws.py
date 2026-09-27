@@ -11,7 +11,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter, ValidationError
 
 from app.auth import ws_principal
+from app.core.audit import is_synthetic_email
 from app.core.live import Subscriber
+from app.core.registry import Device, Registry
 from app.core.runtime import rt
 from twobme_common.types import AgentError, AgentMessage, Hello
 
@@ -90,8 +92,7 @@ async def ws_live(ws: WebSocket) -> None:
             dev = None
     if dev is None:
         if p.is_admin:
-            devs = list(r.registry.devices.values())
-            dev = max(devs, key=lambda d: d.last_seen.timestamp() if d.last_seen else 0) if devs else None
+            dev = default_admin_device(r.registry)
         else:
             dev = r.registry.bound_device(p.user.id)
     sub = Subscriber(ws=ws, user_id=p.user.id, is_admin=p.is_admin, device_id=dev.id if dev else None)
@@ -101,6 +102,20 @@ async def ws_live(ws: WebSocket) -> None:
         r.live.send_to(s, "snapshot", dev.id if dev else None, r.hub.snapshot(drt))
 
     await r.live.serve(sub, on_open)
+
+
+def default_admin_device(reg: Registry) -> Device | None:
+    """The observer dashboard's device when the client names none: the most recently seen REAL device, so the
+    org-demo employees (scripts/core_org_demo.py ticks 19 of them every 5 s) never displace A's laptop."""
+    devs = list(reg.devices.values())
+    if not devs:
+        return None
+
+    def key(d: Device) -> tuple[bool, float]:
+        u = reg.users.get(d.user_id)
+        return (not is_synthetic_email(u.email if u else None), d.last_seen.timestamp() if d.last_seen else 0.0)
+
+    return max(devs, key=key)
 
 
 async def _close(ws: WebSocket, code: int, reason: str) -> None:

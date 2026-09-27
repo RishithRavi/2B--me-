@@ -1,7 +1,7 @@
 """Demo / admin endpoints (§5.3, §13 expo mode). Require DEMO_MODE=1.
 
-Every call runs inside `audit.acting(<principal handle>)`, so the org audit trail (§2.4) attributes markers,
-resets and re-arms to the person who pressed the button.
+Every call runs inside `audit.acting(<actor>)`, so the org audit trail (§2.4) attributes markers, resets and
+re-arms to the person who pressed the button, or to "<X-Actor> (API token)" for scripts (audit.actor_name).
 """
 
 from __future__ import annotations
@@ -13,10 +13,11 @@ from fastapi import APIRouter, HTTPException
 
 from app.auth import DemoAdmin, DemoPrincipal, Principal
 from app.core import voice_demo
-from app.core.audit import ORG_DOMAIN, acting
+from app.core.audit import LOCK_TEXT, ORG_DOMAIN, acting
 from app.core.hub import DeviceRuntime
 from app.core.registry import token_hash
 from app.core.runtime import rt
+from app.routers.admin import Actor
 from twobme_common.types import (
     DemoDeviceIn,
     DemoLabelIn,
@@ -53,27 +54,36 @@ def _drt(p: Principal, device_id: UUID) -> DeviceRuntime:
 
 
 @router.post("/label", response_model=OkOut)
-async def label(body: DemoLabelIn, p: DemoPrincipal) -> OkOut:
-    with acting(p.user.handle):
+async def label(body: DemoLabelIn, p: DemoPrincipal, by: Actor) -> OkOut:
+    with acting(by):
         await rt().hub.set_label(_drt(p, body.device_id), body.label, body.actor)
     return OkOut()
 
 
 @router.post("/marker", response_model=MarkerPoint)
-async def marker(body: DemoMarkerIn, p: DemoPrincipal) -> MarkerPoint:
-    with acting(p.user.handle):
+async def marker(body: DemoMarkerIn, p: DemoPrincipal, by: Actor) -> MarkerPoint:
+    with acting(by):
         return await rt().hub.add_marker(_drt(p, body.device_id), body.label, None, body.text, source="dashboard")
 
 
 @router.post("/reset", response_model=Snapshot)
-async def reset(body: DemoDeviceIn, p: DemoAdmin) -> Snapshot:
-    with acting(p.user.handle):
-        return await rt().hub.reset(_drt(p, body.device_id), by=f"dashboard:{p.user.handle}")
+async def reset(body: DemoDeviceIn, p: DemoAdmin, by: Actor) -> Snapshot:
+    with acting(by):
+        drt = _drt(p, body.device_id)
+        was = drt.dev.lock_reason if drt.dev.locked else None
+        snap = await rt().hub.reset(drt, by=f"dashboard:{by}")
+        audit = rt().extras.get("audit")
+        if was is not None and audit is not None:  # the trace-back trail must show a reset that cleared a lock
+            audit.emit("lock", f"Lock cleared by operator reset (was {LOCK_TEXT.get(was, was)})",
+                       device_id=drt.device_id, user_id=drt.dev.user_id, severity=2)
+        # a demo-decision preset for one beat must not leak into the next run (§13 "Reset demo")
+        voice_demo.clear_override(drt.device_id, "demo reset")
+        return snap
 
 
 @router.post("/rearm", response_model=TrustLive)
-async def rearm(body: DemoRearmIn, p: DemoAdmin) -> TrustLive:
-    with acting(p.user.handle):
+async def rearm(body: DemoRearmIn, p: DemoAdmin, by: Actor) -> TrustLive:
+    with acting(by):
         return await rt().hub.rearm(_drt(p, body.device_id), body.confidence)
 
 
@@ -108,7 +118,7 @@ async def purge_session(body: PurgeSessionIn, p: DemoAdmin) -> OkOut:
 
 
 @router.post("/voice-outcome", response_model=OkOut)
-async def voice_outcome(body: DemoVoiceOutcomeIn, p: DemoAdmin) -> OkOut:
+async def voice_outcome(body: DemoVoiceOutcomeIn, p: DemoAdmin, by: Actor) -> OkOut:
     """Stub voice only: the operator's sticky outcome for this device's challenge responses (None clears).
     Every result it produces is published with simulated=true (§8 C2 stub honesty)."""
     if voice_demo.voice_mode() != "stub":
@@ -119,14 +129,13 @@ async def voice_outcome(body: DemoVoiceOutcomeIn, p: DemoAdmin) -> OkOut:
     text = (f"Demo voice outcome set to {body.decision} (simulated)" if body.decision
             else "Demo voice outcome cleared (label-aware simulated default)")
     if audit is not None:
-        audit.emit("admin_action", text, device_id=drt.device_id, user_id=drt.dev.user_id, severity=1,
-                   actor=p.user.handle)
+        audit.emit("admin_action", text, device_id=drt.device_id, user_id=drt.dev.user_id, severity=1, actor=by)
     rt().hub.feed(drt, "operator", text, 1)
     return OkOut(detail=text)
 
 
 @router.post("/org/seed", response_model=OrgSeedOut)
-async def org_seed(body: OrgSeedIn, p: DemoAdmin) -> OrgSeedOut:
+async def org_seed(body: OrgSeedIn, p: DemoAdmin, by: Actor) -> OrgSeedOut:
     """Idempotent pseudonymous org-demo users emp01..empNN@org.2bme.tech, one monitor-mode device each.
     Re-seeding keeps users, devices, trust and models, and rotates every device token (returned once)."""
     r = rt()
@@ -156,5 +165,5 @@ async def org_seed(body: OrgSeedIn, p: DemoAdmin) -> OrgSeedOut:
     audit = r.extras.get("audit")
     if audit is not None:
         audit.emit("admin_action", f"Org demo seeded: {body.n} synthetic employees (device tokens rotated)",
-                   severity=0, actor=p.user.handle)
+                   severity=0, actor=by)
     return OrgSeedOut(employees=out)
