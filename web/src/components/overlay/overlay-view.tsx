@@ -295,7 +295,7 @@ export function OverlayView() {
             {promptable(challenge) ? (
               <>
                 <div className="mb-4">
-                  <WhyChips blocks={state.blocks} limit={4} />
+                  <WhyChips blocks={state.blocks} level={serverLocked ? "locked" : (state.trust?.level ?? null)} limit={4} />
                 </div>
                 {mock ? (
                   <MockChallengeFlow

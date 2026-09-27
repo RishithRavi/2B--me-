@@ -37,19 +37,24 @@ export interface TrustGaugeProps {
   learning?: boolean;
   size?: "md" | "xl";
   className?: string;
-  /** device lock reason (e.g. "admin_lock"); picks the md caption while locked */
+  /** device lock reason (e.g. "admin_lock"); picks the caption while locked */
   lockReason?: string | null;
-  /** replaces the md caption entirely (null hides it) */
+  /** replaces the caption entirely (null hides it) */
   caption?: string | null;
+  /** the value is the last known one (agent offline): dimmed, and the caption says so */
+  stale?: boolean;
 }
 
-function lockCaption(reason: string | null | undefined): string {
+export function lockCaption(reason: string | null | undefined): string {
   if (reason === "admin_lock") return "Locked by your security admin — only an admin can unlock it.";
+  if (reason === "voice_spoof") return "Locked: the voice check flagged a synthetic voice. Behavior alone never locks.";
+  if (reason === "voice_impostor") return "Locked: the voice didn't match the owner. Behavior alone never locks.";
+  if (reason === "lock") return "Locked: the one-time-code fallback failed. Behavior alone never locks.";
   return "Locked by a failed voice check — behavior alone never locks.";
 }
 
 /** Big live trust gauge: arc colored by level, display %, level label; LOCKED and learning states. */
-export function TrustGauge({ trust, locked, learning, size = "md", className, lockReason, caption }: TrustGaugeProps) {
+export function TrustGauge({ trust, locked, learning, size = "md", className, lockReason, caption, stale = false }: TrustGaugeProps) {
   const isLocked = Boolean(locked || trust?.locked || trust?.level === "locked");
   const level: Level = isLocked ? "locked" : learning ? "learning" : (trust?.level ?? "learning");
   const conf = trust?.confidence ?? 0;
@@ -57,10 +62,24 @@ export function TrustGauge({ trust, locked, learning, size = "md", className, lo
   const value = isLocked ? 1 : Math.max(0.005, Math.min(1, conf));
   const color = levelColor(level);
   const display = trust ? Math.min(99, trust.display) : null;
+  const xl = size === "xl";
+  // Below the arc (never inside it, where it would cross the 0 / 100 labels on a small gauge).
+  const text =
+    caption !== undefined
+      ? caption
+      : stale
+        ? "Last known value — the agent is offline."
+        : isLocked
+          ? lockCaption(lockReason)
+          : level === "learning"
+            ? "No model yet — collecting a baseline."
+            : xl
+              ? "Confidence it's still the enrolled owner."
+              : "Confidence that the enrolled owner is still at the keyboard.";
 
   return (
-    <div className={cn("mx-auto w-full", size === "xl" ? "max-w-[420px]" : "max-w-[260px]", className)}>
-    <div className="relative aspect-square w-full">
+    <div className={cn("mx-auto w-full", xl ? "max-w-[420px]" : "max-w-[260px]", className)}>
+    <div className={cn("relative aspect-square w-full transition-opacity", stale && "opacity-50")}>
       <svg viewBox="0 0 200 200" className="size-full overflow-visible" role="img" aria-label={`Trust ${display ?? "unknown"}%, ${levelLabel(level)}`}>
         <defs>
           <filter id="gauge-glow" x="-30%" y="-30%" width="160%" height="160%">
@@ -123,7 +142,6 @@ export function TrustGauge({ trust, locked, learning, size = "md", className, lo
           <>
             <Lock className={cn("mb-1 text-trust-locked", size === "xl" ? "size-12" : "size-8")} />
             <div className={cn("font-semibold tracking-[0.2em] text-trust-locked", size === "xl" ? "text-4xl" : "text-2xl")}>LOCKED</div>
-            {size === "xl" && <div className="mt-1 text-sm text-muted-foreground">a failed voice check locked it</div>}
           </>
         ) : (
           <>
@@ -140,25 +158,12 @@ export function TrustGauge({ trust, locked, learning, size = "md", className, lo
               {level === "learning" && <GraduationCap className="size-3.5" />}
               {levelLabel(level)}
             </div>
-            {size === "xl" && (
-              <div className="mt-2 text-sm text-muted-foreground">
-                {level === "learning" ? "no model yet — collecting baseline" : "confidence it's still the enrolled owner"}
-              </div>
-            )}
           </>
         )}
       </div>
     </div>
-      {size === "md" && caption !== null && (
-        <p className="-mt-3 text-center text-[11px] text-muted-foreground">
-          {caption !== undefined
-            ? caption
-            : isLocked
-            ? lockCaption(lockReason)
-            : level === "learning"
-              ? "No model yet — collecting a baseline."
-              : "Confidence that the enrolled owner is still at the keyboard."}
-        </p>
+      {text !== null && (
+        <p className={cn("text-center text-muted-foreground", xl ? "-mt-1 text-sm" : "-mt-3 text-[11px]", stale && "text-trust-watch")}>{text}</p>
       )}
     </div>
   );

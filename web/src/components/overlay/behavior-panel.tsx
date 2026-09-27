@@ -14,7 +14,7 @@ import { LogoMark } from "@/components/site/logo";
 import { Button } from "@/components/ui/button";
 import type { Level, ModelInfo, TrustPoint } from "@/lib/contracts";
 import type { LiveState } from "@/lib/live";
-import { fmtAgo, fmtClock, levelColor, levelLabel, modelBackendLabel } from "@/lib/ui";
+import { fmtAgo, fmtClock, levelColor, levelLabel, modelBackendLabel, scoredModalities } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 /** 10-minute trust area chart with the 80% / 40% bands (pure SVG: this panel floats over other apps). */
@@ -198,11 +198,11 @@ export function BehaviorPanel({
         </div>
 
         <Section icon={Fingerprint} title="What counted" hint="last update, per modality (ΔL)">
-          <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} />
+          <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} level={level} enabled={scoredModalities(state.model?.enabled_modalities)} />
         </Section>
 
         <Section icon={Sparkles} title="Why" hint="largest deviations from your profile">
-          <WhyChips blocks={state.blocks} limit={4} />
+          <WhyChips blocks={state.blocks} level={level} limit={4} />
         </Section>
 
         <Section icon={Fingerprint} title="Your identity model">

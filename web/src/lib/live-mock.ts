@@ -288,9 +288,10 @@ export class MockLive implements MockControls {
   }
 
   private model(status: ModelInfo["status"] = "ready"): ModelInfo {
+    const enabled: Modality[] = ["keyboard", "mouse", "scroll"]; // workflow/temporal are captured, not scored (like live)
     const headline: Record<string, number | null> = {};
-    for (const ms of Object.values(FEATURE_SPEC.modalities)) {
-      for (const f of ms.features) if (f.headline) headline[f.column] = TYPICAL[f.name] ?? null; // keyed by column
+    for (const m of enabled) {
+      for (const f of FEATURE_SPEC.modalities[m].features) if (f.headline) headline[f.column] = TYPICAL[f.name] ?? null; // keyed by column
     }
     return {
       status,
@@ -299,7 +300,7 @@ export class MockLive implements MockControls {
       version: this.modelVersion,
       trained_at: iso(Date.now() - 42 * 60_000),
       n_blocks: { keyboard: 412, mouse: 388, scroll: 96, workflow: 61, temporal: 240 },
-      enabled_modalities: ["keyboard", "mouse", "scroll", "workflow", "temporal"],
+      enabled_modalities: enabled,
       metrics: { eer_keyboard: 0.16, eer_mouse: 0.23, fused_eer: 0.09 },
       headline_medians: headline,
       learned_since_enroll: this.learned,

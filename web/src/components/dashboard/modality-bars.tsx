@@ -3,35 +3,43 @@
 import { motion } from "framer-motion";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { BlockScored, Modality, TrustLive } from "@/lib/contracts";
-import { MODALITIES, fmtAgo, fmtSigned, modalityColor, modalityIcon, modalityLabel } from "@/lib/ui";
+import type { BlockScored, Level, Modality, TrustLive } from "@/lib/contracts";
+import { alarmLevel, fmtAgo, fmtSigned, modalityColor, modalityIcon, modalityLabel, unscoredLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 /**
  * Signed per-modality contribution to the last trust update (ΔL = κ·w·q·f(llr)).
- * Right of center = evidence for the owner (modality color), left = against (red).
+ * Right of center = evidence for the owner (modality color), left = against (red at Watch or below, grey at Normal).
  */
 export function ModalityBars({
   trust,
   lastBlocks,
+  level,
+  enabled,
   large = false,
 }: {
   trust: TrustLive | null;
   lastBlocks: Partial<Record<Modality, BlockScored>>;
+  /** current trust level (locked when the device is locked): negative bars are red only when it is not Normal */
+  level: Level | null | undefined;
+  /** the modalities the model scores (scoredModalities); the rest get one "captured, not scored" line */
+  enabled: readonly Modality[];
   large?: boolean;
 }) {
+  const alarm = alarmLevel(level);
   const per = trust?.per_modality ?? {};
-  const maxAbs = Math.max(0.25, ...MODALITIES.map((m) => Math.abs(per[m]?.delta ?? 0)));
+  const maxAbs = Math.max(0.25, ...enabled.map((m) => Math.abs(per[m]?.delta ?? 0)));
+  const unscored = unscoredLabel(enabled);
 
   return (
     <div className={cn("space-y-2.5", large && "space-y-4")}>
-      {MODALITIES.map((m) => {
+      {enabled.map((m) => {
         const c = per[m];
         const Icon = modalityIcon(m);
         const delta = c?.delta ?? null;
         const frac = delta === null ? 0 : Math.min(1, Math.abs(delta) / maxAbs);
         const neg = (delta ?? 0) < 0;
-        const barColor = neg ? "var(--trust-suspicious)" : modalityColor(m);
+        const barColor = neg ? (alarm ? "var(--trust-suspicious)" : "var(--muted-foreground)") : modalityColor(m);
         const last = lastBlocks[m];
         return (
           <Tooltip key={m}>
@@ -53,7 +61,7 @@ export function ModalityBars({
                     />
                   )}
                 </div>
-                <div className={cn("tnum text-right font-mono text-xs", large && "text-sm", delta === null ? "text-muted-foreground" : neg ? "text-trust-suspicious" : "text-foreground")}>
+                <div className={cn("tnum text-right font-mono text-xs", large && "text-sm", delta === null || (neg && !alarm) ? "text-muted-foreground" : neg ? "text-trust-suspicious" : "text-foreground")}>
                   {delta === null ? "—" : fmtSigned(delta)}
                 </div>
               </div>
@@ -89,6 +97,7 @@ export function ModalityBars({
         <span>← against owner</span>
         <span>for owner →</span>
       </div>
+      {unscored && <p className={cn("text-[11px] text-muted-foreground/70", large && "text-xs")}>{unscored}: captured, not scored by this model</p>}
     </div>
   );
 }

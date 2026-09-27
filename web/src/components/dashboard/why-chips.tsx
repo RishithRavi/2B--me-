@@ -4,8 +4,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2 } from "lucide-react";
 import { useMemo } from "react";
 
-import type { BlockScored, DeviationOut, Modality } from "@/lib/contracts";
-import { featureMeta, fmtZ, modalityColor, modalityIcon } from "@/lib/ui";
+import type { BlockScored, DeviationOut, Level, Modality } from "@/lib/contracts";
+import { alarmLevel, featureMeta, fmtZ, modalityColor, modalityIcon } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 const RECENT_MS = 45_000;
@@ -41,9 +41,25 @@ export function whyChips(blocks: BlockScored[], limit = 8): WhyChip[] {
     .slice(0, limit);
 }
 
-export function WhyChips({ blocks, large = false, limit = 8 }: { blocks: BlockScored[]; large?: boolean; limit?: number }) {
+/** Red only while trust is at Watch or below: at Normal every chip is grey context. */
+export function redChip(c: Pick<WhyChip, "against" | "z">, level: Level | null | undefined): boolean {
+  return alarmLevel(level) && c.against && Math.abs(c.z) >= RED_Z;
+}
+
+export function WhyChips({
+  blocks,
+  level,
+  large = false,
+  limit = 8,
+}: {
+  blocks: BlockScored[];
+  /** current trust level (locked when the device is locked) */
+  level: Level | null | undefined;
+  large?: boolean;
+  limit?: number;
+}) {
   const chips = useMemo(() => whyChips(blocks, limit), [blocks, limit]);
-  const anyRed = chips.some((c) => c.against && Math.abs(c.z) >= RED_Z);
+  const anyRed = chips.some((c) => redChip(c, level));
 
   if (!chips.length) {
     return <p className="py-3 text-sm text-muted-foreground">Waiting for scored blocks…</p>;
@@ -54,7 +70,7 @@ export function WhyChips({ blocks, large = false, limit = 8 }: { blocks: BlockSc
       <div className={cn("flex flex-wrap gap-2", large && "gap-2.5")}>
         <AnimatePresence initial={false} mode="popLayout">
           {chips.map((c) => {
-            const red = c.against && Math.abs(c.z) >= RED_Z;
+            const red = redChip(c, level);
             const Icon = modalityIcon(c.modality);
             const label = c.label || featureMeta(c.feature)?.label || c.feature;
             return (
