@@ -54,3 +54,5 @@ Format: `- YYYY-MM-DD HH:MM ET · <who> · <file/type> · <change>`
     eligibility row-level (reset keeps the baseline); failed train/retrain keeps the previous ready model; transitions keys
     validated against `app_categories.json`; marker text ≤ 80 chars; `GET /decisions/{id}` falls back to Tiger.
   - Stub voice: fake header admin-only, operator override + label-aware default, `simulated=true` (api.md "Stub voice").
+- 2026-09-26 22:00 ET · Claude · additive: `GET /history/sessions` and `GET /history/anomalies` accept an optional `device_id`
+  (admin: any device; user: own devices only, a foreign id → `[]`). Breach trace-back from `/admin` → `/history?device_id=`.
