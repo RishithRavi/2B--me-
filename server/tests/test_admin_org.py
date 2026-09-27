@@ -185,6 +185,10 @@ def test_audit_trail_for_a_takeover_flow(client, monkeypatch):
     assert any(r["kind"] == "lock" and r["severity"] == 5 for r in rows)
     alerts = [r for r in rows if r["kind"] == "alert"]
     assert alerts and all(r["ref_id"] for r in alerts)
+    texts = [r["summary"] for r in alerts]
+    assert all("Alert:" not in s and "(severity" not in s for s in texts), texts
+    assert any(s.startswith("Takeover suspected — ") for s in texts), texts
+    assert "Different speaker blocked · simulated voice" in texts, texts  # a voice verdict: no behavioral feature
     # the operator reset is attributed as well: a named script via X-Actor, then a person's cookie session
     client.post("/api/demo/reset", json={"device_id": dev_a}, headers={**ADMIN, "X-Actor": "org-demo engine"})
     newest = audit(client, device_id=dev_a, limit=5)
@@ -251,6 +255,8 @@ def test_admin_lock_unlock_force_reverify_ack_note(client):
 
     tr = rt().extras["audit"].track(uuid.UUID(dev_a))
     assert tr.last_anomaly is not None and tr.last_anomaly.kind == "voice_spoof"
+    alert = next(r for r in audit(client, device_id=dev_a) if r["kind"] == "alert")
+    assert alert["summary"] == "Synthetic voice blocked · simulated voice" and alert["severity"] == 5
     r = act(client, dev_a, "ack_alert", anomaly_id=str(tr.last_anomaly.id))
     assert r.status_code == 200 and r.json()["summary"] == "Alert acknowledged (voice spoof)"
     assert r.json()["ref_id"] == str(tr.last_anomaly.id)
@@ -513,5 +519,41 @@ def test_audit_unit_dedupe_and_huge_z():
     rows = log.recent(10)
     assert len(rows) == 1 and rows[0].kind == "alert" and rows[0].handle == "Employee 07"
     assert "far outside baseline" in rows[0].summary and "2463" not in rows[0].summary
+    assert rows[0].summary.startswith("Takeover suspected — app transition pattern") and "(severity" not in rows[0].summary
     assert log.track(dev.id).last_anomaly.explanation == "template"
     assert sink.rows[0][0] == "audit_log" and sink.live == [(dev.id, None, "audit")]  # admins only (no owner)
+
+
+def test_audit_unit_voice_alert_text(monkeypatch):
+    """Voice verdicts read plainly, say when the voice was simulated, and never append a behavioral feature."""
+    from types import SimpleNamespace
+
+    from app.core import voice_demo
+    from app.core.audit import AuditLog
+    from twobme_common.types import AnomalyLive, DeviationOut
+
+    class Sink:
+        def insert(self, table, row):
+            pass
+
+        def publish(self, device_id, owner_id, type_, data):
+            pass
+
+    dev = SimpleNamespace(id=uuid.uuid4(), user_id=uuid.uuid4())
+    reg = SimpleNamespace(devices={dev.id: dev}, users={}, bound_device=lambda _uid: dev)
+    log = AuditLog(writer=Sink(), live=Sink(), registry=reg)
+    drt = SimpleNamespace(dev=dev)
+    top = [DeviationOut(feature="kb.backspace_rate", label="backspace rate", unit="frac", z=9.4)]
+
+    def alert(kind: str) -> str:
+        log.observe(drt, "anomaly", AnomalyLive(id=uuid.uuid4(), kind=kind, severity=5, trust_before=0.9,
+                                                trust_after=0.001, top_features=top))
+        return log.recent(1)[0].summary
+
+    monkeypatch.setattr(voice_demo, "voice_mode", lambda: "stub")
+    assert alert("voice_spoof") == "Synthetic voice blocked · simulated voice"
+    assert alert("voice_impostor") == "Different speaker blocked · simulated voice"
+    assert alert("lock") == "Device locked — backspace rate +9.4σ"
+    monkeypatch.setattr(voice_demo, "voice_mode", lambda: "real")
+    assert alert("voice_spoof") == "Synthetic voice blocked"
+

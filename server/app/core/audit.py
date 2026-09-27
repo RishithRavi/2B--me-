@@ -110,6 +110,12 @@ ISSUED_TEXT = {
     "step_up": ("Step-up voice challenge issued", 2),
     "unlock": ("Unlock voice challenge issued", 1),
 }
+ALERT_TEXT = {
+    "takeover_suspected": "Takeover suspected", "voice_spoof": "Synthetic voice blocked",
+    "voice_impostor": "Different speaker blocked", "trust_drop": "Trust drop", "lock": "Device locked",
+    "redteam_tool": "Red-team tool read the active challenge",
+}
+VOICE_KINDS = ("voice_spoof", "voice_impostor")
 LOCK_TEXT = {"voice_spoof": "voice spoof", "voice_impostor": "voice impostor", "lock": "failed TOTP",
              "admin_lock": "admin lock"}
 MARKER_TEXT = {
@@ -256,12 +262,17 @@ class AuditLog:
             t.last_redteam_audit = now
         else:
             t.last_anomaly, t.last_anomaly_at = a, utcnow()
+        summary = ALERT_TEXT.get(a.kind, a.kind.replace("_", " ").capitalize())
         top = a.top_features[0] if a.top_features else None
-        why = ""
-        if top is not None:  # a never-seen category can score |z| in the thousands: say "far outside" instead
-            why = f" — {top.label} " + (f"{top.z:+.1f}σ" if abs(top.z) <= 99 else "far outside baseline (|z| > 99)")
-        self._emit_dev(drt, "alert", f"Alert: {a.kind.replace('_', ' ')} (severity {a.severity}){why}",
-                       a.severity, a.id)
+        if a.kind in VOICE_KINDS:  # a voice verdict, not a behavioral deviation: say whether the voice was simulated
+            from app.core.voice_demo import voice_mode
+
+            if voice_mode() == "stub":
+                summary += " · simulated voice"
+        elif top is not None:  # a never-seen category can score |z| in the thousands: say "far outside" instead
+            summary += f" — {top.label} " + (f"{top.z:+.1f}σ" if abs(top.z) <= 99
+                                              else "far outside baseline (|z| > 99)")
+        self._emit_dev(drt, "alert", summary, a.severity, a.id)
 
     def _on_challenge(self, drt: Any, cl: Any) -> None:
         trigger, status = cl.trigger, cl.status
