@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ORG_SIZE } from "@/lib/admin-mock";
 import { api } from "@/lib/api";
 import { useMounted } from "@/lib/hooks";
 import type { StatusOut } from "@/lib/contracts";
@@ -13,31 +14,40 @@ import { cn } from "@/lib/utils";
 
 const POLL_MS = 15_000;
 
-const MOCK_STATUS: StatusOut = {
-  ok: true,
-  version: "mock",
-  uptime_s: 3600,
-  tiger: "up",
-  voice_warm: true,
-  demo_mode: true,
-  continuous_update: true,
-  writer: { queued: 0, dropped: 0, flushed: 18234, failed_batches: 0, last_flush_at: null },
-  devices_online: 1,
-  elevenlabs: { used_frac: 0.42 },
-  inference: null,
-  voice_mode: "stub",
-  model_backend: "twobme_ml",
-};
-
 type Tone = "ok" | "bad" | "warn" | "neutral";
 
-function Item({ ok, tone, label, hint, className }: { ok?: boolean | null; tone?: Tone; label: string; hint?: string; className?: string }) {
+/** Hidden below `sm`, so the phone strip shows whole items only instead of one cut mid-word at the edge. */
+const WIDE_ONLY = "hidden sm:inline-flex";
+
+function Item({
+  ok,
+  tone,
+  label,
+  short,
+  hint,
+  className,
+}: {
+  ok?: boolean | null;
+  tone?: Tone;
+  label: string;
+  /** shorter label shown below `sm` */
+  short?: string;
+  hint?: string;
+  className?: string;
+}) {
   const t: Tone = tone ?? (ok === null || ok === undefined ? "neutral" : ok ? "ok" : "bad");
   const color = { ok: "var(--trust-normal)", bad: "var(--trust-suspicious)", warn: "var(--trust-watch)", neutral: "var(--muted-foreground)" }[t];
   const body = (
-    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", className)}>
+    <span className={cn("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap", className)}>
       <span className="size-1.5 rounded-full" style={{ background: color }} />
-      {label}
+      {short ? (
+        <>
+          <span className="sm:hidden">{short}</span>
+          <span className="hidden sm:inline">{label}</span>
+        </>
+      ) : (
+        label
+      )}
     </span>
   );
   if (!hint) return body;
@@ -62,7 +72,7 @@ function explanations(s: StatusOut): string | null {
 }
 
 /** Stub voice is badged loudly: its results are canned, never live analysis (§8 C2 "Stub honesty"). */
-function StubVoice() {
+function StubVoice({ hint = "VOICE_MODE=stub: voice results on this server are canned demo outcomes, not a live analysis of the audio." }: { hint?: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -71,14 +81,36 @@ function StubVoice() {
           Voice: simulated (stub)
         </span>
       </TooltipTrigger>
-      <TooltipContent side="top">VOICE_MODE=stub: voice results on this server are canned demo outcomes, not a live analysis of the audio.</TooltipContent>
+      <TooltipContent side="top">{hint}</TooltipContent>
     </Tooltip>
   );
 }
 
 /**
+ * Mock mode describes no server: no Tiger, model, writer or devices-online claims, only what the browser simulates
+ * (a 20-device org on /admin, canned voice results, template explanations).
+ */
+function MockStrip({ pathname }: { pathname: string }) {
+  return (
+    <>
+      <StubVoice hint="Demo mode: voice results are simulated in this browser, never a live analysis of the audio." />
+      <Item
+        tone="warn"
+        label="demo · simulated in this browser"
+        short="demo · simulated"
+        hint="Mock mode: the data on this page is simulated in your browser, not read from a live device, Tiger or the model"
+      />
+      {pathname.startsWith("/admin") && (
+        <Item tone="neutral" label={`simulated org · ${ORG_SIZE} devices`} className={WIDE_ONLY} hint="The org console demo simulates this many employee devices in the browser" />
+      )}
+      <Item tone="neutral" label="explanations template" className={WIDE_ONLY} hint="Anomaly explanations in the demo come from a local template" />
+    </>
+  );
+}
+
+/**
  * Thin P0 status strip: stub-voice warning, Tiger, model backend, voice, writer queue/drops, devices online, retrain
- * mode and explanation source. Tolerates API down.
+ * mode and explanation source. Tolerates API down. Below `sm` only the voice, Tiger and device items show.
  */
 export function StatusFooter() {
   const pathname = usePathname();
@@ -90,11 +122,7 @@ export function StatusFooter() {
 
   useEffect(() => {
     if (!mounted) return; // wait for the client-side mock flag (hydration renders with the server value)
-    if (mock) {
-      setStatus(MOCK_STATUS);
-      setOffline(false);
-      return;
-    }
+    if (mock) return; // the mock strip describes the browser simulation, not a server
     let alive = true;
     const ctl = new AbortController();
     const poll = async () => {
@@ -126,17 +154,25 @@ export function StatusFooter() {
   return (
     <footer className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/85 backdrop-blur-md">
       <div className="scrollbar-thin mx-auto flex h-7 max-w-[1440px] items-center gap-4 overflow-x-auto px-4 font-mono text-[11px] text-muted-foreground sm:px-6">
-        {offline || !status ? (
+        {mock && mounted ? (
+          <MockStrip pathname={pathname} />
+        ) : offline || !status ? (
           <Item ok={offline ? false : null} label={offline ? "API offline" : "checking API…"} hint={checkedAt ? `last check ${fmtAgo(checkedAt)}` : undefined} />
         ) : (
           <>
             {status.voice_mode === "stub" && <StubVoice />}
-            <Item ok={status.ok} label={`API ${status.version}`} hint={`uptime ${fmtDuration(status.uptime_s)}${status.demo_mode ? " · demo mode" : ""}`} />
+            <Item
+              ok={status.ok}
+              label={`API ${status.version}`}
+              hint={`uptime ${fmtDuration(status.uptime_s)}${status.demo_mode ? " · demo mode" : ""}`}
+              className={WIDE_ONLY}
+            />
             <Item ok={status.tiger === "up"} label={`Tiger ${status.tiger}`} hint="Tiger Cloud (TimescaleDB): history, baselines, anomalies" />
             {backend && (
               <Item
                 tone={backend === "twobme_ml" ? "ok" : "warn"}
                 label={`model ${backend}`}
+                className={WIDE_ONLY}
                 hint={
                   backend === "twobme_ml"
                     ? "twobme_ml: per-user one-class detector, trained only on the enrolled person's blocks"
@@ -154,12 +190,18 @@ export function StatusFooter() {
             <Item
               ok={status.writer.dropped === 0 && status.writer.failed_batches === 0}
               label={`writer q ${status.writer.queued} · drop ${status.writer.dropped}`}
+              className={WIDE_ONLY}
               hint={`flushed ${status.writer.flushed.toLocaleString()} rows · failed batches ${status.writer.failed_batches}${status.writer.last_flush_at ? ` · last flush ${fmtAgo(status.writer.last_flush_at)}` : ""}`}
             />
-            <Item ok={status.devices_online > 0} label={`${status.devices_online} device${status.devices_online === 1 ? "" : "s"} online`} />
+            <Item
+              ok={status.devices_online > 0}
+              label={`${status.devices_online} device${status.devices_online === 1 ? "" : "s"} online`}
+              short={`${status.devices_online} online`}
+            />
             <Item
               tone="neutral"
               label={status.continuous_update ? "manual retrain" : "model frozen"}
+              className={WIDE_ONLY}
               hint={
                 status.continuous_update
                   ? "Only high-confidence genuine blocks become update candidates; retraining is operator-triggered (Retrain now)"
@@ -170,6 +212,7 @@ export function StatusFooter() {
               <Item
                 tone="neutral"
                 label={`explanations ${explain}`}
+                className={WIDE_ONLY}
                 hint={explain === "vultr" ? "Anomaly explanations from Vultr Serverless Inference (feature z-scores only)" : "Anomaly explanations use a local template (no inference key set)"}
               />
             )}
