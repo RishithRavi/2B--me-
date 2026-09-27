@@ -14,7 +14,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: { default: "2bME — continuous behavioral authentication", template: "%s · 2bME" },
   description:
-    "Login proves who you were. 2bME keeps checking who you are: a continuous trust score from privacy-safe typing, pointer and workflow rhythm, with a voice step-up that catches cloned voices.",
+    "Login proves who you were. 2bME keeps checking who you are: a continuous trust score from privacy-safe typing, pointer and scroll rhythm, with a voice or one-time-code step-up when it stops matching.",
   metadataBase: new URL("https://2bme.tech"),
 };
 
