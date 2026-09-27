@@ -15,9 +15,11 @@ Deployment target: **https://2bme.tech** on Vultr · HackGT 13
 
 ## What it does
 A macOS agent turns keyboard, trackpad, scroll and app-switching **timing** into privacy-safe aggregate
-blocks, streams them to a FastAPI scorer designed for Vultr Compute, and keeps a **continuous trust
-score** for the enrolled person. When someone else takes over the session, trust falls, and a high-risk action (a $2,000
-checkout) steps up to a **voice challenge**. ElevenLabs speaks a fresh phrase, and FFT/DSP features, a
+blocks and streams them to a FastAPI scorer designed for Vultr Compute. The active identity model uses
+keyboard, mouse and scroll evidence to maintain a **continuous trust score** for the enrolled person;
+workflow and temporal blocks remain available for diagnostics. When someone else takes over the session,
+trust falls, and a high-risk action (a $2,000 checkout) steps up to a **voice challenge**. ElevenLabs
+speaks a fresh phrase, and FFT/DSP features, a
 speaker embedding and a deepfake detector decide VERIFY / BLOCK_IMPOSTOR / BLOCK_SPOOF. Behavior alone
 never blocks. On the laptop itself, an always-on-top overlay shows live trust and takes over the screen
 with the voice check when someone else seems to be at the keyboard; a failed check locks the Mac.
@@ -77,11 +79,13 @@ uv sync --all-packages                                   # Python 3.12 workspace
 docker compose -f infra/docker-compose.dev.yml up -d db  # local TimescaleDB-HA on :5433
 TIGER_DATABASE_URL=postgres://postgres:postgres@localhost:5433/tsdb COOKIE_SECURE=false \
   uv run uvicorn app.main:app --app-dir server --port 8000
-cd web && corepack pnpm i && corepack pnpm dev           # http://localhost:3000 (proxies /api to :8000)
+npm install --global pnpm@12.6.0                         # once per development machine
+cd web && pnpm i && pnpm dev                             # http://localhost:3000 (proxies /api to :8000)
 scripts/gate.sh core                                     # merge gate
 ```
 Contracts: edit `packages/common/src/twobme_common/types.py` or `contracts/*.yaml`, then
 `uv run python scripts/core_gen_ts.py` (regenerates `web/src/lib/contracts.ts` + report schemas).
+Release and evidence steps: see `RELEASE_CHECKLIST.md`.
 
 Sponsors: Tiger Data · Vultr · ElevenLabs · .tech · NSA Hearsay. The Visa-style checkout is a clearly
 labelled demo scenario, not affiliated with Visa. `/admin`'s employee roster is synthetic, anonymized

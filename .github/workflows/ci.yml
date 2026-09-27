@@ -1,0 +1,54 @@
+name: merge gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: merge-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.6.0
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install web dependencies
+        run: pnpm --dir web install --frozen-lockfile
+
+      - name: Install overlay dependencies
+        run: pnpm --dir overlay install --frozen-lockfile
+
+      - name: Run privacy, contracts, Python, web, overlay, and local E2E checks
+        run: scripts/gate.sh all
+
+      - name: Build production web export
+        run: pnpm --dir web run build

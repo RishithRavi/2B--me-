@@ -68,6 +68,8 @@ Start these only after CP4 (Sat 19:00) is green:
    - Scroll: velocity, burst length, inter-scroll timing, reversals.
    - Workflow: app switching, task-switch latency, transition patterns, window/tab behavior, keyboard↔mouse transitions.
    - Temporal: frequency, burstiness, idle intervals, periodicity, FFT.
+   - **Current active model:** keyboard, mouse and scroll only. Workflow and temporal remain collected,
+     wire-compatible diagnostic evidence; real A/B validation did not justify using them for identity scoring.
 4. **Privacy is part of the product.**
    - Never record typed content, passwords, clipboard, document text, window titles, URLs or key identities.
    - Anonymize **on the device**, and send only aggregated blocks (§2.2).
@@ -548,6 +550,8 @@ Everything is under `/api`. WebSockets are under `/ws`. `api.2bme.tech` is an al
    - **Parameters:** C=1.0, D=1.0, B=0.5 (unit slope at 0), κ=0.5.
    - **Weights:** `w = {keyboard 1.0, mouse 1.0, scroll 0.5, workflow 0.4, temporal 0.05}`.
    - A missing modality contributes 0.
+   - The default v2 model emits scores only for keyboard, mouse and scroll. Workflow and temporal weights
+     remain in the frozen trust contract for old-artifact compatibility and have no active contribution.
 
 **Simulated defaults (be honest in the pitch).** These use the exact config above, with 2-tick arming:
 - **Genuine user with mild autocorrelation (AR ρ=0.6):** below 0.90 on about 3% of ticks, and 87% of 30-minute runs never arm a challenge.
