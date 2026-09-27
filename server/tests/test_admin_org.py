@@ -232,6 +232,8 @@ def test_admin_lock_unlock_force_reverify_ack_note(client):
     assert r.status_code == 200, r.text
     t = agent.tick("a")
     assert t["locked"] is False and t["confidence"] >= before - 0.05
+    # the pinned minimum recorded while admin-locked is not behavior: the roster sparkline has no V-dip
+    assert min(row_for(roster(client), dev_a)["sparkline"]) > 0.5
     assert act(client, dev_a, "unlock").status_code == 409  # not locked
 
     # force_reverify -> a proactive challenge through the issuer, sent to the agent; one at a time

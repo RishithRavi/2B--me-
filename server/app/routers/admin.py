@@ -110,7 +110,9 @@ def roster_row(drt: DeviceRuntime) -> RosterRow:
         model_version=mi.version if mi.status == "ready" or (mi.version and mi.status == "training") else None,
         model_backend=model_backend(r.models, dev.user_id),
         last_anomaly=tr.last_anomaly if tr else None, last_anomaly_at=tr.last_anomaly_at if tr else None,
-        sparkline=[round(p.confidence, 4) for p in list(drt.history)[-SPARK_N:]], flags=flags,
+        # the pinned minimum an admin lock (or a locked tick) records is not behavior: never part of the sparkline
+        sparkline=[round(p.confidence, 4) for p in list(drt.history) if p.level != "locked"][-SPARK_N:],
+        flags=flags,
     )
 
 
