@@ -1316,6 +1316,12 @@ class DeviceHub:
                 await self.send_agent(drt, AgentUnlock())
                 self.publish(drt, "unlock", {})
                 self.feed(drt, "lock", f"Device unlocked by {via}", 1)
+            if row["trigger"] == "unlock" and not drt.dev.locked and drt.label == "impostor":
+                # the owner's unlock VERIFY ends the open takeover: A's next actions are stamped genuine/a,
+                # the stage button flips back to "Mark takeover", and the label-aware stub default is VERIFY again
+                await self.add_marker(drt, "takeover_end", None,
+                                      f"owner verified by {'voice' if via == 'voice' else 'TOTP'}",
+                                      source=f"{via} unlock")
             if not drt.dev.locked:
                 drt.engine.anchor(self.cfg.anchors.verify)
                 drt.in_takeover = drt.failed_challenge = False

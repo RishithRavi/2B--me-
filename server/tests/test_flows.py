@@ -332,6 +332,60 @@ def test_unlock_only_via_voice_or_reset(client):
     agent.close()
 
 
+def test_owner_unlock_verify_ends_the_open_takeover(client):
+    """SC-5: takeover_start -> proactive BLOCK_SPOOF (lock) -> the owner's unlock VERIFY ends the takeover:
+    label genuine/a, a takeover_end marker, "Takeover ended (voice unlock)" in the feed."""
+    from app.core.runtime import rt
+
+    _uid, dev_id, agent = setup_monitored(client)
+    for _ in range(4):
+        agent.tick("a")
+    assert client.post("/api/demo/marker", json={"device_id": dev_id, "label": "takeover_start"}).status_code == 200
+    for _ in range(12):
+        agent.tick("b")
+    ch = next(m for m in agent.pending if m["type"] == "challenge" and m["trigger"] == "proactive")
+    r = client.post(f"/api/voice/challenges/{ch['challenge_id']}/response",
+                    files={"wav": ("a.wav", b"RIFF0000", "audio/wav")},
+                    headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
+    assert r.json()["outcome"]["device_locked"] is True
+    drt = rt().hub.devices[uuid.UUID(dev_id)]
+    assert (drt.label, drt.actor) == ("impostor", "b")  # a lock alone does not end the takeover
+    login(client, "a")  # the lock revoked A's web sessions
+    un = client.post("/api/voice/challenges", json={"reason": "unlock"})
+    assert un.status_code == 200, un.text
+    r = client.post(f"/api/voice/challenges/{un.json()['challenge_id']}/response",
+                    files={"wav": ("a.wav", b"RIFF0000", "audio/wav")})  # stub default for unlock: VERIFY
+    assert r.json()["outcome"]["device_locked"] is False
+    assert (drt.label, drt.actor) == ("genuine", "a")
+    assert [m.label for m in drt.markers if m.label.startswith("takeover")] == ["takeover_start", "takeover_end"]
+    feed = [f.text for f in drt.feed]
+    assert "Takeover ended (voice unlock)" in feed
+    assert rt().hub.snapshot(drt).label == "genuine"
+    agent.close()
+
+
+def test_unlock_verify_without_takeover_adds_no_marker(client):
+    """SC-5: an unlock VERIFY with no open takeover (label genuine) adds no takeover_end marker."""
+    from app.core.runtime import rt
+
+    _uid, dev_id, agent = setup_monitored(client)
+    for _ in range(10):
+        agent.tick("b")
+    d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
+    client.post(f"/api/voice/challenges/{d['challenge_id']}/response",
+                files={"wav": ("a.wav", b"RIFF0000", "audio/wav")},
+                headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
+    login(client, "a")
+    un = client.post("/api/voice/challenges", json={"reason": "unlock"}).json()
+    r = client.post(f"/api/voice/challenges/{un['challenge_id']}/response",
+                    files={"wav": ("a.wav", b"RIFF0000", "audio/wav")})
+    assert r.json()["outcome"]["device_locked"] is False
+    drt = rt().hub.devices[uuid.UUID(dev_id)]
+    assert not any(m.label == "takeover_end" for m in drt.markers)
+    assert not any("Takeover ended" in f.text for f in drt.feed)
+    agent.close()
+
+
 def test_rearm_and_redteam_active_challenge(client):
     _uid, dev_id, agent = setup_monitored(client)
     tl = client.post("/api/demo/rearm", json={"device_id": dev_id, "confidence": 0.31}, headers=ADMIN).json()
