@@ -13,7 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app.auth import hash_password
-from app.config import Settings, get_settings
+from app.config import Settings, get_settings, insecure_secrets
 from app.core.explain import Explainer
 from app.core.hub import DeviceHub, HubError
 from app.core.live import LiveBus
@@ -76,6 +76,10 @@ def build_runtime(s: Settings) -> Runtime:
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ANN201
     s = get_settings()
+    bad = insecure_secrets(s)
+    if bad:  # §5.3 "Secrets": the repo is public, so example / empty / dev-default secrets are known to everyone
+        raise RuntimeError(f"refusing to start with COOKIE_SECURE=true: {', '.join(bad)} empty or a public "
+                           "placeholder; set real values in .env (local dev: COOKIE_SECURE=false)")
     r = build_runtime(s)
     set_runtime(r)
     # Tiger: bounded wait so an outage never blocks startup (degraded mode)

@@ -1,28 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import VoiceEnroll from "../../components/voice/VoiceEnroll";
-import type { EnrollProgress } from "../../lib/contracts";
+import { VoiceEnroll } from "../../components/voice/voice-enroll";
+import {
+  FEATURE_SPEC,
+  type EnrollProgress,
+  type Modality,
+} from "../../lib/contracts";
 import { startPresence } from "../../sdk/presence";
 import styles from "./page.module.css";
 
 type Progress = Pick<EnrollProgress, "counts" | "gates" | "ready">;
-const gates: Record<string, number> = {
-  keyboard: 100,
-  mouse: 60,
-  scroll: 30,
-  workflow: 20,
-  temporal: 60,
-};
+// Workflow and temporal remain accepted by the wire contract for compatibility, but
+// are not active identity signals and therefore are not enrollment requirements.
+const activeModalities: readonly Modality[] = ["keyboard", "mouse", "scroll"];
+const gates = activeModalities.map(
+  (m) => [m, FEATURE_SPEC.modalities[m].enroll_gate] as const,
+);
 const labels: Record<string, string> = {
   keyboard: "Typing rhythm",
   mouse: "Pointer movement",
   scroll: "Scrolling",
-  workflow: "App & window changes",
-  temporal: "Activity rhythm",
 };
 const practice =
-  "A familiar rhythm emerges as you work. Write a short plan for your day, pause to think, and correct a few words. Switch between your usual apps, move the pointer, and scroll naturally.";
+  "A familiar rhythm emerges as you work. Write a short plan for your day, pause to think, correct a few words, move the pointer, and scroll naturally.";
 
 async function request<T>(url: string, data?: unknown): Promise<T> {
   const response = await fetch(`/api${url}`, {
@@ -157,8 +158,8 @@ export default function EnrollPage() {
       });
       setJob(result.job_id);
     });
-  const total = Object.keys(gates).length;
-  const complete = Object.entries(gates).filter(
+  const total = gates.length;
+  const complete = gates.filter(
     ([m, n]) => (progress.counts[m] ?? 0) >= n,
   ).length;
 
@@ -423,7 +424,7 @@ export default function EnrollPage() {
             <br />
             one signal at a time.
           </h2>
-          {Object.entries(gates).map(([m, goal]) => {
+          {gates.map(([m, goal]) => {
             const count = progress.counts[m] ?? 0;
             return (
               <div className={styles.signal} key={m}>
@@ -441,9 +442,7 @@ export default function EnrollPage() {
                 <small>
                   {count >= goal
                     ? "Collection goal reached"
-                    : m === "temporal"
-                      ? "Non-overlapping 30-second windows"
-                      : "Evidence blocks"}
+                    : "Evidence blocks"}
                 </small>
               </div>
             );

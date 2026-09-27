@@ -5,6 +5,10 @@
 #   3. scripts/core_replay_ticks.py --e2e: enroll → train from Tiger → genuine → takeover → suspicious →
 #      proactive challenge → C → stub BLOCK_IMPOSTOR → lock → N → unlock VERIFY → co-present Y
 # When Codex 1's fixtures + `twobme-agent replay` land, step 3 also replays genuine_A then impostor_B.
+# MODEL_BACKEND defaults to `fallback` here: the fast synthetic run enrolls 40 ticks, below twobme_ml's gates.
+# `MODEL_BACKEND=auto scripts/core_e2e_local.sh` must pass too (twobme_ml refuses → that job trains the
+# fallback model and the identity card says so). Paced twobme_ml variant (~6 min, real model):
+#   MODEL_BACKEND=twobme_ml E2E_ENROLL_TICKS=110 E2E_ENROLL_INTERVAL=3 scripts/core_e2e_local.sh
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -17,10 +21,22 @@ cleanup() { [ -n "$PID" ] && kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev
 trap cleanup EXIT
 
 docker compose -f infra/docker-compose.dev.yml up -d db >/dev/null
-for _ in $(seq 1 60); do
-  docker compose -f infra/docker-compose.dev.yml exec -T db pg_isready -U postgres -d tsdb >/dev/null 2>&1 && break
+ready_streak=0
+for _ in $(seq 1 120); do
+  if docker compose -f infra/docker-compose.dev.yml exec -T db pg_isready -U postgres -d tsdb >/dev/null 2>&1 \
+    && docker compose -f infra/docker-compose.dev.yml exec -T db psql -U postgres -d postgres -qc "SELECT 1" >/dev/null 2>&1; then
+    ready_streak=$((ready_streak + 1))
+    [ "$ready_streak" -ge 3 ] && break
+  else
+    ready_streak=0
+  fi
   sleep 1
 done
+if [ "$ready_streak" -lt 3 ]; then
+  echo "TimescaleDB did not become stably ready"
+  docker compose -f infra/docker-compose.dev.yml logs --tail=80 db
+  exit 1
+fi
 if [ -z "${E2E_DB_URL:-}" ]; then  # fresh database every run (no cross-run training contamination)
   docker compose -f infra/docker-compose.dev.yml exec -T db psql -U postgres -d postgres -qc "DROP DATABASE IF EXISTS tsdb_e2e WITH (FORCE)" >/dev/null
   docker compose -f infra/docker-compose.dev.yml exec -T db psql -U postgres -d postgres -qc "CREATE DATABASE tsdb_e2e" >/dev/null
@@ -28,7 +44,9 @@ fi
 
 export TIGER_DATABASE_URL="$DB_URL" DATA_DIR="$TMP/data" REPORTS_DIR="$TMP/reports" COOKIE_SECURE=false \
        DEMO_MODE=true ADMIN_TOKEN="e2e-admin" SEED_PASSWORD_A="e2e-a" SEED_PASSWORD_B="e2e-b" \
-       SEED_PASSWORD_ADMIN="e2e-admin-pw" DECISION_TICK_WAIT_S=0.2 WRITER_FLUSH_S=0.5
+       SEED_PASSWORD_ADMIN="e2e-admin-pw" DECISION_TICK_WAIT_S=0.2 WRITER_FLUSH_S=0.5 \
+       MODEL_BACKEND="${MODEL_BACKEND:-fallback}"
+echo "e2e: MODEL_BACKEND=$MODEL_BACKEND port=$PORT db=${DB_URL##*/}"
 uv run uvicorn app.main:app --app-dir server --port "$PORT" --log-level warning >"$LOG" 2>&1 &
 PID=$!
 for _ in $(seq 1 60); do
@@ -41,7 +59,8 @@ fi
 
 set +e
 uv run python scripts/core_replay_ticks.py --e2e --api "http://localhost:$PORT" \
-  --password "e2e-a" --admin-token "e2e-admin"
+  --password "e2e-a" --admin-token "e2e-admin" \
+  --enroll-ticks "${E2E_ENROLL_TICKS:-40}" --enroll-interval "${E2E_ENROLL_INTERVAL:-0}"
 rc=$?
 set -e
 if [ "$rc" -ne 0 ]; then echo "--- api log (tail) ---"; tail -60 "$LOG"; fi

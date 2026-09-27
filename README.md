@@ -15,13 +15,19 @@ Deployment target: **https://2bme.tech** on Vultr · HackGT 13
 
 ## What it does
 A macOS agent turns keyboard, trackpad, scroll and app-switching **timing** into privacy-safe aggregate
-blocks, streams them to a FastAPI scorer designed for Vultr Compute, and keeps a **continuous trust
-score** for the enrolled person. When someone else takes over the session, trust falls, and a high-risk action (a $2,000
-checkout) steps up to a **voice challenge**. ElevenLabs speaks a fresh phrase, and FFT/DSP features, a
+blocks and streams them to a FastAPI scorer designed for Vultr Compute. The active identity model uses
+keyboard, mouse and scroll evidence to maintain a **continuous trust score** for the enrolled person;
+workflow and temporal blocks remain available for diagnostics. When someone else takes over the session,
+trust falls, and a high-risk action (a $2,000 checkout) steps up to a **voice challenge**. ElevenLabs
+speaks a fresh phrase, and FFT/DSP features, a
 speaker embedding and a deepfake detector decide VERIFY / BLOCK_IMPOSTOR / BLOCK_SPOOF. Behavior alone
 never blocks. On the laptop itself, an always-on-top overlay shows live trust and takes over the screen
 with the voice check when someone else seems to be at the keyboard; a failed check locks the Mac.
 Tiger Data stores the behavior history, baselines and anomalies.
+
+For a security team, `/admin` gives org-wide visibility: a roster of employee sessions, insider-threat
+and anomaly surfacing across the org, and an audit trail of trust changes, alerts and challenges — the
+same continuous-identity signal, aggregated instead of per-person.
 
 ```
 agent (PyObjC tap → key classes → evidence blocks) ──wss──▶ FastAPI hub (Vultr target) ──▶ TrustEngine ──▶ dashboard
@@ -61,7 +67,7 @@ retains it in account history (Zero Retention is enterprise-only). `STT_BACKEND=
 | `contracts/` | frozen contracts: feature spec, trust config, WS/REST docs, schemas, fixtures | Claude |
 | `packages/common` | `twobme_common`: shared pydantic DTOs, spec loader, config | Claude |
 | `server/` | FastAPI hub, policy, Tiger writer/history, auth | Claude (`server/app/voice`: Codex 2) |
-| `web/` | Next.js static site (landing, dashboard, history, lab, shop, verify, enroll, overlay) | Claude / Codex 1 / Codex 2 |
+| `web/` | Next.js static site (landing, dashboard, history, lab, shop, verify, enroll, overlay, admin) | Claude / Codex 1 / Codex 2 |
 | `overlay/` | Electron on-laptop overlay: trust pill → full-screen voice check on a suspected takeover → lock screen | Claude |
 | `infra/` | Docker Compose, Caddy, migrations, deploy | Claude |
 | `agent/`, `packages/features`, `packages/ml` | macOS agent, feature extraction, models, TrustEngine | Codex 1 |
@@ -73,11 +79,14 @@ uv sync --all-packages                                   # Python 3.12 workspace
 docker compose -f infra/docker-compose.dev.yml up -d db  # local TimescaleDB-HA on :5433
 TIGER_DATABASE_URL=postgres://postgres:postgres@localhost:5433/tsdb COOKIE_SECURE=false \
   uv run uvicorn app.main:app --app-dir server --port 8000
-cd web && corepack pnpm i && corepack pnpm dev           # http://localhost:3000 (proxies /api to :8000)
+npm install --global pnpm@12.6.0                         # once per development machine
+cd web && pnpm i && pnpm dev                             # http://localhost:3000 (proxies /api to :8000)
 scripts/gate.sh core                                     # merge gate
 ```
 Contracts: edit `packages/common/src/twobme_common/types.py` or `contracts/*.yaml`, then
 `uv run python scripts/core_gen_ts.py` (regenerates `web/src/lib/contracts.ts` + report schemas).
+Release and evidence steps: see `RELEASE_CHECKLIST.md`.
 
 Sponsors: Tiger Data · Vultr · ElevenLabs · .tech · NSA Hearsay. The Visa-style checkout is a clearly
-labelled demo scenario, not affiliated with Visa.
+labelled demo scenario, not affiliated with Visa. `/admin`'s employee roster is synthetic, anonymized
+demo data generated in the browser — no real person's behavior.

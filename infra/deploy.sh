@@ -26,14 +26,16 @@ if [ "$day" = "Sun" ] && [ "$hm" -ge 0900 ] && [ "$hm" -lt 1130 ] && [ "${FORCE_
 fi
 [ -f .env ] || { echo ".env missing (copy .env.example and fill it)"; exit 1; }
 mkdir -p data reports
+export UV_EXTRAS="${UV_EXTRAS:-}"
 
 if [ "$PULL" = 1 ]; then git pull --ff-only; fi
 echo "deploying $(git rev-parse --short HEAD)"
 
-lock=$(sha256sum uv.lock | cut -c1-12)
+lock=$( { sha256sum uv.lock; printf '%s\n' "$UV_EXTRAS"; } | sha256sum | cut -c1-12)
 if [ "$REBUILD_BASE" = 1 ] || ! docker image inspect "twobme-base:$lock" >/dev/null 2>&1; then
-  echo "building twobme-base:$lock (uv.lock changed)…"
-  docker build -f infra/Dockerfile.base -t "twobme-base:$lock" -t twobme-base:latest .
+  echo "building twobme-base:$lock (dependency lock or extras changed)…"
+  docker build --build-arg UV_EXTRAS="$UV_EXTRAS" \
+    -f infra/Dockerfile.base -t "twobme-base:$lock" -t twobme-base:latest .
 else
   docker tag "twobme-base:$lock" twobme-base:latest
 fi

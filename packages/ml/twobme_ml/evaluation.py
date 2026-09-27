@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_curve, roc_auc_score, confusion_matrix
 from twobme_common.types import Block
-from .model import UserModel, temporal_subset, GATES
+from .model import ACTIVE_MODALITIES, UserModel, temporal_subset, GATES
 
 
 def roc_metrics(genuine, impostor):
@@ -114,7 +114,13 @@ def live_trials(markers, ticks):
     return trials
 
 
-def evaluate(df, cfg, markers=(), ticks=()):
+def heldout_scores(df, cfg):
+    """Official held-out split and block scores behind `evaluate`.
+
+    Returns the A (and, if trainable, B) models, per-actor typicality series by modality,
+    one record per scored block (actor, session, modality, time, typicality), and the
+    identification truth/prediction pairs.
+    """
     a = df[(df.actor == "a") & (df.label == "genuine")].sort_values("time")
     b = df[(df.actor == "b") & (df.label == "impostor")].sort_values("time")
     if len(a) < 2 or len(b) < 2:
@@ -149,8 +155,8 @@ def evaluate(df, cfg, markers=(), ticks=()):
         )
     atest = temporal_subset(atest)
     btest = temporal_subset(btest)
-    results = {}
     series = {"a": {}, "b": {}}
+    records = []
     truth = []
     pred = []
     for actor, rows in [("a", atest), ("b", btest)]:
@@ -162,10 +168,23 @@ def evaluate(df, cfg, markers=(), ticks=()):
                 series[actor].setdefault(block.modality, []).append(
                     (pd.Timestamp(row.time), sa.typicality)
                 )
+                records.append(
+                    {"actor": actor, "session": row.session_id, "modality": block.modality,
+                     "t": pd.Timestamp(row.time), "typicality": sa.typicality}
+                )
             if sa and sb:
                 truth.append(actor)
                 pred.append("a" if sa.typicality >= sb.typicality else "b")
-    for m in GATES:
+    return {"a_model": am, "b_model": bm, "b_model_note": b_model_note, "series": series,
+            "records": records, "truth": truth, "pred": pred}
+
+
+def evaluate(df, cfg, markers=(), ticks=(), held=None):
+    held = held or heldout_scores(df, cfg)
+    am, bm, b_model_note = held["a_model"], held["b_model"], held["b_model_note"]
+    series, truth, pred = held["series"], held["truth"], held["pred"]
+    results = {}
+    for m in ACTIVE_MODALITIES:
         ga = [t for _, t in series["a"].get(m, [])]
         im = [t for _, t in series["b"].get(m, [])]
         beta, weak = beta_mle(im)
@@ -188,8 +207,6 @@ def evaluate(df, cfg, markers=(), ticks=()):
                 "keyboard": 1,
                 "mouse": 1,
                 "scroll": 0.5,
-                "workflow": 0.4,
-                "temporal": 0.05,
             },
         )
         return [

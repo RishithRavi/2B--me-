@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,6 +25,8 @@ class Settings(BaseSettings):
     totp_enc_key: str = ""
     continuous_update: bool = True
     training_frozen: bool = False
+    # identity model backend (§5.7): auto = twobme_ml when importable, else the server's FallbackUserModel
+    model_backend: Literal["auto", "twobme_ml", "fallback"] = "auto"
 
     # Tiger
     tiger_database_url: str = ""
@@ -71,6 +74,26 @@ class Settings(BaseSettings):
 
     def verify_url(self, challenge_id: object) -> str:
         return f"{self.public_base_url.rstrip('/')}/verify?c={challenge_id}"
+
+
+# Values that are public (the repo is public): the .env.example placeholders and the dev defaults above.
+PUBLIC_SECRET_VALUES = frozenset({
+    "", "change-me", "change-me-64-random-bytes", "changeme", "dev-insecure-session-secret",
+    "a-dev-password", "b-dev-password", "admin-dev-password",
+})
+SECRET_SETTINGS = ("session_secret", "admin_token", "seed_password_a", "seed_password_b", "seed_password_admin")
+
+
+def insecure_secrets(s: Settings) -> list[str]:
+    """Env names of secrets that are empty or public. Only enforced with COOKIE_SECURE=true (§5.3 "Secrets")."""
+    if not s.cookie_secure:
+        return []
+    bad = []
+    for name in SECRET_SETTINGS:
+        v = str(getattr(s, name) or "").strip()
+        if v.lower() in PUBLIC_SECRET_VALUES or v.lower().startswith("change-me"):
+            bad.append(name.upper())
+    return bad
 
 
 @lru_cache(maxsize=1)

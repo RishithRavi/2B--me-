@@ -11,6 +11,8 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
 
 ## Open
 
+- [ ] 2026-09-26 19:05 ET · from Codex 1 → Claude · core fallback/docs/contracts · The user removed workflow and temporal from the active identity model after the real-data comparison. `twobme_ml`, evaluation, trust scoring and `/enroll` now use keyboard/mouse/scroll only while preserving the five-modality wire schema. Please make the core fallback model use the same three active modalities and revise the core-owned `IMPLEMENTATION.md` plus the now-obsolete workflow-gate CHANGELOG wording. Do not remove schema fields or stored-data compatibility. · blocking? n
+
 ## Done
 
 ## Codex 2 — 2026-09-26 — C0 / pre-CP0
@@ -86,3 +88,64 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
 - **Claude / e2e gate:** `scripts/gate.sh voice` passes, but skips end-to-end
   validation because `scripts/core_e2e_local.sh` is absent on the CP0 base.
   Real microphone/model tests remain pending, separate from this missing gate.
+## Codex 2 — C2 service integration (2026-09-26)
+
+- **Claude / deployment dependency (blocks real runtime):** the voice routes now
+  support `VOICE_MODE=real`, but `server/pyproject.toml` and the API image still
+  do not install `hearsay[server]`. Please add the workspace dependency/source and
+  update the lock/image on the VM. Stub imports deliberately remain usable
+  without optional voice packages. No model weights were installed on the Mac.
+- **Claude / configuration:** expose the voice-owned settings documented in
+  `server/app/voice/README.md` in `.env.example` / deployment wiring: VOICE_MODE,
+  calibration path, CM/ECAPA SHA pins, local STT model path, quiet/expo enrollment
+  label, and prompt voice ID. Real mode requires measured calibration and warm
+  models; fake headers work only in demo stub mode. The existing example VOICE_T_*
+  values are not silently treated as calibrated production thresholds.
+- **Claude / ingress:** retain a bounded multipart request limit at Caddy/API
+  ingress. Voice closes all UploadFile objects and caps each read at 8 MiB, but
+  FastAPI parses/spools the multipart body before the endpoint reader executes.
+- The approved rank offset correction (`-0.5`) and 64+20 spectral profile layout
+  are implemented. The earlier spectral-dimension blocker is resolved. A DTO
+  exposing enrolled LTAS to the UI is still separate from server-side scoring.
+- Remaining box-dependent validation: actual pinned model loading, fit CM
+  calibration / speaker thresholds using consented captures, and record accuracy
+  and VM latency. The HTTP/pipeline tests use fake model adapters and synthetic
+  audio; they are not detector-performance evidence.
+- **Operator / runtime access:** run Codex 2's `scripts/voice_setup_box.sh` from a
+  clean Linux amd64 checkout, or provide the SSH target and absolute checkout
+  path so Codex 2 can run it. The 20+20 smoke also needs the private consented
+  genuine and ElevenLabs corpus paths on that host. No matching SSH alias or
+  local calibration corpus is currently available.
+- **Claude / Codex 1 — post-merge gate regressions:** after merging current
+  `origin/main` (`4060101`), `scripts/gate.sh voice` reports stale generated
+  `web/src/lib/contracts.ts`, and `server/tests/test_flows.py::test_copresent_owner_frictionless_purchase`
+  hangs after `packages/ml/twobme_ml/trust.py` rejects an out-of-order tick. The
+  voice-owned suite remains green (124 tests). These files are outside Codex 2
+  ownership. A separate local `uv sync` step also could not fetch `hatchling`
+  because this sandbox has no PyPI DNS; that is an environment failure.
+- **Codex 1 / review + real-data run (branch `ml-wider-gap-13wf`):** at the user's request, Claude edited signals-owned files:
+  - `packages/ml`: detector v2, cross-conformal scoring, temporal fitted on every window, gates from the spec.
+  - `scripts/sig_gap_experiment.py`, `scripts/sig_prepare_demo.py` (workflow rationale).
+  - `agent/TRAINING.md`, `agent/COLLECTION_PROTOCOL.md`, `web/src/app/enroll/page.tsx`, and a float tolerance in `test_features.py`.
+
+  `detector: v1` restores the old model exactly. Please:
+  - run `uv run python scripts/sig_gap_compare.py --run-dir <your real run>` and share `gap-compare.json` (aggregates only);
+  - confirm v2 before anyone packages or activates it. The simulated gains are development evidence only.
+- **Codex 1 / trust engine:** since `twobme_ml` joined the server's environment, `twobme_ml.trust.TrustEngine.on_tick` raises
+  "Out-of-order tick must not be scored" inside the hub (`hub.py` → `on_tick`). This fails
+  `server/tests/test_flows.py::test_copresent_owner_frictionless_purchase` and `core_e2e_local.sh` on `main`. The server's
+  fallback engine clamps `dt = max(0, t_end - t_prev)` (`trust_fallback.py:57`) instead of raising.
+
+## Codex 2 — gate resolution (2026-09-26 19:46 ET)
+
+- **Resolved:** `server/pyproject.toml` now installs the base Hearsay package and
+  exposes the `voice` extra for `hearsay[server]`; the API/base Dockerfiles accept
+  the matching `UV_EXTRAS` build argument. `.env.example` documents every real
+  voice setting while keeping the deployable demo on explicit stub mode.
+- **Resolved:** the core hub safely stores and acknowledges out-of-order ticks
+  without scoring them, `jsdom` is locked for web tests, and the fast E2E pins
+  the fallback backend without weakening real-model enrollment gates.
+- **Validation:** `scripts/gate.sh voice` passes every step, including 49 server
+  tests, 44 web tests, overlay tests and the complete local Tiger E2E. Remaining
+  operator work is the real Vultr model preload, measured voice calibration and
+  hardware smoke test; those are deployment evidence, not merge-gate failures.

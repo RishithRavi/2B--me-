@@ -15,6 +15,7 @@ export class NativeRecorder {
   readonly context = new AudioContext(); // native sample rate; server owns resampling
   analyser: AnalyserNode | null = null;
   micName = "";
+  openedAtMs = 0;
   private stream: MediaStream | null = null;
   private node: AudioWorkletNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
@@ -43,6 +44,7 @@ export class NativeRecorder {
       const track = stream.getAudioTracks()[0];
       if (!track || track.getSettings().deviceId !== pinned.deviceId) throw new Error("The browser selected another microphone.");
       this.micName = track.label;
+      this.openedAtMs = this.context.currentTime * 1000;
       track.onended = () => { void this.close(); };
       await this.context.audioWorklet.addModule("/worklets/voice-pcm.js");
       this.checkOpen();

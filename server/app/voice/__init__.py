@@ -1,19 +1,21 @@
-"""Voice step-up service (§8 C2). STUB committed by Claude at A0; ownership → Codex 2 at CP0.
+"""Voice service exports frozen at CP0."""
 
-Exports (the contract the app relies on — keep these names):
-    router: APIRouter            # mounted at /api/voice
-    issuer: ChallengeIssuer      # app.core.ports.ChallengeIssuer
-    async def startup() -> None  # preload + warm-up; lifespan awaits it (timeout)
-    def score_audio(x, sr, profile) -> CMResult
-Hub callbacks: app.core.events.{challenge_status, voice_stage, voice_decided, totp_decided}.
-Persistence: app.db.repo_voice.
-"""
-
-from app.voice.issuer import FakeIssuer
+from app.voice.issuer import VoiceIssuer
 from app.voice.router import router
-from app.voice.service import score_audio
 from app.voice.startup import startup
 
-issuer = FakeIssuer()
+issuer = VoiceIssuer()
+
+
+def score_audio(x, sr, profile):
+    from twobme_common.types import CMResult
+
+    from app.voice.state import state
+
+    current = state()
+    if current.mode == "stub":
+        return CMResult(margin=0, ms={"total": 0})
+    return current.pipeline.score_audio(x, sr, profile)
+
 
 __all__ = ["router", "issuer", "startup", "score_audio"]

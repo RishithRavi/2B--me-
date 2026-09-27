@@ -71,7 +71,7 @@ twobme-ml eval --from-logs /path/a.jsonl /path/b.jsonl --live-evidence /path/tri
 
 `--speed > 1` requires enroll mode; it is ingestion only, never a live trust demonstration. Replay rebases the log's monotonic start to the current wall clock. For trustworthy offline temporal evaluation, evaluate the original logs, not accelerated network timestamps.
 
-`TIGER_DATABASE_URL` is needed only for `--from-db`. No server or Tiger is needed for `--from-logs`. Calibration needs enough chronological coverage for all five purged folds in addition to each modality's enrollment gate. Underfilled modalities are explicitly disabled; training refuses to emit an empty model. Load joblib artifacts only from trusted local storage.
+`TIGER_DATABASE_URL` is needed only for `--from-db`. No server or Tiger is needed for `--from-logs`. Calibration needs enough chronological coverage for all five purged folds in addition to each active modality's enrollment gate. The identity model uses keyboard, mouse and scroll; workflow and temporal remain wire-compatible but are not scored. Underfilled active modalities are explicitly disabled, and training refuses to emit an empty model. Load joblib artifacts only from trusted local storage.
 
 Live evidence is a JSON object with `markers: [{t,label}]` and `ticks: [{t,confidence}]`. TTD requires two consecutive ticks below .40 and is bounded by the trial end/300 seconds. Supply at least five actual trials. The committed report is an honest pending-data report, not a synthetic claim about A/B.
 

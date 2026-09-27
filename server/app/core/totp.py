@@ -29,6 +29,13 @@ def _fernet() -> Fernet:
 
 
 def enroll(user: User) -> str:
+    """§5.3 factor rule: replacing an existing TOTP secret needs a fresh strong factor — a voice/TOTP VERIFY
+    on the user's bound device in the last 5 min — or an admin. Otherwise HTTP 409 (via HubError)."""
+    if user.totp_secret_enc and user.role != "admin" and not rt().hub.recent_strong_verify(user.id):
+        from app.core.hub import HubError
+
+        raise HubError(409, "TOTP is already set up; replacing it needs a voice or TOTP check on your device "
+                            "in the last 5 minutes (or an admin)")
     secret = pyotp.random_base32()
     user.totp_secret_enc = _fernet().encrypt(secret.encode()).decode()
     rt().registry.save_user(user)
