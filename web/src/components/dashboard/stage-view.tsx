@@ -11,7 +11,7 @@ import type { LiveState } from "@/lib/live";
 import { takeoverOpen } from "@/lib/ttd";
 
 import { ChallengeBanner } from "./banners";
-import { ConnectionBadge, stageLink } from "./dashboard-view";
+import { ConnectionBadge, liveLevel, stageLink } from "./dashboard-view";
 import { EventFeed } from "./event-feed";
 import { SecureInputBanner } from "./health-pills";
 import { ModalityBars } from "./modality-bars";
@@ -50,6 +50,7 @@ export function StageView({
   const [hidden, setHidden] = useState<string | null>(null);
   const view = currentVoiceView(state, now);
   const voice = view && `${view.challengeId}:${view.result?.t ?? "scoring"}` !== hidden ? view : null;
+  const level = liveLevel(state);
 
   return (
     <div className="bg-console-grid fixed inset-0 z-50 flex flex-col overflow-auto bg-background">
@@ -94,9 +95,9 @@ export function StageView({
             <div className="grid gap-5 lg:grid-cols-2">
               <div className="panel p-5">
                 <div className="eyebrow mb-3 text-xs">Why</div>
-                <WhyChips blocks={state.blocks} large limit={6} />
+                <WhyChips blocks={state.blocks} level={level} large limit={6} />
                 <div className="mt-5">
-                  <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} large />
+                  <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} level={level} large />
                 </div>
               </div>
               <div className="panel flex flex-col p-5">

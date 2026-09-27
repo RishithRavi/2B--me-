@@ -198,11 +198,11 @@ export function BehaviorPanel({
         </div>
 
         <Section icon={Fingerprint} title="What counted" hint="last update, per modality (ΔL)">
-          <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} />
+          <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} level={level} />
         </Section>
 
         <Section icon={Sparkles} title="Why" hint="largest deviations from your profile">
-          <WhyChips blocks={state.blocks} limit={4} />
+          <WhyChips blocks={state.blocks} level={level} limit={4} />
         </Section>
 
         <Section icon={Fingerprint} title="Your identity model">

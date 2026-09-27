@@ -4,8 +4,9 @@ import { presenceWanted } from "@/components/site/presence-mount";
 import { initialLiveState } from "@/lib/live";
 import { modelBackendLabel } from "@/lib/ui";
 
-import { stageLink } from "./dashboard-view";
+import { liveLevel, stageLink } from "./dashboard-view";
 import { needsResnapshot } from "./live-hooks";
+import { redChip } from "./why-chips";
 
 describe("needsResnapshot (stream opened before the device existed)", () => {
   const s = { ...initialLiveState(), connected: true, synced: true };
@@ -57,5 +58,27 @@ describe("presenceWanted (root-layout co-presence beacon)", () => {
     expect(presenceWanted({ ...ok, status: "anon" })).toBe(false);
     expect(presenceWanted({ ...ok, status: "loading" })).toBe(false);
     expect(presenceWanted({ ...ok, mock: true })).toBe(false);
+  });
+});
+
+describe("why-chip alarm color follows the trust level", () => {
+  const against = { against: true, z: -3.1 };
+  it("is grey at Normal (and before any trust), red at Watch, Suspicious and Locked", () => {
+    expect(redChip(against, "normal")).toBe(false);
+    expect(redChip(against, null)).toBe(false);
+    expect(redChip(against, "learning")).toBe(false);
+    expect(redChip(against, "watch")).toBe(true);
+    expect(redChip(against, "suspicious")).toBe(true);
+    expect(redChip(against, "locked")).toBe(true);
+  });
+  it("needs a block that counted against the owner and |z| >= 2", () => {
+    expect(redChip({ against: false, z: -3.1 }, "suspicious")).toBe(false);
+    expect(redChip({ against: true, z: 1.4 }, "suspicious")).toBe(false);
+  });
+  it("liveLevel reports Locked for a locked device", () => {
+    const s = initialLiveState();
+    expect(liveLevel(s)).toBeNull();
+    const device = { id: "d1", label: "Mac", pointer: "trackpad" as const, mode: "monitor" as const, locked: true, lock_reason: null, last_seen: null };
+    expect(liveLevel({ ...s, device })).toBe("locked");
   });
 });

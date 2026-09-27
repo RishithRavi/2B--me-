@@ -3,23 +3,27 @@
 import { motion } from "framer-motion";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { BlockScored, Modality, TrustLive } from "@/lib/contracts";
-import { MODALITIES, fmtAgo, fmtSigned, modalityColor, modalityIcon, modalityLabel } from "@/lib/ui";
+import type { BlockScored, Level, Modality, TrustLive } from "@/lib/contracts";
+import { MODALITIES, alarmLevel, fmtAgo, fmtSigned, modalityColor, modalityIcon, modalityLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 /**
  * Signed per-modality contribution to the last trust update (ΔL = κ·w·q·f(llr)).
- * Right of center = evidence for the owner (modality color), left = against (red).
+ * Right of center = evidence for the owner (modality color), left = against (red at Watch or below, grey at Normal).
  */
 export function ModalityBars({
   trust,
   lastBlocks,
+  level,
   large = false,
 }: {
   trust: TrustLive | null;
   lastBlocks: Partial<Record<Modality, BlockScored>>;
+  /** current trust level (locked when the device is locked): negative bars are red only when it is not Normal */
+  level: Level | null | undefined;
   large?: boolean;
 }) {
+  const alarm = alarmLevel(level);
   const per = trust?.per_modality ?? {};
   const maxAbs = Math.max(0.25, ...MODALITIES.map((m) => Math.abs(per[m]?.delta ?? 0)));
 
@@ -31,7 +35,7 @@ export function ModalityBars({
         const delta = c?.delta ?? null;
         const frac = delta === null ? 0 : Math.min(1, Math.abs(delta) / maxAbs);
         const neg = (delta ?? 0) < 0;
-        const barColor = neg ? "var(--trust-suspicious)" : modalityColor(m);
+        const barColor = neg ? (alarm ? "var(--trust-suspicious)" : "var(--muted-foreground)") : modalityColor(m);
         const last = lastBlocks[m];
         return (
           <Tooltip key={m}>
@@ -53,7 +57,7 @@ export function ModalityBars({
                     />
                   )}
                 </div>
-                <div className={cn("tnum text-right font-mono text-xs", large && "text-sm", delta === null ? "text-muted-foreground" : neg ? "text-trust-suspicious" : "text-foreground")}>
+                <div className={cn("tnum text-right font-mono text-xs", large && "text-sm", delta === null || (neg && !alarm) ? "text-muted-foreground" : neg ? "text-trust-suspicious" : "text-foreground")}>
                   {delta === null ? "—" : fmtSigned(delta)}
                 </div>
               </div>

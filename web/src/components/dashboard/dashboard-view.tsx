@@ -7,6 +7,7 @@ import { Dot } from "@/components/site/empty-state";
 import { Panel } from "@/components/site/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { Level } from "@/lib/contracts";
 import { useNow } from "@/lib/hooks";
 import type { LiveState, LiveStore } from "@/lib/live";
 import { fmtAgo, shortId } from "@/lib/ui";
@@ -48,6 +49,12 @@ export function ConnectionBadge({ state, mock }: { state: LiveState; mock: boole
   );
 }
 
+/** The level the why-chips and modality bars key their alarm color on: Locked while the device is locked. */
+export function liveLevel(state: Pick<LiveState, "device" | "trust">): Level | null {
+  if (state.device?.locked || state.trust?.locked) return "locked";
+  return state.trust?.level ?? null;
+}
+
 /** Stage view link that keeps the admin's drill-in device (?device_id=). */
 export function stageLink(mock: boolean, deviceId: string | null, stage = true): string {
   const q = new URLSearchParams();
@@ -80,6 +87,7 @@ export function DashboardView({
   const now = useNow(5000);
   const voice = currentVoiceView(state, now);
   const stageHref = stageLink(mock, state.focus);
+  const level = liveLevel(state);
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-4 px-4 py-5 sm:px-6">
@@ -155,10 +163,10 @@ export function DashboardView({
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="grid gap-4 lg:col-span-8 lg:grid-cols-2">
           <Panel title="Per-modality contribution" icon={Fingerprint} hint="last tick, ΔL">
-            <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} />
+            <ModalityBars trust={state.trust} lastBlocks={state.lastBlocks} level={level} />
           </Panel>
           <Panel title="Why" icon={Sparkles} hint="largest deviations from your profile">
-            <WhyChips blocks={state.blocks} />
+            <WhyChips blocks={state.blocks} level={level} />
           </Panel>
           <Panel title="Identity" icon={Fingerprint} hint="what 2bME has learned about you">
             <IdentityCard

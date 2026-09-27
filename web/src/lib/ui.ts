@@ -39,6 +39,14 @@ export function levelFromConfidence(conf: number): Level {
   return "suspicious";
 }
 
+/**
+ * Watch, Suspicious and Locked: evidence against the owner is an alarm (red). At Normal (or no level yet) the same
+ * evidence is ordinary variation and stays grey, so the red only appears when trust actually falls.
+ */
+export function alarmLevel(level: Level | null | undefined): boolean {
+  return level === "watch" || level === "suspicious" || level === "locked";
+}
+
 /** 0.9712 → "97%"; digits controls decimals. null/NaN → "—". */
 export function fmtPct(conf: number | null | undefined, digits = 0): string {
   if (conf === null || conf === undefined || !Number.isFinite(conf)) return "—";
