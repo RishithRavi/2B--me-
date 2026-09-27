@@ -750,7 +750,7 @@ class Sim implements OrgSim {
     if (e.plan.role === "insider" && level === "watch" && !e.flags.includes("insider_drift")) {
       this.setFlag(e, "insider_drift", true);
       const devs = INSIDER_SIGNATURE.map(([n, z]) => deviation(n, z + (this.rng() - 0.5) * 0.3));
-      this.raiseAnomaly(
+      const drift = this.raiseAnomaly(
         e,
         now,
         "trust_drop",
@@ -760,6 +760,7 @@ class Sim implements OrgSim {
         devs,
         "Slow, sustained drift over 25 minutes in typing and pointer rhythm (more pauses, more hesitation before clicks) rather than a sudden change of hands: the insider-threat pattern.",
       );
+      drift.action = "insider_drift"; // how the hub marks an insider-drift trust_drop
       this.emitAnomaly(out, e, now);
       this.emitAudit(out, e, now, "alert", `Insider drift: 25 min of sustained deviation · ${fmtDevs(devs)} — no takeover signature, review activity`, 3, "system", e.anomaly?.id ?? null);
     }

@@ -144,12 +144,27 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
     if (hit) setSelectedId(hit.device_id);
   }, [params, preview, state.loaded, state.rows]);
 
-  // Toast when anyone drops to Suspicious or gets locked (never for the state on arrival).
+  // Toast when anyone drops to Suspicious, gets locked or starts drifting (never for the state on arrival).
   const prevLevels = useRef<Map<string, Level> | null>(null);
+  const prevFlags = useRef<Map<string, readonly string[]> | null>(null);
   useEffect(() => {
     if (preview || !state.loaded || state.rows.length === 0) return;
     const drops = levelDrops(prevLevels.current, state.rows);
     prevLevels.current = new Map(state.rows.map((r) => [r.device_id, r.level]));
+    const flagsBefore = prevFlags.current;
+    prevFlags.current = new Map(state.rows.map((r) => [r.device_id, r.flags]));
+    if (flagsBefore) {
+      for (const r of state.rows) {
+        const was = flagsBefore.get(r.device_id);
+        if (!was || was.includes("insider_drift") || !r.flags.includes("insider_drift")) continue;
+        toast.warning(`${r.handle} · insider drift`, {
+          id: `drift-${r.device_id}`,
+          description: "Sustained deviation over 5 min. Review activity; behavior alone never blocks.",
+          duration: 9000,
+          action: { label: "Inspect", onClick: () => select(r.device_id) },
+        });
+      }
+    }
     const alerting = alertingDrops(drops);
     for (const d of alerting.slice(0, 3)) {
       const r = d.row;

@@ -10,7 +10,7 @@ import { TrustGauge } from "@/components/dashboard/trust-gauge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import type { AdminActionIn, AuditRow, RosterRow, TrustLive } from "@/lib/contracts";
+import type { AdminActionIn, AnomalyLive, AuditRow, RosterRow, TrustLive } from "@/lib/contracts";
 import { trustDisplay } from "@/lib/org-live";
 import { fmtAgo, fmtClock, fmtPct, fmtZ, levelColor } from "@/lib/ui";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,8 @@ const ANOMALY_LABEL: Record<string, string> = {
   redteam_tool: "red-team tool read",
 };
 const anomalyLabel = (kind: string) => ANOMALY_LABEL[kind] ?? kind.replace(/_/g, " ");
+/** The hub writes insider drift as a trust_drop whose action is "insider_drift". */
+const alertLabel = (a: AnomalyLive) => (a.action === "insider_drift" ? "insider drift" : anomalyLabel(a.kind));
 
 const CHALLENGE_TEXT: Record<string, string> = {
   proactive: "Proactive voice check",
@@ -184,7 +186,7 @@ export function EmployeeDrawer({
                   <div className="space-y-2.5 rounded-lg p-3 ring-1 ring-foreground/10" style={{ background: `color-mix(in oklch, ${severityColor(anomaly.severity)} 6%, transparent)` }}>
                     <div className="flex items-center gap-2 text-[13px]">
                       <ShieldAlert className="size-4" style={{ color: severityColor(anomaly.severity) }} />
-                      <span className="font-medium capitalize">{anomalyLabel(anomaly.kind)}</span>
+                      <span className="font-medium capitalize">{alertLabel(anomaly)}</span>
                       <span className="text-muted-foreground">· severity {anomaly.severity}</span>
                       <time className="tnum ml-auto text-[11px] text-muted-foreground">{fmtAgo(row.last_anomaly_at, now)}</time>
                     </div>
@@ -243,7 +245,7 @@ export function EmployeeDrawer({
                     disabled={busy !== null || !anomaly || Boolean(ack)}
                     onClick={() => anomaly && run({ device_id: row.device_id, action: "ack_alert", anomaly_id: anomaly.id }, "Alert acknowledged")}
                   >
-                    <CheckCheck /> {ack ? "Alert acknowledged" : anomaly ? `Acknowledge alert: ${anomalyLabel(anomaly.kind)}` : "No alert to acknowledge"}
+                    <CheckCheck /> {ack ? "Alert acknowledged" : anomaly ? `Acknowledge alert: ${alertLabel(anomaly)}` : "No alert to acknowledge"}
                   </Button>
                 </div>
                 <form
