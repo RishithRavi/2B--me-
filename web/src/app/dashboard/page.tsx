@@ -22,8 +22,8 @@ function Dashboard() {
   const deviceParam = params.get("device_id");
   const me = useMe();
   const { state, store, mock } = useLive({ enabled: authSettled(me.status) });
-  const actions = useDashboardActions(store, state.device?.id ?? state.focus);
-  const server = useServerInfo(mock);
+  const server = useServerInfo(mock, `${me.status}:${state.connected}`);
+  const actions = useDashboardActions(store, state.device?.id ?? state.focus, { voiceStub: server.voiceMode === "stub" });
 
   useEffect(() => {
     if (store && !mock && deviceParam) store.setFocus(deviceParam);

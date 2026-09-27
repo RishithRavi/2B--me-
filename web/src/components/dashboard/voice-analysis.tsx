@@ -8,12 +8,12 @@ import { AudioLines, Check, CircleDashed, FlaskConical, Loader2, Minus, ShieldCh
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { MarkerPoint, VoiceStageLive } from "@/lib/contracts";
+import type { VoiceStageLive } from "@/lib/contracts";
 import type { LiveState, LiveVoiceResult } from "@/lib/live";
 import { fmtClock, shortId } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
-import { DECISION_META, dspRows, isSimulated, scoringMs, stageTiles, type StageTile } from "./voice-format";
+import { DECISION_META, dspRows, isSimulated, lastResetAt, scoringMs, stageTiles, type StageTile } from "./voice-format";
 import type { VoiceMode } from "./voice-mode";
 
 /** Amber badge: this voice result came from the stub pipeline (canned or chosen by the operator). */
@@ -45,12 +45,6 @@ export interface VoiceView {
 }
 
 const MAX_AGE_MS = 10 * 60 * 1000;
-
-function lastResetAt(markers: MarkerPoint[]): number {
-  let t = -Infinity;
-  for (const m of markers) if (m.label === "reset") t = Math.max(t, Date.parse(m.t));
-  return t;
-}
 
 /**
  * What the voice panel shows right now: a check being scored on the open challenge (live stages, no result yet),

@@ -1,7 +1,7 @@
 // Pure presentation helpers for a voice check result (unit-tested): decision meta, the four stage tiles and the
 // DSP/FFT rows. Keys in `dsp` differ between the stub, the mock stream and the real Hearsay pipeline, so known
 // keys get a label and unit and anything else is humanized from its name.
-import type { VoiceDecision, VoiceResultLive, VoiceStageLive } from "@/lib/contracts";
+import type { MarkerPoint, VoiceDecision, VoiceResultLive, VoiceStageLive } from "@/lib/contracts";
 
 export interface DecisionMeta {
   label: string;
@@ -188,6 +188,13 @@ export function dspRows(dsp: Record<string, number> | null | undefined): DspRow[
 /** Stub voice: a result is simulated when the server says so, or when the server runs VOICE_MODE=stub. */
 export function isSimulated(result: Pick<VoiceResultLive, "simulated"> | null | undefined, voiceMode: string | null): boolean {
   return voiceMode === "stub" || !!result?.simulated;
+}
+
+/** Server time (ms) of the newest Reset marker, -Infinity if none: the voice panel and the outcome control start over. */
+export function lastResetAt(markers: MarkerPoint[]): number {
+  let t = -Infinity;
+  for (const m of markers) if (m.label === "reset") t = Math.max(t, Date.parse(m.t));
+  return t;
 }
 
 /** Total scoring latency from stage_ms (the stub's `total`, else the sum of stages). */

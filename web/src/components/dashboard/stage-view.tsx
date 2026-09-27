@@ -128,7 +128,9 @@ export function StageView({
               Re-arm (31%)
             </Button>
           </div>
-          {isAdmin && voiceMode === "stub" && <VoiceOutcomeControl deviceId={state.device?.id ?? state.focus} mock={mock} bare />}
+          {isAdmin && voiceMode === "stub" && (
+            <VoiceOutcomeControl deviceId={state.device?.id ?? state.focus} mock={mock} voiceResults={state.voiceResults} markers={state.markers} bare />
+          )}
         </div>
       </div>
     </div>
