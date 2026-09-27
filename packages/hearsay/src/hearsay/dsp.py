@@ -111,15 +111,34 @@ def spectral_similarity(current, enrolled) -> float:
     if (
         current.ndim != 1
         or current.shape != enrolled.shape
-        or current.size not in (64, 84)
+        or current.size not in (64, 83, 84)
         or not np.isfinite(current).all()
         or not np.isfinite(enrolled).all()
     ):
-        raise ValueError("spectral vectors must have matching 64 or 84 finite dimensions")
+        raise ValueError("spectral vectors must have matching 64, 83 or 84 finite dimensions")
     norm = np.linalg.norm(current) * np.linalg.norm(enrolled)
     if norm <= 1e-12:
         raise ValueError("cannot compare a zero spectral vector")
     return float(np.clip(current @ enrolled / norm, -1, 1))
+
+
+def spectral_vector(ltas_db, mfcc_mean) -> np.ndarray:
+    """Return the calibrated 83-d identity vector.
+
+    Absolute energy and MFCC c0 mostly describe recording level. Removing them
+    keeps the comparison focused on spectral shape, as required by the voice
+    runbook. Stored profiles retain the raw 64+20 values for compatibility.
+    """
+    ltas = np.asarray(ltas_db, dtype=np.float64)
+    mfcc = np.asarray(mfcc_mean, dtype=np.float64)
+    if (
+        ltas.shape != (64,)
+        or mfcc.shape != (20,)
+        or not np.isfinite(ltas).all()
+        or not np.isfinite(mfcc).all()
+    ):
+        raise ValueError("spectral profile requires 64 LTAS and 20 finite MFCC values")
+    return np.concatenate([ltas - ltas.mean(), mfcc[1:]])
 
 
 def findings(current: dict, enrolled: dict) -> list[str]:

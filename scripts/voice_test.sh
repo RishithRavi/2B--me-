@@ -7,5 +7,5 @@ if [ -z "$voice_python" ]; then
 fi
 export PYTHONPATH="$PWD/server:$PWD/packages/hearsay/src${PYTHONPATH:+:$PYTHONPATH}"
 "$voice_python" -m pytest packages/hearsay/tests server/app/voice/tests -q
-"$voice_python" -m ruff check --config packages/hearsay/pyproject.toml packages/hearsay server/app/voice scripts/voice_check_metrics.py scripts/voice_model_smoke.py scripts/voice_preload_models.py scripts/voice_resolve_revisions.py
-"$voice_python" -m ruff format --check --config packages/hearsay/pyproject.toml packages/hearsay server/app/voice scripts/voice_check_metrics.py scripts/voice_model_smoke.py scripts/voice_preload_models.py scripts/voice_resolve_revisions.py
+"$voice_python" -m ruff check --config packages/hearsay/pyproject.toml packages/hearsay server/app/voice scripts/voice_check_metrics.py scripts/voice_fit_calibration.py scripts/voice_model_smoke.py scripts/voice_preload_models.py scripts/voice_resolve_revisions.py
+"$voice_python" -m ruff format --check --config packages/hearsay/pyproject.toml packages/hearsay server/app/voice scripts/voice_check_metrics.py scripts/voice_fit_calibration.py scripts/voice_model_smoke.py scripts/voice_preload_models.py scripts/voice_resolve_revisions.py

@@ -11,6 +11,7 @@ Options:
   --runtime-root PATH   Cache, manifests and reports (default: data/voice-runtime)
   --model NAME          df-arena or fallback (default: df-arena)
   --real-dir PATH       Directory with at least 20 consented genuine clips
+  --impostor-dir PATH   Directory with at least 10 consented different-speaker clips
   --synth-dir PATH      Directory with at least 20 consented ElevenLabs clips
   --preflight-only      Validate host architecture, capacity and disk, then exit
   --allow-undersized    Continue below the planned 8-vCPU/16-GiB VM shape
@@ -25,6 +26,7 @@ EOF
 runtime_root=data/voice-runtime
 model=df-arena
 real_dir=
+impostor_dir=
 synth_dir=
 resolve_only=0
 skip_smoke=0
@@ -37,6 +39,7 @@ while (($#)); do
     --runtime-root) runtime_root=${2:?missing runtime root}; shift 2 ;;
     --model) model=${2:?missing model}; shift 2 ;;
     --real-dir) real_dir=${2:?missing real directory}; shift 2 ;;
+    --impostor-dir) impostor_dir=${2:?missing impostor directory}; shift 2 ;;
     --synth-dir) synth_dir=${2:?missing synthetic directory}; shift 2 ;;
     --preflight-only) preflight_only=1; shift ;;
     --allow-undersized) allow_undersized=1; shift ;;
@@ -140,8 +143,23 @@ HF_HOME=$HF_HOME .venv/bin/python scripts/voice_model_smoke.py \
   --threads "$threads" \
   --output "$runtime_root/reports/model-smoke.json"
 
+if [[ ! -f $VOICE_CALIBRATION_PATH && -n $impostor_dir ]]; then
+  HF_HOME=$HF_HOME .venv/bin/python scripts/voice_fit_calibration.py \
+    --owner-dir "$real_dir" \
+    --impostor-dir "$impostor_dir" \
+    --synth-dir "$synth_dir" \
+    --model "$model" \
+    --cm-revision "$VOICE_CM_REVISION" \
+    --ecapa-revision "$VOICE_ECAPA_REVISION" \
+    --speaker-cache "$runtime_root/models/ecapa" \
+    --device cpu \
+    --threads "$threads" \
+    --output "$VOICE_CALIBRATION_PATH"
+fi
 if [[ ! -f $VOICE_CALIBRATION_PATH ]]; then
-  echo "Smoke passed, but real service remains fail-closed until measured calibration exists at:" >&2
+  echo "Smoke passed, but real service remains fail-closed until measured calibration exists." >&2
+  echo "Pass --impostor-dir with at least 10 clips from a consenting different speaker." >&2
+  echo "Expected calibration path:" >&2
   echo "$VOICE_CALIBRATION_PATH" >&2
   exit 4
 fi
