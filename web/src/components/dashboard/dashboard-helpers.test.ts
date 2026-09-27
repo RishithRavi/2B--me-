@@ -4,8 +4,10 @@ import { presenceWanted } from "@/components/site/presence-mount";
 import { initialLiveState } from "@/lib/live";
 import { modelBackendLabel, scoredModalities, unscoredLabel } from "@/lib/ui";
 
-import { liveLevel, stageLink } from "./dashboard-view";
-import { needsResnapshot } from "./live-hooks";
+import type { RosterRow } from "@/lib/contracts";
+
+import { drillTitle, liveLevel, stageLink } from "./dashboard-view";
+import { agentOffline, needsResnapshot, type Drill } from "./live-hooks";
 import { redChip } from "./why-chips";
 
 describe("needsResnapshot (stream opened before the device existed)", () => {
@@ -94,3 +96,31 @@ describe("scored modalities (workflow and temporal are captured, not scored)", (
     expect(unscoredLabel(["keyboard", "mouse", "scroll", "workflow", "temporal"])).toBeNull();
   });
 });
+
+describe("admin drill-in (synthetic employees are labelled; offline shows the last known value)", () => {
+  const row = (over: Partial<RosterRow>): RosterRow =>
+    ({ device_id: "e07", handle: "Employee 07", team: "People", synthetic: true, device_label: "MacBook Pro", online: true, last_seen: null, ...over }) as RosterRow;
+  const drill = (over: Partial<RosterRow>): Drill => ({ deviceId: "e07", row: row(over), notFound: false });
+
+  it("names a synthetic employee by handle and team, anything else by device label", () => {
+    expect(drillTitle(drill({}), "MacBook Pro")).toBe("Employee 07 · People");
+    expect(drillTitle(drill({ team: null }), "MacBook Pro")).toBe("Employee 07");
+    expect(drillTitle(drill({ synthetic: false, handle: "A" }), "A's MacBook Pro")).toBe("A's MacBook Pro");
+    expect(drillTitle(null, "A's MacBook Pro")).toBe("A's MacBook Pro");
+    expect(drillTitle({ deviceId: "e07", row: null, notFound: false }, null)).toBeNull();
+  });
+
+  it("offline = live heartbeat 30 s or more (advanced since the report), else the roster's flag", () => {
+    const now = 1_000_000;
+    const health = (hb: number | null) => ({ heartbeat_age_s: hb }) as LiveStateHealth;
+    expect(agentOffline({ health: health(2), healthAt: now }, null, now)).toBe(false);
+    expect(agentOffline({ health: health(2), healthAt: now - 29_000 }, null, now)).toBe(true);
+    expect(agentOffline({ health: health(45), healthAt: now }, drill({ online: true }), now)).toBe(true);
+    // a live heartbeat wins over a stale roster poll
+    expect(agentOffline({ health: health(1), healthAt: now }, drill({ online: false }), now)).toBe(false);
+    expect(agentOffline({ health: null, healthAt: null }, drill({ online: false }), now)).toBe(true);
+    expect(agentOffline({ health: null, healthAt: null }, null, now)).toBe(false);
+  });
+});
+
+type LiveStateHealth = NonNullable<ReturnType<typeof initialLiveState>["health"]>;

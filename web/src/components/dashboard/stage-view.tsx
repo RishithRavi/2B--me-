@@ -1,6 +1,6 @@
 "use client";
 
-import { Flag, FlagOff, Loader2, RotateCcw, Target, X } from "lucide-react";
+import { Building2, Flag, FlagOff, Loader2, RotateCcw, Target, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -11,10 +11,11 @@ import type { LiveState } from "@/lib/live";
 import { takeoverOpen } from "@/lib/ttd";
 import { scoredModalities } from "@/lib/ui";
 
-import { ChallengeBanner } from "./banners";
-import { ConnectionBadge, liveLevel, stageLink } from "./dashboard-view";
+import { ChallengeBanner, OfflineBanner } from "./banners";
+import { ConnectionBadge, SyntheticBadge, drillTitle, liveLevel, rosterHref, stageLink } from "./dashboard-view";
 import { EventFeed } from "./event-feed";
 import { SecureInputBanner } from "./health-pills";
+import { agentOffline, type Drill } from "./live-hooks";
 import { ModalityBars } from "./modality-bars";
 import { TrustChart } from "./trust-chart";
 import { TrustGauge } from "./trust-gauge";
@@ -39,12 +40,15 @@ export function StageView({
   actions,
   isAdmin,
   voiceMode,
+  drill = null,
 }: {
   state: LiveState;
   mock: boolean;
   actions: DashboardActions;
   isAdmin: boolean;
   voiceMode: VoiceMode;
+  /** an admin viewing a device from the org console (/dashboard?stage=1&device_id=) */
+  drill?: Drill | null;
 }) {
   const learning = !state.model || state.model.status !== "ready" || state.device?.mode === "enroll";
   const open = takeoverOpen(state.markers) || state.label === "impostor";
@@ -58,6 +62,8 @@ export function StageView({
   const chartBox = useRef<HTMLDivElement>(null);
   const chartH = useBoxHeight(chartBox, 260, voice !== null);
   useInertChrome();
+  const synthetic = !!drill?.row?.synthetic;
+  const offline = agentOffline(state, drill, now);
 
   return (
     <div className="bg-console-grid fixed inset-0 z-50 flex flex-col overflow-hidden bg-background">
@@ -67,7 +73,8 @@ export function StageView({
           Login proves who you <em>were</em>. 2bME keeps checking who you <em>are</em>.
         </span>
         <div className="ml-auto flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">{state.device?.label ?? "no device"}</span>
+          {synthetic && <SyntheticBadge />}
+          <span className="text-sm text-muted-foreground">{drillTitle(drill, state.device?.label) ?? "no device"}</span>
           <ConnectionBadge state={state} mock={mock} />
           <Button asChild variant="ghost" size="icon-sm" aria-label="Exit stage view">
             <Link href={stageLink(mock, state.focus, false)}>
@@ -81,6 +88,7 @@ export function StageView({
           the chart (or the voice panel) absorbs the spare height, the gauge scales to its box. */}
       <main data-stage-body className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4 xl:px-5">
         <SecureInputBanner health={state.health} />
+        {offline && <OfflineBanner lastSeen={state.device?.last_seen ?? drill?.row?.last_seen} />}
         <ChallengeBanner challenge={state.open_challenge} compact readOnly />
 
         <div className="grid gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-12 xl:grid-rows-[minmax(0,1fr)]">
@@ -91,11 +99,12 @@ export function StageView({
                 locked={state.device?.locked}
                 lockReason={state.device?.lock_reason}
                 learning={learning}
+                stale={offline}
                 size="xl"
                 className="max-w-[300px] xl:max-w-[min(420px,100cqw,calc(100cqh_-_1.75rem))]"
               />
             </div>
-            <TtdStopwatch markers={state.markers} history={state.trust_history} blocks={state.blocks} large />
+            {!synthetic && <TtdStopwatch markers={state.markers} history={state.trust_history} blocks={state.blocks} large />}
           </div>
 
           <div className="flex flex-col gap-3 xl:col-span-9 xl:min-h-0">
@@ -137,39 +146,50 @@ export function StageView({
         </div>
       </main>
 
-      {/* operator controls: their own row under the body, so nothing ever sits beneath them */}
-      <div className="shrink-0 border-t bg-background/88 px-4 py-2 backdrop-blur-md xl:px-5">
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 xl:grid-cols-[1fr_1fr_1fr_auto] xl:items-center [&>button]:px-2 [&>button]:text-sm sm:[&>button]:text-base max-sm:[&>button>svg]:hidden">
-          <Button
-            size="lg"
-            className={open ? "h-11 bg-muted text-foreground hover:bg-muted/80" : "h-11 bg-trust-suspicious text-white hover:bg-trust-suspicious/85"}
-            onClick={() => void actions.setTakeover(!open)}
-            disabled={busy === "takeover"}
-          >
-            {busy === "takeover" ? <Loader2 className="size-5 animate-spin" /> : open ? <FlagOff className="size-5" /> : <Flag className="size-5" />}
-            {open ? "End takeover" : "Mark takeover"}
+      {/* operator controls: their own row under the body, so nothing ever sits beneath them. They drive the demo
+          laptop (A); an org employee's device gets the console link instead. */}
+      {synthetic && drill ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t bg-background/88 px-4 py-3 text-sm text-muted-foreground backdrop-blur-md xl:px-5">
+          <Building2 className="size-4 shrink-0" />
+          <span>Synthetic org employee. Admin actions (lock, re-verify, acknowledge) live in the org console.</span>
+          <Button asChild variant="outline" size="sm" className="ml-auto">
+            <Link href={rosterHref(drill.deviceId)}>Open in the org console</Link>
           </Button>
-          <Button size="lg" variant="outline" className="h-11" onClick={() => void actions.reset()} disabled={busy === "reset"}>
-            {busy === "reset" ? <Loader2 className="size-5 animate-spin" /> : <RotateCcw className="size-5" />}
-            Reset demo
-          </Button>
-          <Button size="lg" variant="outline" className="h-11" onClick={() => void actions.rearm()} disabled={busy === "rearm"}>
-            {busy === "rearm" ? <Loader2 className="size-5 animate-spin" /> : <Target className="size-5" />}
-            Re-arm (31%)
-          </Button>
-          {isAdmin && voiceMode === "stub" && (
-            <VoiceOutcomeControl
-              deviceId={state.device?.id ?? state.focus}
-              mock={mock}
-              voiceResults={state.voiceResults}
-              markers={state.markers}
-              bare
-              compact
-              className="col-span-3 xl:col-span-1"
-            />
-          )}
         </div>
-      </div>
+      ) : (
+        <div className="shrink-0 border-t bg-background/88 px-4 py-2 backdrop-blur-md xl:px-5">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 xl:grid-cols-[1fr_1fr_1fr_auto] xl:items-center [&>button]:px-2 [&>button]:text-sm sm:[&>button]:text-base max-sm:[&>button>svg]:hidden">
+            <Button
+              size="lg"
+              className={open ? "h-11 bg-muted text-foreground hover:bg-muted/80" : "h-11 bg-trust-suspicious text-white hover:bg-trust-suspicious/85"}
+              onClick={() => void actions.setTakeover(!open)}
+              disabled={busy === "takeover"}
+            >
+              {busy === "takeover" ? <Loader2 className="size-5 animate-spin" /> : open ? <FlagOff className="size-5" /> : <Flag className="size-5" />}
+              {open ? "End takeover" : "Mark takeover"}
+            </Button>
+            <Button size="lg" variant="outline" className="h-11" onClick={() => void actions.reset()} disabled={busy === "reset"}>
+              {busy === "reset" ? <Loader2 className="size-5 animate-spin" /> : <RotateCcw className="size-5" />}
+              Reset demo
+            </Button>
+            <Button size="lg" variant="outline" className="h-11" onClick={() => void actions.rearm()} disabled={busy === "rearm"}>
+              {busy === "rearm" ? <Loader2 className="size-5 animate-spin" /> : <Target className="size-5" />}
+              Re-arm (31%)
+            </Button>
+            {isAdmin && voiceMode === "stub" && (
+              <VoiceOutcomeControl
+                deviceId={state.device?.id ?? state.focus}
+                mock={mock}
+                voiceResults={state.voiceResults}
+                markers={state.markers}
+                bare
+                compact
+                className="col-span-3 xl:col-span-1"
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

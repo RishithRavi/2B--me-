@@ -1,18 +1,19 @@
 "use client";
 
-import { FlaskConical, LogIn, WifiOff } from "lucide-react";
+import { ArrowLeft, FlaskConical, LogIn, SearchX, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 
 import { DashboardView } from "@/components/dashboard/dashboard-view";
-import { useRefreshMeOnAuthClose, useResnapshotOnFirstDevice } from "@/components/dashboard/live-hooks";
+import { useDrill, useRefreshMeOnAuthClose, useResnapshotOnFirstDevice } from "@/components/dashboard/live-hooks";
 import { StageView } from "@/components/dashboard/stage-view";
 import { useDashboardActions } from "@/components/dashboard/use-actions";
 import { useServerInfo } from "@/components/dashboard/voice-mode";
 import { EmptyState } from "@/components/site/empty-state";
 import { Button } from "@/components/ui/button";
 import { useLive } from "@/lib/live";
+import { shortId } from "@/lib/ui";
 import { useMe } from "@/lib/session";
 
 function Dashboard() {
@@ -24,6 +25,13 @@ function Dashboard() {
   const { state, store, mock } = useLive({ enabled: authSettled(me.status) });
   const server = useServerInfo(mock, `${me.status}:${state.connected}`);
   const actions = useDashboardActions(store, state.device?.id ?? state.focus, { voiceStub: server.voiceMode === "stub" });
+  const admin = me.me?.role === "admin";
+  // An admin's drill-in names a roster row (synthetic employees get labelled, A's stage controls stay off them).
+  const drill = useDrill(deviceParam && admin && !mock ? deviceParam : null);
+  // A device the roster doesn't have (admin), or one the server wouldn't stream to this user (it fell back to
+  // another of theirs, which the focused store ignores): say so instead of showing an empty "Learning" device.
+  const notFound =
+    !!deviceParam && !mock && (drill ? drill.notFound : !admin && state.connected && Object.keys(state.knownDevices).length > 0 && !state.knownDevices[deviceParam]);
 
   useEffect(() => {
     if (store && !mock && deviceParam) store.setFocus(deviceParam);
@@ -60,7 +68,31 @@ function Dashboard() {
     );
   }
 
-  const isAdmin = mock || me.me?.role === "admin";
+  if (notFound) {
+    return (
+      <div className="mx-auto w-full max-w-lg px-4 py-20">
+        <div className="panel">
+          <EmptyState
+            icon={SearchX}
+            title="Device not found or not yours"
+            action={
+              <Button asChild size="sm" variant="outline">
+                {/* full page load: the live store is still focused on the missing device */}
+                <a href={admin ? "/admin" : "/dashboard"}>
+                  <ArrowLeft /> {admin ? "Back to the org console" : "Open your dashboard"}
+                </a>
+              </Button>
+            }
+          >
+            {admin ? "The org roster has no device " : "Your account has no device "}
+            <span className="font-mono">{shortId(deviceParam)}</span>. The link may be stale.
+          </EmptyState>
+        </div>
+      </div>
+    );
+  }
+
+  const isAdmin = mock || admin;
 
   return (
     <>
@@ -73,7 +105,7 @@ function Dashboard() {
         </div>
       )}
       {stage ? (
-        <StageView state={state} mock={mock} actions={actions} isAdmin={isAdmin} voiceMode={server.voiceMode} />
+        <StageView state={state} mock={mock} actions={actions} isAdmin={isAdmin} voiceMode={server.voiceMode} drill={drill} />
       ) : (
         <DashboardView
           state={state}
@@ -83,6 +115,7 @@ function Dashboard() {
           isAdmin={isAdmin}
           voiceMode={server.voiceMode}
           serverBackend={server.modelBackend}
+          drill={drill}
         />
       )}
     </>

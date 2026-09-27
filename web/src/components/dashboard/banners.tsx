@@ -1,6 +1,6 @@
 "use client";
 
-import { AudioLines, ChevronDown, Hourglass, Lock, MonitorSmartphone, ShieldAlert } from "lucide-react";
+import { AudioLines, ChevronDown, Hourglass, Lock, MonitorSmartphone, ShieldAlert, WifiOff } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 import type { ChallengeLive, LiveDevice } from "@/lib/contracts";
 import type { KnownDevice } from "@/lib/live";
 import { useNow } from "@/lib/hooks";
+import { fmtAgo } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 const TRIGGER_TEXT: Record<ChallengeLive["trigger"], string> = {
@@ -106,7 +107,34 @@ export function ChallengeBanner({
   );
 }
 
-export function LockedBanner({ device, onUnlock, busy }: { device: LiveDevice | null; onUnlock: () => void; busy: boolean }) {
+/** The device's agent stopped reporting: what's on screen is its last known state, not a live reading. */
+export function OfflineBanner({ lastSeen }: { lastSeen: string | null | undefined }) {
+  useNow(5000);
+  return (
+    <div role="status" className="flex items-center gap-3 rounded-xl border border-trust-watch/45 bg-trust-watch/10 px-4 py-3">
+      <WifiOff className="size-5 shrink-0 text-trust-watch" />
+      <div className="min-w-0 flex-1 text-sm">
+        <span className="font-semibold">Agent offline</span>
+        <span className="text-muted-foreground">
+          {lastSeen ? ` — last seen ${fmtAgo(lastSeen)}` : ""}; trust shown is the last known value.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** readOnly: someone else's device (an admin's drill-in): no voice unlock from this screen. */
+export function LockedBanner({
+  device,
+  onUnlock,
+  busy,
+  readOnly = false,
+}: {
+  device: LiveDevice | null;
+  onUnlock: () => void;
+  busy: boolean;
+  readOnly?: boolean;
+}) {
   if (!device?.locked) return null;
   return (
     <div role="alert" className="flex flex-col gap-3 rounded-xl border border-trust-locked/50 bg-trust-locked/12 px-4 py-3 sm:flex-row sm:items-center">
@@ -117,9 +145,11 @@ export function LockedBanner({ device, onUnlock, busy }: { device: LiveDevice | 
           Every high-risk action is declined until the owner passes a fresh voice check (or TOTP).
         </div>
       </div>
-      <Button size="sm" onClick={onUnlock} disabled={busy} className="shrink-0">
-        <AudioLines /> Unlock with voice
-      </Button>
+      {!readOnly && (
+        <Button size="sm" onClick={onUnlock} disabled={busy} className="shrink-0">
+          <AudioLines /> Unlock with voice
+        </Button>
+      )}
     </div>
   );
 }
