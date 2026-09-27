@@ -172,3 +172,28 @@ Owners mark `[x]` with the commit SHA when done, or `[-]` with a reason.
   tests, 44 web tests, overlay tests and the complete local Tiger E2E. Remaining
   operator work is the real Vultr model preload, measured voice calibration and
   hardware smoke test; those are deployment evidence, not merge-gate failures.
+
+## Claude — visual dress-rehearsal requests (Sat 22:15; details + screenshots: QA of the integrated build)
+- [ ] **Codex 2 (high) — stub honesty in ChallengeFlow.** `components/voice/challenge-flow.tsx` (result header, ~L84-95) shows
+      "Synthetic voice detected · Speaker cosine 0.58 · Synthetic score 0.93" with no badge. Render `SimulatedBadge`
+      (exported by `components/dashboard/voice-analysis.tsx`) when `reply.result.simulated` or `useVoiceMode(false) === "stub"`
+      (`components/dashboard/voice-mode.ts`), plus a "Simulated voice check" note above the phrase; badge `/verify`'s header too.
+      Low: "unknown challenge" → "This challenge link has expired · Request a new one".
+- [ ] **Codex 2 (high) — fresh phrase in stub mode.** `server/app/voice/issuer.py` `fresh_material` (~L36-39) and `stub.py` (~L310)
+      always return the fixed phrase "amber river quiet falcon lantern". Draw `hearsay.phrases.new_phrase()` and simulate only
+      the scoring (§13 2:10 promises a new phrase).
+- [ ] **Codex 2 (high) — no dev mic field.** `components/voice/voice-recorder.tsx` (~L114-118) shows an editable "Demo microphone
+      name" on the overlay prompt, lock screen, /shop and /verify, and Start is disabled while it's empty. Auto-select exact match of
+      `NEXT_PUBLIC_VOICE_MIC_LABEL` → first substring → default input; show "Microphone: <name>"; put the field behind
+      `?micdebug=1`; never disable Start for it. (deploy.sh now passes `VOICE_MIC_LABEL` from `.env` into the web build.)
+- [ ] **Codex 2 (high) — /shop state.** `app/shop/page.tsx`: (1) the poll swallows 401 and retries forever; on 401 stop and say
+      "Signed out — this Mac was locked. Sign in again to see this order."; close/refresh the dialog on a terminal challenge status;
+      (2) signed out → "Sign in to buy" → `/login?next=/shop` (login honours `?next` now); mock mode banner "Demo mode: sign in to pay";
+      (3) the binding box names the cause (not co-present vs heartbeat stale).
+- [ ] **Codex 1 (high) — /enroll connection.** `app/enroll/page.tsx` (~L72-79) opens `ws://${location.host}/ws/live` and ignores
+      `NEXT_PUBLIC_WS_ORIGIN`, so it hangs on the dev/offline stack. Use `liveUrl()` from `web/src/lib/live.ts`; show the enrolled
+      state (monitor, model vN) instead of step 1 for an enrolled device; signed out → `/login?next=/enroll`. Note §5.3: once a model
+      is active, enroll mode is admin-only (top-ups go through the observer toggle) and TOTP re-enroll returns 409 without a recent VERIFY.
+- [ ] **Codex 1 (high) — /enroll look.** `app/enroll/page.module.css` hard-codes #f5f6f0, Arial and #18654c, and `page.tsx` (~L168)
+      renders a second "2bME" header. Use the site tokens/classes (bg-background, text-foreground, .panel, .eyebrow, Geist) so dark
+      and light work; drop the duplicate header; wrap the `twobme-agent run …` command at 390px; disabled Start contrast ≥ 4.5:1.
