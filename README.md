@@ -1,6 +1,6 @@
-# 2bME: know who's really at the keyboard
+# 2Bme: know who's really at the keyboard
 
-> **Your session can stay the same even when the person using it changes. 2bME looks for that change.**
+> **Your session can stay the same even when the person using it changes. 2Bme looks for that change.**
 
 **Live:** [2bme.tech](https://2bme.tech) · **Event:** HackGT 13
 
@@ -16,11 +16,11 @@ It matters beyond a borrowed laptop. A stolen session can give someone access to
 
 The stakes are real: the FBI's IC3 recorded **$2.9 billion in reported business email compromise losses** and **$3.4 billion in reported losses among people over 60** in 2023. Those figures cover a broader set of scams than we can address; our focus is the moment someone else takes over an authenticated session. [Source: FBI IC3](https://www.ic3.gov/media/IC3-Brochure.pdf).
 
-**Could a computer notice that handoff without reading what you type?** That's the question behind 2bME.
+**Could a computer notice that handoff without reading what you type?** That's the question behind 2Bme.
 
 ## Our answer
 
-**2bME learns the rhythm of how you use your computer.** Your typing has a pace. Your mouse movements and scrolling have patterns. We use those signals to update a live **trust score** as you work, looking for activity that doesn't fit your usual behavior.
+**2Bme learns the rhythm of how you use your computer.** Your typing has a pace. Your mouse movements and scrolling have patterns. We use those signals to update a live **trust score** as you work, looking for activity that doesn't fit your usual behavior.
 
 When the pattern changes, trust can fall. In our checkout flow, a risky action such as a $2,000 purchase then requires a **voice check** or a one-time code before it can proceed.
 
@@ -30,7 +30,7 @@ Think of a bank teller who knows you well enough to notice when something feels 
 
 | Step | What happens | What you see |
 |---|---|---|
-| 1. **Enroll** | The owner uses the laptop normally while 2bME learns their behavior. | An identity card with a model version |
+| 1. **Enroll** | The owner uses the laptop normally while 2Bme learns their behavior. | An identity card with a model version |
 | 2. **Normal use** | The owner keeps working. | The trust score stays high (green) |
 | 3. **Takeover** | A teammate sits down and starts using the same laptop. | Trust falls in real time, with "why" chips such as *typing rhythm unusual* |
 | 4. **Risky action** | The intruder tries a $2,000 checkout. | The purchase is paused and a voice challenge appears |
@@ -42,7 +42,7 @@ Think of a bank teller who knows you well enough to notice when something feels 
 
 ## Privacy is part of the product
 
-We measure **timing, not content.** 2bME never records:
+We measure **timing, not content.** 2Bme never records:
 
 - what you type, or passwords
 - clipboard contents or document text
@@ -84,7 +84,7 @@ Our work connects the macOS capture agent, timing features, owner-specific model
 ## Hackathon tracks
 
 ### 🌊 Oracle of the Deep: AI/ML behavioral fingerprinting
-2bME is an ML system that learns one person's **behavioral fingerprint** from about 80 privacy-safe timing features across keyboard, mouse and scroll (app switching and idle patterns are captured as context). It combines them into a **continuous trust score**. A one-class, owner-only detector with cross-conformal scoring decides how "owner-like" each window of activity is. A fusion engine weighs each input type by how much evidence it has seen. The `/lab` page shows the evidence: owner-vs-intruder error rates for each input type, ablations, and time-to-detection.
+2Bme is an ML system that learns one person's **behavioral fingerprint** from about 80 privacy-safe timing features across keyboard, mouse and scroll (app switching and idle patterns are captured as context). It combines them into a **continuous trust score**. A one-class, owner-only detector with cross-conformal scoring decides how "owner-like" each window of activity is. A fusion engine weighs each input type by how much evidence it has seen. The `/lab` page shows the evidence: owner-vs-intruder error rates for each input type, ablations, and time-to-detection.
 
 ### 🛟 Aramco, A Marina's Mission: security as social good
 For a small business, a compromised account can mean a missed payroll. For a family, it can mean hours spent trying to recover money and wondering who else has access. We want protection that asks less of people during normal use and notices when something changes. This prototype explores that through behavioral checks and a voice-or-code fallback. Testing with the people we hope to help, including people whose movement or speech varies, is an essential next step.
