@@ -130,10 +130,25 @@ export function IdentityCard({
         )}
       </div>
 
+      {status === "ready" && model?.error && (
+        <div className="inline-flex items-start gap-1.5 rounded-md border border-trust-watch/40 bg-trust-watch/10 px-2 py-1 text-[11px] text-trust-watch">
+          <TriangleAlert className="mt-px size-3 shrink-0" />
+          <span>
+            Retrain refused — v{model.version ?? "?"} kept: {model.error}
+          </span>
+        </div>
+      )}
+
       {model && (status === "ready" || status === "training") && modelBackendLabel(backend) && (
         <div
           className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground"
-          title={backend === "fallback" ? "Median/MAD mean-|z| fallback scorer (twobme_ml unavailable)" : "One-class model trained only on this user's own blocks"}
+          title={
+            backend === "fallback"
+              ? typeof model.metrics?.backend_note === "string"
+                ? model.metrics.backend_note
+                : "Median/MAD mean-|z| fallback scorer (twobme_ml unavailable)"
+              : "One-class model trained only on this user's own blocks"
+          }
         >
           <Cpu className="size-3" /> scored by <span className="font-medium text-foreground">{modelBackendLabel(backend)}</span>
         </div>

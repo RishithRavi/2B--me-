@@ -37,10 +37,19 @@ export interface TrustGaugeProps {
   learning?: boolean;
   size?: "md" | "xl";
   className?: string;
+  /** device lock reason (e.g. "admin_lock"); picks the md caption while locked */
+  lockReason?: string | null;
+  /** replaces the md caption entirely (null hides it) */
+  caption?: string | null;
+}
+
+function lockCaption(reason: string | null | undefined): string {
+  if (reason === "admin_lock") return "Locked by your security admin — only an admin can unlock it.";
+  return "Locked by a failed voice check — behavior alone never locks.";
 }
 
 /** Big live trust gauge: arc colored by level, display %, level label; LOCKED and learning states. */
-export function TrustGauge({ trust, locked, learning, size = "md", className }: TrustGaugeProps) {
+export function TrustGauge({ trust, locked, learning, size = "md", className, lockReason, caption }: TrustGaugeProps) {
   const isLocked = Boolean(locked || trust?.locked || trust?.level === "locked");
   const level: Level = isLocked ? "locked" : learning ? "learning" : (trust?.level ?? "learning");
   const conf = trust?.confidence ?? 0;
@@ -140,10 +149,12 @@ export function TrustGauge({ trust, locked, learning, size = "md", className }: 
         )}
       </div>
     </div>
-      {size === "md" && (
+      {size === "md" && caption !== null && (
         <p className="-mt-3 text-center text-[11px] text-muted-foreground">
-          {isLocked
-            ? "Locked by a failed voice check — behavior alone never locks."
+          {caption !== undefined
+            ? caption
+            : isLocked
+            ? lockCaption(lockReason)
             : level === "learning"
               ? "No model yet — collecting a baseline."
               : "Confidence that the enrolled owner is still at the keyboard."}

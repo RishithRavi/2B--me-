@@ -15,7 +15,7 @@ Shapes: `twobme_common.types` (TS `contracts.ts`). Errors: `{"detail": "..."}` w
 Seeded accounts: `a@2bme.tech`, `b@2bme.tech`, `admin@2bme.tech` (role `admin` = observer; never revoked, never anchors trust).
 
 ## Devices and agent
-| POST | `/devices/register` (cookie) | `DeviceRegisterIn` → `DeviceRegisterOut{device_id, device_token}` |
+| POST | `/devices/register` (cookie) | `DeviceRegisterIn` → `DeviceRegisterOut{device_id, device_token}`. A user's first device starts in enroll mode (0.97 after training activation); a new device of a user who already has an active model starts in **monitor at 0.30** (§5.3, §5.4) |
 |---|---|---|
 | GET | `/devices` (cookie) | → `DeviceOut[]` |
 | POST | `/agent/ticks` (Bearer) | `AgentTicksIn{ticks}` → `AgentTicksOut{accepted, duplicates}` (HTTPS fallback) |
@@ -30,7 +30,7 @@ co-present ⇔ over the last 20 s at some lag ∈ {−1,0,+1} s: `pearson(browse
 seconds **and** agent count ≥ 0.8 × browser count in ≥ 80% of browser-active seconds. Otherwise **remote** (0.30).
 
 ## Enroll and models
-| POST | `/enroll/mode` | `EnrollModeIn{device_id, mode}` → `OkOut` |
+| POST | `/enroll/mode` | `EnrollModeIn{device_id, mode}` → `OkOut`. `mode=enroll` is **admin-only** (403) once the user has an active model; agent `hello.requested_mode=enroll` is ignored for such a user (feed line) |
 |---|---|---|
 | GET | `/enroll/status?device_id=` | → `EnrollProgress` |
 | POST | `/enroll/train` | `EnrollTrainIn{device_id, source: tiger|logs}` → `JobOut{job_id}`; then a `model` live event |
@@ -56,10 +56,15 @@ seconds **and** agent count ≥ 0.8 × browser count in ≥ 80% of browser-activ
 | POST | `/voice/challenges/{id}/prompt-ended` | → `OkOut`; status → `prompt_ended` |
 | POST | `/voice/challenges/{id}/response` | multipart `wav`, `client_prompt_end_ms` → `ChallengeResponseOut{result, outcome, next?}` |
 | POST | `/voice/totp/verify` | `TotpVerifyIn{challenge_id, code}` → `TotpVerifyOut{ok, outcome}` |
-| POST | `/voice/totp/enroll` | → `TotpEnrollOut{otpauth_uri}` |
+| POST | `/voice/totp/enroll` | → `TotpEnrollOut{otpauth_uri}`. **409** when a secret already exists, unless the caller is admin or the bound device had a voice/TOTP VERIFY in the last 5 min (§5.3; enforced in `app.core.totp`) |
 
-Stub (A0, until Codex 2 replaces it): the response endpoint returns a canned `VoiceResult` chosen by the
-`X-Fake-Decision: VERIFY|RETRY|FALLBACK_MFA|BLOCK_SPOOF|BLOCK_IMPOSTOR` header (default VERIFY).
+Stub voice (`VOICE_MODE=stub`, demo only; Sat 20:20): the response endpoint returns a canned `VoiceResult` chosen by
+`X-Fake-Decision: VERIFY|RETRY|FALLBACK_MFA|BLOCK_SPOOF|BLOCK_IMPOSTOR`. The header is honoured **only from an admin** (admin
+cookie or `X-Admin-Token`); a user-sent header is stripped. Otherwise `VoiceDemoMiddleware` injects the operator override from
+`/demo/voice-outcome`, or a label-aware default: BLOCK_IMPOSTOR while the device is labelled impostor (Mark takeover), else
+VERIFY; unlock challenges ignore BLOCK_*/RETRY overrides. An override clears on `/demo/reset` and after a BLOCK_* it produced has
+locked the device. Every stub result is published with `VoiceResultLive.simulated=true`. Real mode rejects fake headers (400).
+An unlock challenge on an **admin-locked** device returns 409 (only an admin unlocks it).
 
 ## History (Tiger)
 | GET | `/history/sessions?limit=` | → `SessionRow[]` |

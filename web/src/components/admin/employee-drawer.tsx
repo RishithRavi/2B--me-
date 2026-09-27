@@ -141,7 +141,8 @@ export function EmployeeDrawer({
                   trust={asTrust(row)}
                   locked={row.locked}
                   learning={row.level === "learning"}
-                  className="max-w-[210px] [&>p]:hidden"
+                  caption={null}
+                  className="max-w-[210px]"
                 />
                 <div className="min-w-0 space-y-3">
                   <div>
@@ -276,7 +277,7 @@ export function EmployeeDrawer({
                   </Link>
                 </Button>
                 <Button asChild variant="secondary">
-                  <Link href="/history">
+                  <Link href={`/history?device_id=${encodeURIComponent(row.device_id)}`}>
                     <History /> Trace in history
                   </Link>
                 </Button>

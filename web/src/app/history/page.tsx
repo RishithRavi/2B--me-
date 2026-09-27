@@ -1,7 +1,8 @@
 "use client";
 
 import { Database, History as HistoryIcon, ListTree, RefreshCw, Ruler, TrendingUp } from "lucide-react";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
 import { AnomaliesList, BaselineTable, SessionsTable, TigerCard } from "@/components/history/panels";
 import { TrustTimeline } from "@/components/history/trust-timeline";
@@ -31,7 +32,20 @@ function Body<T>({ res, empty, children, skeleton = 160 }: { res: Resource<T>; e
   return <>{children(res.data)}</>;
 }
 
+// Deep links from /admin (breach trace-back): ?session_id=<id> opens that session; ?device_id=<id> opens the
+// device's most recent session.
 export default function HistoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <HistoryInner />
+    </Suspense>
+  );
+}
+
+function HistoryInner() {
+  const params = useSearchParams();
+  const sessionParam = params.get("session_id");
+  const deviceParam = params.get("device_id");
   const me = useMe();
   const mock = useMockMode();
   const isAdmin = mock || me.me?.role === "admin";
@@ -39,7 +53,10 @@ export default function HistoryPage() {
   const [modality, setModality] = useState<Modality>("keyboard");
 
   const sessions = useResource("history:sessions", (s) => api.historySessions(50, s), { sample: () => sampleSessions() });
-  const sessionId = picked ?? sessions.data?.[0]?.session_id ?? null;
+  const linked =
+    sessionParam ??
+    (deviceParam ? (sessions.data?.find((r) => r.device_id === deviceParam)?.session_id ?? null) : null);
+  const sessionId = picked ?? linked ?? sessions.data?.[0]?.session_id ?? null;
   const trust = useResource(sessionId ? `history:trust:${sessionId}` : null, (s) => api.historyTrust({ session_id: sessionId }, s), {
     sample: () => sampleTrust(sessionId ?? ""),
   });

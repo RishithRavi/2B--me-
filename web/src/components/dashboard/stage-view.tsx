@@ -75,7 +75,7 @@ export function StageView({
 
         <div className="grid flex-1 gap-5 xl:grid-cols-12">
           <div className="panel flex flex-col gap-5 p-6 xl:col-span-4">
-            <TrustGauge trust={state.trust} locked={state.device?.locked} learning={learning} size="xl" />
+            <TrustGauge trust={state.trust} locked={state.device?.locked} lockReason={state.device?.lock_reason} learning={learning} size="xl" />
             <TtdStopwatch markers={state.markers} history={state.trust_history} blocks={state.blocks} large />
           </div>
           <div className="flex flex-col gap-5 xl:col-span-8">

@@ -43,3 +43,14 @@ Format: `- YYYY-MM-DD HH:MM ET · <who> · <file/type> · <change>`
   `OrgSeedIn/OrgEmployee/OrgSeedOut`, `DemoVoiceOutcomeIn`; endpoints `/admin/roster`, `/admin/audit`, `/admin/actions`,
   `/ws/live?scope=org`, `/demo/org/seed`, `/demo/voice-outcome` (contracts/api.md). Optional fields: `ModelInfo.backend`,
   `VoiceResultLive.simulated`, `StatusOut.voice_mode`, `StatusOut.model_backend`. Regenerated `web/src/lib/contracts.ts`.
+- 2026-09-26 20:20 ET · Claude · additive / semantics (build round: b-server-core, b-server-org):
+  - Migration **006**: hypertable `audit_log(time, id, kind, device_id, user_id, handle, actor, summary, severity, ref_id)`,
+    PK (id, time); nullable `users.team` (org-demo employees).
+  - `RosterRow.flags` may carry `sim_voice_<decision>` while a stub-voice override is set (open list).
+  - Optional request header `X-Actor`, honoured only with `X-Admin-Token`; audit actor for token calls = `<X-Actor or automation> (API token)`.
+  - `ModelInfo.metrics.backend_note` / `metrics.method` (train | full_refit | b7_update): free-form metrics keys, no DTO change.
+  - Behavior (§5.3): TOTP re-enroll 409 without a recent VERIFY/admin; new device of an enrolled user → monitor at 0.30;
+    `mode=enroll` admin-only once a model is active; `update_candidate` revoked 120 s before an arming / BLOCK_*; training
+    eligibility row-level (reset keeps the baseline); failed train/retrain keeps the previous ready model; transitions keys
+    validated against `app_categories.json`; marker text ≤ 80 chars; `GET /decisions/{id}` falls back to Tiger.
+  - Stub voice: fake header admin-only, operator override + label-aware default, `simulated=true` (api.md "Stub voice").

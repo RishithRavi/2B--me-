@@ -143,7 +143,7 @@ export function DashboardView({
       {/* row 1: gauge + chart */}
       <div className="grid gap-4 lg:grid-cols-12">
         <Panel title="Trust" icon={Activity} className="lg:col-span-4" bodyClassName="space-y-4">
-          <TrustGauge trust={state.trust} locked={state.device?.locked} learning={learning} />
+          <TrustGauge trust={state.trust} locked={state.device?.locked} lockReason={state.device?.lock_reason} learning={learning} />
           <TtdStopwatch markers={state.markers} history={state.trust_history} blocks={state.blocks} />
         </Panel>
         <Panel title="Last 10 minutes" icon={BarChart3} hint="bands at 80% and 40% · takeover shaded" className="lg:col-span-8">

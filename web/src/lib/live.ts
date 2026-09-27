@@ -365,7 +365,7 @@ export function withConnection(s: LiveState, connected: boolean, closeCode: numb
 const LIVE_TYPES: ReadonlySet<LiveType> = new Set<LiveType>([
   "snapshot", "trust", "block_scored", "context", "enroll_progress", "model", "anomaly", "challenge",
   "voice_stage", "voice_result", "decision", "marker", "mode", "lock", "unlock", "label", "presence",
-  "health", "feed",
+  "health", "feed", "audit",
 ]);
 
 export function parseLive(raw: string): LiveEvent | null {

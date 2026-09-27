@@ -42,7 +42,9 @@ fi
 
 if [ "$WEB" = 1 ]; then
   echo "building web in node:22…"
-  docker run --rm -v "$PWD/web:/app" -w /app -e NEXT_TELEMETRY_DISABLED=1 -e CI=1 node:22 \
+  mic_label=$(grep -E '^VOICE_MIC_LABEL=' .env | tail -1 | cut -d= -f2- || true)
+  docker run --rm -v "$PWD/web:/app" -w /app -e NEXT_TELEMETRY_DISABLED=1 -e CI=1 \
+    -e NEXT_PUBLIC_VOICE_MIC_LABEL="$mic_label" node:22 \
     sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm build"
 fi
 [ -f web/out/index.html ] || { echo "web/out missing"; exit 1; }
