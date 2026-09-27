@@ -300,6 +300,8 @@ class DeviceRuntime:
     agent_ws: WebSocket | None = None
     agent_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     agent_disconnected_at: float | None = None
+    # demo habit rule: seconds of active typing since the last ⌥⌫ word delete
+    habit_typing_s: float = 0.0
     seen: dict[UUID, deque] = field(default_factory=dict)
     trust: TrustLive | None = None
     last_seq: int | None = None
@@ -725,6 +727,8 @@ class DeviceHub:
         prev_level = drt.trust.level if drt.trust else None
         evidence = [s for _, _, s in scored if s is not None] if not learning and not drt.dev.locked else []
         st = drt.engine.on_tick(t_end.timestamp(), flags.idle_s, evidence)
+        if not drt.dev.locked:
+            st = self._habit_rule(drt, tick, st, t_end, learning)
         if drt.dev.locked:
             drt.engine.pin_min()
             per = st.per_modality
@@ -796,6 +800,39 @@ class DeviceHub:
             drt.tick_count += 1
             drt.tick_cond.notify_all()
         return "ok"
+
+    HABIT_TICK_S = 5.0
+    HABIT_REASON = "habit_word_delete"
+
+    def _habit_rule(self, drt: DeviceRuntime, tick: Tick, st: TrustState, t_end: datetime,
+                    learning: bool) -> TrustState:
+        """Demo habit rule (settings.habit_word_delete): the owner deletes whole words with ⌥⌫. Every
+        habit_window_s of active typing (a tick with >= habit_min_keys keys) without a single ⌥⌫ drops trust by
+        habit_drop percentage points. It is an owner-set rule, not something the model learned, and says so in the
+        feed; like all behavior it only lowers trust (and so may arm a challenge) and never blocks by itself."""
+        s = self.s
+        n = tick.counts.word_deletes
+        if not getattr(s, "habit_word_delete", False) or n is None or learning:
+            drt.habit_typing_s = 0.0
+            return st
+        if n > 0:
+            drt.habit_typing_s = 0.0
+            return st
+        if tick.counts.keys >= s.habit_min_keys:
+            drt.habit_typing_s += self.HABIT_TICK_S
+        if drt.habit_typing_s < s.habit_window_s:
+            return st
+        drt.habit_typing_s = 0.0
+        before = st.confidence
+        after = max(0.01, before - s.habit_drop)
+        drt.engine.anchor(after)
+        window = round(s.habit_window_s)
+        self.feed(drt, "habit", f"Habit rule: no ⌥⌫ word delete in {window} s of typing — trust "
+                  f"{round(before * 100)}% → {round(after * 100)}% (owner-set rule, not the model)", 2)
+        out = drt.engine.snapshot_state(t_end.timestamp(), [*st.reasons, self.HABIT_REASON])
+        out.per_modality = st.per_modality
+        out.delta_logit = st.delta_logit + (out.logit - st.logit)
+        return out
 
     def _update_candidate(self, drt: DeviceRuntime, b: Block, contrib: tuple[float, float, float] | None,
                           learning: bool) -> bool:

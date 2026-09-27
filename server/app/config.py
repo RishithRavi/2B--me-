@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     training_frozen: bool = False
     # identity model backend (§5.7): auto = twobme_ml when importable, else the server's FallbackUserModel
     model_backend: Literal["auto", "twobme_ml", "fallback"] = "auto"
+    # Demo habit rule (off by default; HABIT_WORD_DELETE=true): the owner deletes words with ⌥⌫. Every
+    # habit_window_s of active typing without one drops trust by habit_drop (absolute). An owner-set rule, shown as
+    # such in the feed; it only applies to agents that report TickCounts.word_deletes, and never blocks by itself.
+    habit_word_delete: bool = False
+    habit_window_s: float = 30.0
+    habit_drop: float = 0.17
+    habit_min_keys: int = 3
 
     # Tiger
     tiger_database_url: str = ""

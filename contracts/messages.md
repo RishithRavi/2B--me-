@@ -29,7 +29,8 @@ null on the wire (`derived: model`). Workflow blocks add `transitions {"ide>brow
 the temporal context adds `psd: float[32]`.
 
 `activity` = input events per 1 s bucket over the tick (sparkline + co-presence); not stored.
-`counts` goes to `trust_ticks.flags`.
+`counts` goes to `trust_ticks.flags`. `counts.word_deletes` (optional, Sat 22:50): ⌥⌫ word deletes this tick, detected on the
+capture thread and sent only as a count (a correction-style habit); agents that don't send it are never subject to the habit rule.
 
 **Idempotency / sessions**
 - Dedupe on `(device_id, run_id, seq)`; `seq` restarts at 0 per run. Tiger inserts `ON CONFLICT DO NOTHING`.

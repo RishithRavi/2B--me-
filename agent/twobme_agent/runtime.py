@@ -57,6 +57,8 @@ class TickBuilder:
             active = True
         elif kind == "app":
             self.counts["app_switches"] += 1
+        elif kind == "habit" and e.get("kind") == "word_delete":
+            self.counts["word_deletes"] += 1
         if active:
             self.activity.append(t)
             self.last_input = t
@@ -103,6 +105,7 @@ class TickBuilder:
                     "clicks",
                     "scroll_events",
                     "app_switches",
+                    "word_deletes",
                 ]
             },
             "activity": activity,
@@ -130,7 +133,7 @@ def handle_message(message, base):
     kind = message.get("type")
     if kind in ("challenge", "lock", "unlock"):
         notify(kind)
-    if kind == "challenge" and message.get("browser_live_recent") is False:
+    if kind == "challenge" and message.get("open_browser") is True:
         url = message.get("verify_url", "")
         target = urlsplit(url)
         origin = urlsplit(base)

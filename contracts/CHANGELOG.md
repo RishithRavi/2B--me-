@@ -56,3 +56,9 @@ Format: `- YYYY-MM-DD HH:MM ET · <who> · <file/type> · <change>`
   - Stub voice: fake header admin-only, operator override + label-aware default, `simulated=true` (api.md "Stub voice").
 - 2026-09-26 22:00 ET · Claude · additive: `GET /history/sessions` and `GET /history/anomalies` accept an optional `device_id`
   (admin: any device; user: own devices only, a foreign id → `[]`). Breach trace-back from `/admin` → `/history?device_id=`.
+- 2026-09-26 22:50 ET · Claude · additive: `TickCounts.word_deletes: int | None` (⌥⌫ word deletes per tick; the agent detects
+  ⌥⌫ on the capture thread and sends only this count; the key still flows as an ordinary BKSP class event, so features are
+  unchanged). Server **habit rule** behind `HABIT_WORD_DELETE` (default off): every `HABIT_WINDOW_S`=30 s of active typing
+  (ticks with ≥ 3 keys) without a word delete drops trust by `HABIT_DROP`=0.17 (absolute) with feed line "Habit rule: …
+  (owner-set rule, not the model)" and trust reason `habit_word_delete`. Only for agents that report the count; never blocks.
+  Also: the agent now reads `AgentChallenge.open_browser` (was `browser_live_recent`).

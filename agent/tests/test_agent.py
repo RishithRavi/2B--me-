@@ -103,3 +103,21 @@ def test_numeric_features_cannot_smuggle_content():
     ]
     with pytest.raises(ValueError, match="Non-numeric"):
         safe_tick(tick, spec())
+
+
+def test_word_delete_habit_is_a_count_only():
+    b = TickBuilder(spec(), {"w_pt": 100, "h_pt": 100}, "r")
+    for i in range(3):
+        b.add({"ev": "key", "t_ns": 100 + i, "down": True, "slot": i, "cls": "BKSP"})
+    b.add(local_event({"ev": "habit", "t_ns": 200, "kind": "word_delete"}))
+    b.add(local_event({"ev": "habit", "t_ns": 300, "kind": "word_delete"}))
+    tick = b.tick(5_000_000_000, "s", ClockOffset())
+    assert tick["counts"]["word_deletes"] == 2 and tick["counts"]["keys"] == 3
+    assert "habit" not in json.dumps(tick) and "word_delete\"" not in json.dumps(tick)
+    assert b.tick(10_000_000_000, "s", ClockOffset())["counts"]["word_deletes"] == 0
+    with pytest.raises(ValueError):
+        local_event({"ev": "habit", "t_ns": 1, "kind": "cmd_c"})
+    tick["counts"]["passwords"] = 1
+    with pytest.raises(ValueError):
+        safe_tick(tick, spec())
+
