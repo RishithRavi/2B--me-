@@ -8,6 +8,7 @@ import type { RosterRow } from "@/lib/contracts";
 
 import { drillTitle, liveLevel, stageLink } from "./dashboard-view";
 import { agentOffline, needsResnapshot, type Drill } from "./live-hooks";
+import { ttdView } from "./ttd-stopwatch";
 import { redChip } from "./why-chips";
 
 describe("needsResnapshot (stream opened before the device existed)", () => {
@@ -124,3 +125,31 @@ describe("admin drill-in (synthetic employees are labelled; offline shows the la
 });
 
 type LiveStateHealth = NonNullable<ReturnType<typeof initialLiveState>["health"]>;
+
+describe("TTD view after a reload or a long takeover", () => {
+  const T0 = Date.parse("2026-09-26T14:00:00.000Z");
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const markers = [{ t: iso(T0), label: "takeover_start" as const, text: null }];
+  const pt = (ms: number, confidence: number) => ({ t: iso(ms), confidence, level: (confidence < 0.4 ? "suspicious" : "normal") as "normal" });
+  const blk = (modality: "keyboard" | "mouse", ms: number) => ({ modality, t_end: iso(ms) }) as never;
+
+  it("counts are complete only when the blocks on hand start before the marker", () => {
+    const history = [pt(T0 - 5000, 0.97), pt(T0 + 30_000, 0.35)];
+    const all = ttdView(markers, history, [blk("keyboard", T0 - 1000), blk("keyboard", T0 + 5000), blk("mouse", T0 + 9000)], T0 + 60_000);
+    expect(all.r.status).toBe("detected");
+    expect(all.countsComplete).toBe(true);
+    expect(all.beforeLoad).toBe(false);
+    // after a reload the snapshot only carries the last 120 s of blocks
+    const reloaded = ttdView(markers, history, [blk("mouse", T0 + 20_000)], T0 + 60_000);
+    expect(reloaded.r.seconds).toBe(30);
+    expect(reloaded.countsComplete).toBe(false);
+  });
+
+  it("says 'detected before this page loaded' when the history begins after the marker, already below 40%", () => {
+    const v = ttdView(markers, [pt(T0 + 231_000, 0.2), pt(T0 + 236_000, 0.18)], [], T0 + 240_000);
+    expect(v.r.status).toBe("detected");
+    expect(v.beforeLoad).toBe(true);
+    // history that starts after the marker but above 40% still times the real crossing
+    expect(ttdView(markers, [pt(T0 + 10_000, 0.7), pt(T0 + 30_000, 0.35)], [], T0 + 40_000).beforeLoad).toBe(false);
+  });
+});

@@ -149,6 +149,22 @@ function trimByTime<T>(items: T[], getT: (x: T) => number, windowMs = WINDOW_MS)
   return items.filter((x) => getT(x) >= cutoff);
 }
 
+/**
+ * Markers keep the 10-minute window, plus the latest takeover_start and every marker after it until a Reset
+ * follows: an open takeover (or its frozen time-to-detection) never loses its start marker to the window.
+ */
+export function trimMarkers(markers: MarkerPoint[]): MarkerPoint[] {
+  if (markers.length === 0) return markers;
+  let start = -Infinity;
+  for (const m of markers) if (m.label === "takeover_start") start = Math.max(start, tms(m.t));
+  const reset = markers.some((m) => m.label === "reset" && tms(m.t) > start);
+  const keepFrom = Number.isFinite(start) && !reset ? start : Infinity;
+  let latest = -Infinity;
+  for (const m of markers) latest = Math.max(latest, tms(m.t));
+  const cutoff = Math.min(latest - WINDOW_MS, keepFrom);
+  return markers.filter((m) => tms(m.t) >= cutoff);
+}
+
 function pushFeed(recent: FeedItem[], item: FeedItem): FeedItem[] {
   return [item, ...recent].slice(0, FEED_MAX);
 }
@@ -246,7 +262,7 @@ export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = D
       const level = d.locked ? "locked" : d.level;
       const point: TrustPoint = { t, confidence: d.confidence, level };
       const history = trimByTime([...s.trust_history, point], (p) => tms(p.t));
-      const markers = trimByTime(s.markers, (m) => tms(m.t));
+      const markers = trimMarkers(s.markers);
       const device = s.device && s.device.locked !== d.locked ? { ...s.device, locked: d.locked } : s.device;
       return { ...s, trust: d, trust_history: history, markers, device };
     }
@@ -305,7 +321,7 @@ export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = D
     }
 
     case "marker": {
-      const markers = trimByTime([...s.markers, ev.data].sort((a, b) => tms(a.t) - tms(b.t)), (x) => tms(x.t));
+      const markers = trimMarkers([...s.markers, ev.data].sort((a, b) => tms(a.t) - tms(b.t)));
       return { ...s, markers };
     }
 

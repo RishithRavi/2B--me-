@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import type { Level } from "@/lib/contracts";
 import { useNow } from "@/lib/hooks";
 import type { LiveState, LiveStore } from "@/lib/live";
+import { takeoverOpen } from "@/lib/ttd";
 import { fmtAgo, scoredModalities, shortId } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
@@ -207,7 +208,14 @@ export function DashboardView({
         <Panel title="Trust" icon={Activity} className="lg:col-span-4" bodyClassName="space-y-4">
           <TrustGauge trust={state.trust} locked={state.device?.locked} lockReason={state.device?.lock_reason} learning={learning} stale={offline} />
           {/* time-to-detection runs off the demo laptop's takeover markers; org employees have none */}
-          {!synthetic && <TtdStopwatch markers={state.markers} history={state.trust_history} blocks={state.blocks} />}
+          {!synthetic && (
+            <TtdStopwatch
+              markers={state.markers}
+              history={state.trust_history}
+              blocks={state.blocks}
+              open={takeoverOpen(state.markers) || state.label === "impostor"}
+            />
+          )}
         </Panel>
         <Panel title="Last 10 minutes" icon={BarChart3} hint="bands at 80% and 40% · takeover shaded" className="lg:col-span-8">
           <TrustChart history={state.trust_history} markers={state.markers} height={392} />

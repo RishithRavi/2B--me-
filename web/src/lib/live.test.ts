@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { AnomalyLive, BlockScored, LiveEvent, Snapshot, TrustLive } from "./contracts";
-import { FEED_MAX, applyLive, initialLiveState, parseLive, type LiveState } from "./live";
-import { computeTtd, takeoverIntervals } from "./ttd";
+import { FEED_MAX, applyLive, initialLiveState, parseLive, trimMarkers, type LiveState } from "./live";
+import { computeTtd, takeoverIntervals, takeoverOpen } from "./ttd";
 
 const DEV = "dev-1";
 const T0 = Date.parse("2026-09-26T14:00:00.000Z");
@@ -249,5 +249,32 @@ describe("TTD stopwatch", () => {
       { from: T0, to: T0 + 10_000, open: false },
       { from: T0 + 20_000, to: T0 + 30_000, open: true },
     ]);
+  });
+});
+
+describe("markers: an open takeover keeps its start past the 10-minute window", () => {
+  const M = 60_000;
+  const mk = (t: number, label: "takeover_start" | "takeover_end" | "rearm" | "reset" | "note") => ({ t: iso(t), label, text: null });
+
+  it("keeps an open takeover_start when a marker lands 11 min later (live stream)", () => {
+    let s: LiveState = applyLive(initialLiveState(), ev("snapshot", snapshot({ markers: [mk(T0 - 60_000, "note")] })));
+    s = applyLive(s, ev("marker", mk(T0, "takeover_start"), T0));
+    s = applyLive(s, ev("marker", mk(T0 + 11 * M, "rearm"), T0 + 11 * M));
+    s = applyLive(s, ev("trust", trust(0.31, T0 + 11 * M), T0 + 11 * M));
+    expect(s.markers.map((m) => m.label)).toEqual(["takeover_start", "rearm"]); // the 12-min-old note is gone
+    expect(computeTtd(s.markers, [], []).status).not.toBe("idle");
+    expect(s.markers.some((m) => m.label === "takeover_start")).toBe(true);
+  });
+
+  it("keeps everything after the latest start, and drops it once a Reset follows", () => {
+    const open = [mk(T0, "takeover_start"), mk(T0 + 2 * M, "note"), mk(T0 + 11 * M, "rearm")];
+    expect(trimMarkers(open)).toEqual(open);
+    expect(takeoverOpen(trimMarkers(open))).toBe(true);
+    const afterReset = [...open, mk(T0 + 12 * M, "reset")];
+    expect(trimMarkers(afterReset).map((m) => m.label)).toEqual(["note", "rearm", "reset"]);
+  });
+
+  it("still trims to the window when there is no takeover", () => {
+    expect(trimMarkers([mk(T0, "note"), mk(T0 + 11 * M, "rearm")]).map((m) => m.label)).toEqual(["rearm"]);
   });
 });

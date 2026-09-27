@@ -118,7 +118,7 @@ export function StageView({
                 className="max-w-[300px] xl:max-w-[min(420px,100cqw,calc(100cqh_-_1.75rem))]"
               />
             </div>
-            {!synthetic && <TtdStopwatch markers={state.markers} history={state.trust_history} blocks={state.blocks} large />}
+            {!synthetic && <TtdStopwatch markers={state.markers} history={state.trust_history} blocks={state.blocks} open={open} large />}
           </div>
 
           <div className="flex flex-col gap-3 xl:col-span-9 xl:min-h-0">
