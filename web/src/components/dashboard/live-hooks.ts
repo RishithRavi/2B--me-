@@ -13,8 +13,9 @@ import { refreshMe } from "@/lib/session";
  * snapshot had device=null and the socket stays unbound: trust events still flow, but lock state, the model and
  * the open challenge never arrive (the overlay sat at "1% reconnecting"). Once events name a device, reconnect.
  */
-export function needsResnapshot(s: Pick<LiveState, "connected" | "device" | "knownDevices">, mock: boolean): string | null {
-  if (mock || !s.connected || s.device !== null) return null;
+export function needsResnapshot(s: Pick<LiveState, "connected" | "synced" | "device" | "knownDevices">, mock: boolean): string | null {
+  // only once this connection's own snapshot said "no device" (not while it is still on its way)
+  if (mock || !s.connected || !s.synced || s.device !== null) return null;
   const ids = Object.keys(s.knownDevices).sort();
   return ids.length ? ids.join(",") : null;
 }

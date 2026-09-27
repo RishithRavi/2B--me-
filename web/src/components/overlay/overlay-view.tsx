@@ -6,25 +6,26 @@
 //   prompt  — a different person may be at the keyboard: full-screen voice check (dismissible — behavior alone
 //             never blocks; purchases and other high-risk actions keep stepping up until it's answered)
 //   lock    — the device was locked by a failed voice check: full screen, not dismissible; the owner signs in
-//             again and unlocks with a fresh voice phrase (§5.4). Fails closed: offline, loading or signed out with
-//             a remembered lock still shows the lock screen.
+//             again and unlocks with a fresh voice phrase (§5.4). Fails closed: offline, loading, signed out, or
+//             signed in as anyone but the locked device's owner with a remembered lock still shows the lock screen.
+//             Only a snapshot received on the current connection, for the remembered device, releases it.
 //   panel   — sign in
-import { CheckCircle2, ChevronDown, Loader2, Lock, LogIn, Mic, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
+import { CheckCircle2, ChevronDown, Loader2, Lock, LogIn, LogOut, Mic, RefreshCw, ShieldAlert, UserX, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useRefreshMeOnAuthClose, useResnapshotOnFirstDevice } from "@/components/dashboard/live-hooks";
 import { SimulatedBadge } from "@/components/dashboard/voice-analysis";
-import { useVoiceMode, type VoiceMode } from "@/components/dashboard/voice-mode";
+import { useVoiceMode } from "@/components/dashboard/voice-mode";
 import { WhyChips } from "@/components/dashboard/why-chips";
 import { LogoMark } from "@/components/site/logo";
 import { Button } from "@/components/ui/button";
 import { ChallengeFlow as RealChallengeFlow } from "@/components/voice/challenge-flow";
 import { ChallengeFlow as MockChallengeFlow } from "@/components/verify-stub/challenge-flow";
 import { mockBackend, realBackend } from "@/components/verify-stub/backend";
-import { ApiError } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type { ChallengeLive, Level, TrustPoint, VoiceDecision } from "@/lib/contracts";
 import { useMounted, useNow } from "@/lib/hooks";
-import { useLive } from "@/lib/live";
+import { type LiveStore, useLive } from "@/lib/live";
 import { refreshMe, useMe } from "@/lib/session";
 import { levelColor, levelLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { BehaviorPanel } from "./behavior-panel";
 import { type OverlayMode, inElectron, overlayBridge } from "./bridge";
 import { OverlaySignIn } from "./sign-in";
-import { type MeStatus, challengeKey, fullScreen, overlayMode, promptable, settleAfterPrompt, SETTLE_MS } from "./overlay-state";
+import { type MeStatus, challengeKey, fullScreen, lockAuthority, overlayMode, promptable, settleAfterPrompt, SETTLE_MS } from "./overlay-state";
 
 // The simulated stream never shares the real lock memory (a mock lock must not lock the real overlay).
 const lockKey = (mock: boolean) => (mock ? "2bme:overlay:locked:mock" : "2bme:overlay:locked");
@@ -41,6 +42,10 @@ const lockKey = (mock: boolean) => (mock ? "2bme:overlay:locked:mock" : "2bme:ov
 export interface LockMemory {
   reason: string | null;
   label: string | null;
+  /** the locked device: only a live snapshot of this device (its owner signed in) says it's unlocked */
+  device_id: string | null;
+  /** the voice result that locked it was simulated (stub voice): the lock screen says so */
+  simulated: boolean;
 }
 
 /** null = not locked. Any unreadable value counts as locked (fail closed). */
@@ -49,9 +54,10 @@ export function parseLockMemory(raw: string | null): LockMemory | null {
   try {
     const v: unknown = JSON.parse(raw);
     const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
-    return { reason: typeof o.reason === "string" ? o.reason : null, label: typeof o.label === "string" ? o.label : null };
+    const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : null);
+    return { reason: str("reason"), label: str("label"), device_id: str("device_id"), simulated: o.simulated === true };
   } catch {
-    return { reason: null, label: null };
+    return { reason: null, label: null, device_id: null, simulated: false };
   }
 }
 
@@ -79,6 +85,31 @@ const LOCK_REASON: Record<string, string> = {
   admin_lock: "An administrator locked this device.",
 };
 
+// Stub voice (§8 C2): never state a canned result as a live finding.
+const SIMULATED_REASON: Record<string, string> = {
+  voice_spoof: "The voice check returned a synthetic-voice (spoof) result.",
+  voice_impostor: "The voice check returned a different-speaker result.",
+};
+
+/** A lock that a voice result caused (a simulated one gets the badge; an admin or TOTP lock doesn't). */
+const voiceLock = (reason: string | null) => reason === null || reason in SIMULATED_REASON;
+
+/**
+ * Another account signed in on this overlay (b@ on A's lock screen): the stream is still focused on the previous
+ * account's device, so the new account's snapshot would be filtered out. Drop the old device and bind afresh.
+ */
+function useRebindOnAccountChange(userId: string | null, store: LiveStore | null, mock: boolean) {
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    if (!store || mock || !userId) return;
+    if (last.current !== null && last.current !== userId) {
+      if (store.getSnapshot().focus !== null) store.setFocus(null);
+      else store.reconnect();
+    }
+    last.current = userId;
+  }, [userId, store, mock]);
+}
+
 /** ?dev=1 (the shell passes it with --dev) shows the stub's demo-decision controls. Always called (hook order). */
 function useDevFlag(): boolean {
   const [dev, setDev] = useState(false);
@@ -98,7 +129,9 @@ export function OverlayView() {
   const devFlag = useDevFlag();
   const signedIn = me.status === "ok" || me.mock;
   const { state, store, mock } = useLive({ enabled: signedIn });
-  const voiceMode = useVoiceMode(mock);
+  const meStatus: MeStatus = me.mock ? "ok" : me.status;
+  // retried until known (the overlay is long-lived and may start before the API is reachable)
+  const voiceMode = useVoiceMode(mock, `${meStatus}:${state.connected}`);
   const now = useNow(1000);
   const [lockMemo, setLockMemo] = useState<LockMemory | null | undefined>(undefined); // undefined = not read yet
   const [snoozedKey, setSnoozedKey] = useState<string | null>(null);
@@ -110,12 +143,18 @@ export function OverlayView() {
 
   useResnapshotOnFirstDevice(state, store, mock);
   useRefreshMeOnAuthClose(state.closeCode, mock);
+  useRebindOnAccountChange(me.me?.user_id ?? null, store, mock);
 
-  const meStatus: MeStatus = me.mock ? "ok" : me.status;
   const serverLocked = !!(state.device?.locked || state.trust?.locked || state.trust?.level === "locked");
-  const synced = signedIn && state.device !== null;
   const memo = lockMemo !== undefined ? lockMemo : mounted ? readLock(mock) : null;
   const lastKnownLocked = memo !== null;
+  // Only this connection's snapshot, for the remembered device, may confirm or release a remembered lock.
+  const fresh = state.synced && state.connected;
+  const deviceId = state.device?.id ?? null;
+  const observer = !me.mock && me.me?.role === "admin";
+  const { synced, foreign } = lockAuthority({ signedIn, fresh, deviceId, memo, observer });
+  // Stub voice: the server says so, or a result on this device was flagged simulated (an older /api/status).
+  const voiceSimulated = voiceMode === "stub" || state.voiceResults.some((r) => r.simulated);
   const remember = useCallback(
     (v: LockMemory | null) => {
       writeLock(mock, v);
@@ -166,7 +205,7 @@ export function OverlayView() {
   const settledReason = settling === "lock" && closedCh ? blockReason(decisionFor(closedCh.challenge_id)) : null;
   useEffect(() => {
     if (settling === "lock") {
-      if (!memo) remember({ reason: settledReason, label: deviceLabel });
+      if (!memo) remember({ reason: settledReason, label: deviceLabel, device_id: deviceId, simulated: voiceSimulated });
       return;
     }
     if (!synced) return;
@@ -174,9 +213,20 @@ export function OverlayView() {
       if (memo) remember(null);
       return;
     }
-    const want = { reason: deviceReason ?? memo?.reason ?? null, label: deviceLabel ?? memo?.label ?? null };
-    if (!memo || memo.reason !== want.reason || memo.label !== want.label) remember(want);
-  }, [settling, settledReason, synced, serverLocked, deviceReason, deviceLabel, memo, remember]);
+    const want: LockMemory = {
+      reason: deviceReason ?? memo?.reason ?? null,
+      label: deviceLabel ?? memo?.label ?? null,
+      device_id: deviceId,
+      simulated: voiceSimulated || !!memo?.simulated,
+    };
+    if (!memo || (Object.keys(want) as (keyof LockMemory)[]).some((k) => memo[k] !== want[k])) remember(want);
+  }, [settling, settledReason, synced, serverLocked, deviceReason, deviceLabel, deviceId, voiceSimulated, memo, remember]);
+
+  // What the lock screen names: the remembered device unless this connection's owner snapshot speaks for it.
+  const fromMemo = memo !== null && !synced;
+  const lockLabel = (fromMemo ? memo.label : deviceLabel) ?? memo?.label ?? "This Mac";
+  const lockReason = fromMemo ? memo.reason : (deviceReason ?? settledReason ?? memo?.reason ?? null);
+  const lockSimulated = voiceLock(lockReason) && (voiceSimulated || !!memo?.simulated);
 
   useEffect(() => {
     if (mounted) overlayBridge()?.setMode(mode);
@@ -240,7 +290,7 @@ export function OverlayView() {
               icon={<ShieldAlert className="size-6 text-trust-suspicious" />}
               title="Is this still the owner?"
               sub={`Typing and pointer rhythm stopped matching the enrolled profile (trust ${state.trust ? `${state.trust.display}%` : "—"}). Behavior alone never blocks — answer a quick voice check to continue.`}
-              badge={voiceMode === "stub" ? <SimulatedBadge /> : null}
+              badge={voiceSimulated ? <SimulatedBadge /> : null}
             />
             {promptable(challenge) ? (
               <>
@@ -281,16 +331,16 @@ export function OverlayView() {
         <FullScreen tone="lock">
           <LockScreen
             meStatus={meStatus}
-            reason={deviceReason ?? settledReason ?? memo?.reason ?? null}
-            deviceLabel={deviceLabel ?? memo?.label ?? "This Mac"}
+            live={fresh}
+            foreignAccount={foreign ? (me.me?.email ?? "another account") : null}
+            reason={lockReason}
+            reasonSimulated={lockSimulated}
+            voiceSimulated={voiceSimulated || !!memo?.simulated}
+            deviceLabel={lockLabel}
             backend={backend}
             devControls={devControls}
-            voiceMode={voiceMode}
             onSignedIn={onSignedIn}
-            onNotLocked={() => {
-              remember(null);
-              store?.reconnect();
-            }}
+            onRecheck={() => store?.reconnect()}
           />
         </FullScreen>
       )}
@@ -474,24 +524,37 @@ function Pill({
   );
 }
 
+const RECHECK_MSG = "2bME reports this account's device as unlocked. Re-checking the lock…";
+
 function LockScreen({
   meStatus,
+  live,
+  foreignAccount,
   reason,
+  reasonSimulated,
+  voiceSimulated,
   deviceLabel,
   backend,
   devControls,
-  voiceMode,
   onSignedIn,
-  onNotLocked,
+  onRecheck,
 }: {
   meStatus: MeStatus;
+  /** a snapshot arrived on the current connection (until then, who the device belongs to isn't known) */
+  live: boolean;
+  /** signed in, but not as the locked device's owner: the email to name (the lock holds) */
+  foreignAccount: string | null;
   reason: string | null;
+  /** the lock came from a simulated (stub) voice result */
+  reasonSimulated: boolean;
+  /** the unlock check will be simulated too */
+  voiceSimulated: boolean;
   deviceLabel: string;
   backend: typeof realBackend;
   devControls: boolean;
-  voiceMode: VoiceMode;
   onSignedIn: () => void;
-  onNotLocked: () => void;
+  /** reconnect for a fresh snapshot (the server's view of the lock) */
+  onRecheck: () => void;
 }) {
   const [unlockId, setUnlockId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -510,8 +573,10 @@ function LockScreen({
         setNeedsLogin(true);
         setErr(e.status === 403 ? "Sign in again: unlocking needs a session started after the lock." : null);
       } else if (e instanceof ApiError && e.status === 409) {
-        setErr("The device isn't locked anymore.");
-        onNotLocked();
+        // "not locked" is about the signed-in account's device. It never clears the remembered lock by itself:
+        // the fresh snapshot decides, and only for the locked device.
+        setErr(RECHECK_MSG);
+        onRecheck();
       } else {
         setErr(e instanceof ApiError ? e.detail || `HTTP ${e.status}` : String(e));
       }
@@ -529,9 +594,32 @@ function LockScreen({
     }
   }
 
+  async function signOut() {
+    setBusy(true);
+    try {
+      await api.logout();
+    } catch {
+      /* the refresh below shows whoever is still signed in */
+    }
+    try {
+      await refreshMe();
+    } finally {
+      setBusy(false);
+      setUnlockId(null);
+      setErr(null);
+    }
+  }
+
+  // the re-check after a 409 is answered by the next snapshot
+  useEffect(() => {
+    if (live) setErr((e) => (e === RECHECK_MSG ? null : e));
+  }, [live]);
+
   const offline = meStatus === "offline";
   const connecting = meStatus === "loading";
   const showLogin = !offline && !connecting && (meStatus !== "ok" || needsLogin);
+  const checking = !offline && !connecting && !showLogin && !live;
+  const reasonText = (reason && ((reasonSimulated && SIMULATED_REASON[reason]) || LOCK_REASON[reason])) || "A voice check failed.";
 
   return (
     <div className="w-full max-w-3xl text-center">
@@ -539,12 +627,16 @@ function LockScreen({
         <Lock className="size-8 text-trust-locked" />
       </div>
       <h1 className="text-3xl font-semibold tracking-tight">{deviceLabel} is locked</h1>
+      {reasonSimulated && (
+        <div className="mt-3 flex justify-center">
+          <SimulatedBadge />
+        </div>
+      )}
       <p className="mx-auto mt-2 max-w-lg text-muted-foreground">
-        {(reason && LOCK_REASON[reason]) || "A voice check failed."} The session was signed out. Only the owner can unlock it, with a
-        fresh voice phrase.
+        {reasonText} The session was signed out. Only the owner can unlock it, with a fresh voice phrase.
       </p>
       <div className="mx-auto mt-8 max-w-3xl text-left">
-        {offline || connecting ? (
+        {offline || connecting || checking ? (
           <div className="mx-auto flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-border bg-card p-6 text-center">
             {offline ? <WifiOff className="size-5 text-muted-foreground" /> : <Loader2 className="size-5 animate-spin text-muted-foreground" />}
             <p className="text-sm text-muted-foreground">
@@ -557,6 +649,12 @@ function LockScreen({
                 {retrying ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />} Try again
               </Button>
             )}
+            {checking && (
+              <Button variant="ghost" size="sm" onClick={onRecheck}>
+                <RefreshCw className="size-3.5" /> Check again
+              </Button>
+            )}
+            {err && <p className="text-sm text-trust-suspicious">{err}</p>}
           </div>
         ) : showLogin ? (
           <div className="mx-auto max-w-sm rounded-2xl border border-border bg-card p-6">
@@ -570,9 +668,19 @@ function LockScreen({
             />
             {err && <p className="mt-3 text-sm text-trust-suspicious">{err}</p>}
           </div>
+        ) : foreignAccount ? (
+          <div className="mx-auto flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-border bg-card p-6 text-center" data-testid="lock-foreign">
+            <UserX className="size-5 text-trust-suspicious" />
+            <p className="text-sm">
+              Signed in as <span className="font-medium">{foreignAccount}</span>. Only the owner of {deviceLabel} can unlock it.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => void signOut()} disabled={busy}>
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <LogOut className="size-3.5" />} Sign out and switch account
+            </Button>
+          </div>
         ) : unlockId ? (
           <div className="rounded-2xl border border-border bg-card p-6">
-            {voiceMode === "stub" && (
+            {voiceSimulated && (
               <div className="mb-4 flex justify-end">
                 <SimulatedBadge />
               </div>
@@ -588,7 +696,7 @@ function LockScreen({
             <Button size="lg" onClick={startUnlock} disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Mic className="size-4" />} Unlock with voice
             </Button>
-            {voiceMode === "stub" && <SimulatedBadge />}
+            {voiceSimulated && <span className="text-xs text-muted-foreground">Stub voice: the unlock check is simulated too.</span>}
             {err && <p className="text-sm text-trust-suspicious">{err}</p>}
           </div>
         )}

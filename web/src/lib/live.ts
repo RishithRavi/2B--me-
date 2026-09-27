@@ -84,6 +84,9 @@ export interface LiveState {
   presence: PresenceLive | null;
   // ---- connection / bookkeeping ----
   connected: boolean;
+  /** a snapshot arrived on the current connection (false while connecting, after a disconnect or a reconnect):
+   *  until then the snapshot fields are left over from an earlier connection (maybe another account's) */
+  synced: boolean;
   /** WS close code of the last disconnect (4401 = not signed in) */
   closeCode: number | null;
   /** device the stream is focused on (null = first snapshot decides) */
@@ -120,6 +123,7 @@ export function initialLiveState(): LiveState {
     voiceResults: [],
     presence: null,
     connected: false,
+    synced: false,
     closeCode: null,
     focus: null,
     knownDevices: {},
@@ -228,6 +232,7 @@ export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = D
         blocks: [...(d.recent_blocks ?? [])].sort((a, b) => tms(a.t_end) - tms(b.t_end)).slice(-BLOCKS_MAX),
         lastBlocks: Object.fromEntries((d.recent_blocks ?? []).map((b) => [b.modality, b])),
         connected: prev.connected,
+        synced: true,
         closeCode: prev.closeCode,
         focus: prev.focus ?? d.device?.id ?? ev.device_id ?? null,
         knownDevices,
@@ -350,7 +355,7 @@ export function applyLive(prev: LiveState, ev: LiveEvent, receivedAt: number = D
 
 export function withConnection(s: LiveState, connected: boolean, closeCode: number | null = s.closeCode): LiveState {
   if (s.connected === connected && s.closeCode === closeCode) return s;
-  return { ...s, connected, closeCode };
+  return { ...s, connected, closeCode, synced: s.synced && connected && s.connected };
 }
 
 // ---------------------------------------------------------------------------
@@ -521,6 +526,7 @@ export class LiveStore {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
     this.backoff = BACKOFF_MIN;
+    if (this.state.synced) this.set({ ...this.state, synced: false }); // the next socket's snapshot re-syncs
     const ws = this.ws;
     this.ws = null;
     if (ws) {

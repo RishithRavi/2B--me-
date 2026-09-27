@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ChallengeLive } from "@/lib/contracts";
 
-import { IDLE_INPUTS, challengeKey, fullScreen, overlayMode, rememberedLockHolds, settleAfterPrompt, type OverlayInputs } from "./overlay-state";
+import { IDLE_INPUTS, challengeKey, fullScreen, lockAuthority, overlayMode, rememberedLockHolds, settleAfterPrompt, type OverlayInputs } from "./overlay-state";
 
 const ch = (trigger: ChallengeLive["trigger"], id = "c1"): ChallengeLive => ({
   challenge_id: id,
@@ -122,5 +122,44 @@ describe("prompt → lock ordering (no transient pill)", () => {
 
   it("a new challenge while settling shows its prompt", () => {
     expect(overlayMode({ ...base, challenge: ch("step_up", "c2"), settling: "prompt" })).toBe("prompt");
+  });
+});
+
+describe("lockAuthority: only a fresh snapshot of the remembered device speaks for the lock", () => {
+  const A = "dev-a";
+  const B = "dev-b";
+  const memoA = { device_id: A };
+  const live = { signedIn: true, fresh: true };
+
+  it("the owner's fresh snapshot of the locked device is authoritative", () => {
+    expect(lockAuthority({ ...live, deviceId: A, memo: memoA })).toEqual({ synced: true, foreign: false });
+    expect(lockAuthority({ ...live, deviceId: A, memo: null })).toEqual({ synced: true, foreign: false });
+  });
+
+  it("another account's device (b@ signs in on A's lock screen) never releases A's lock", () => {
+    const a = lockAuthority({ ...live, deviceId: B, memo: memoA });
+    expect(a).toEqual({ synced: false, foreign: true });
+    // B's own device is unlocked, yet the overlay stays locked
+    expect(overlayMode({ ...base, synced: a.synced, locked: false, lastKnownLocked: true })).toBe("lock");
+  });
+
+  it("an admin (observer) never speaks for the lock, even when their socket binds the locked device", () => {
+    expect(lockAuthority({ ...live, deviceId: A, memo: memoA, observer: true })).toEqual({ synced: false, foreign: true });
+  });
+
+  it("an account without a device can't release a remembered lock", () => {
+    expect(lockAuthority({ ...live, deviceId: null, memo: memoA })).toEqual({ synced: false, foreign: true });
+    expect(lockAuthority({ ...live, deviceId: null, memo: null })).toEqual({ synced: false, foreign: false });
+  });
+
+  it("state left over from an earlier connection (reconnecting, re-sign-in) is not authoritative", () => {
+    const stale = lockAuthority({ signedIn: true, fresh: false, deviceId: A, memo: memoA });
+    expect(stale).toEqual({ synced: false, foreign: false });
+    expect(overlayMode({ ...base, synced: stale.synced, locked: false, lastKnownLocked: true })).toBe("lock");
+    expect(lockAuthority({ signedIn: false, fresh: true, deviceId: A, memo: memoA }).synced).toBe(false);
+  });
+
+  it("an old memory without a device id is released by the signed-in owner's fresh snapshot", () => {
+    expect(lockAuthority({ ...live, deviceId: A, memo: { device_id: null } })).toEqual({ synced: true, foreign: false });
   });
 });

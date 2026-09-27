@@ -16,7 +16,7 @@ export interface OverlayInputs {
   locked: boolean;
   /** remembered across a revoked session, a restart or an outage (localStorage) */
   lastKnownLocked: boolean;
-  /** the live stream delivered this owner's device, so `locked` is authoritative */
+  /** a snapshot on the current connection delivered the locked device's owner view (see lockAuthority) */
   synced: boolean;
   challenge: ChallengeLive | null;
   snoozedKey: string | null;
@@ -49,7 +49,40 @@ export function promptable(c: ChallengeLive | null): c is ChallengeLive {
   return !!c && (c.trigger === "proactive" || c.trigger === "step_up");
 }
 
-/** A remembered lock is released only by a live snapshot of the signed-in owner's device that says "unlocked". */
+export interface LockAuthorityInputs {
+  signedIn: boolean;
+  /** a snapshot arrived on the current, open connection (LiveState.synced && connected) */
+  fresh: boolean;
+  /** the device that snapshot is about (the signed-in account's bound device), null = the account has none */
+  deviceId: string | null;
+  /** the remembered lock (null = none); device_id null = an old memory that didn't record the device */
+  memo: { device_id: string | null } | null;
+  /** signed in as an admin (observer): their socket binds whichever device was seen last, never "their" Mac */
+  observer?: boolean;
+}
+
+export interface LockAuthority {
+  /** the live device state may confirm or release the remembered lock */
+  synced: boolean;
+  /** signed in and live, but not as the owner of the locked device: the lock holds and says who can open it */
+  foreign: boolean;
+}
+
+/**
+ * Who may speak for the remembered lock. Only a snapshot received on the current connection counts (store state
+ * left over from before a disconnect or a re-sign-in can belong to another account), and only for the device the
+ * lock was remembered for: another account signing in (b@, an admin whose socket binds some other device) reports
+ * its own device, which never releases this one.
+ */
+export function lockAuthority(i: LockAuthorityInputs): LockAuthority {
+  if (!i.signedIn || !i.fresh) return { synced: false, foreign: false };
+  if (i.observer) return { synced: false, foreign: true };
+  if (i.deviceId === null) return { synced: false, foreign: i.memo !== null };
+  if (i.memo && i.memo.device_id !== null && i.memo.device_id !== i.deviceId) return { synced: false, foreign: true };
+  return { synced: true, foreign: false };
+}
+
+/** A remembered lock is released only by a live snapshot of the locked device (its owner signed in) that says "unlocked". */
 export function rememberedLockHolds(i: Pick<OverlayInputs, "meStatus" | "lastKnownLocked" | "synced">): boolean {
   return i.lastKnownLocked && !(i.meStatus === "ok" && i.synced);
 }

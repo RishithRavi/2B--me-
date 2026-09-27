@@ -8,7 +8,7 @@ import { stageLink } from "./dashboard-view";
 import { needsResnapshot } from "./live-hooks";
 
 describe("needsResnapshot (stream opened before the device existed)", () => {
-  const s = { ...initialLiveState(), connected: true };
+  const s = { ...initialLiveState(), connected: true, synced: true };
 
   it("asks once events name a device while the snapshot had none", () => {
     expect(needsResnapshot(s, false)).toBeNull();
@@ -21,6 +21,8 @@ describe("needsResnapshot (stream opened before the device existed)", () => {
     const device = { id: "d1", label: "Mac", pointer: "trackpad" as const, mode: "monitor" as const, locked: false, lock_reason: null, last_seen: null };
     expect(needsResnapshot({ ...seen, device }, false)).toBeNull();
     expect(needsResnapshot({ ...seen, connected: false }, false)).toBeNull();
+    // connected but this connection's snapshot hasn't arrived yet (e.g. right after a re-sign-in)
+    expect(needsResnapshot({ ...seen, synced: false }, false)).toBeNull();
     expect(needsResnapshot(seen, true)).toBeNull();
   });
 });
