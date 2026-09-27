@@ -95,6 +95,7 @@ CHALLENGE_FEED = {
     "cancelled": ("Voice challenge cancelled ({trigger})", 1),
 }
 TERMINAL = {"verified", "blocked_spoof", "blocked_impostor", "expired", "cancelled"}
+ADMIN_LOCK = "admin_lock"  # lock_reason of an /admin/actions lock (only an admin unlock or /demo/reset clears it)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -433,6 +434,9 @@ class DeviceHub:
 
     # --- helpers ----------------------------------------------------------------------------------
     def publish(self, drt: DeviceRuntime | None, type_: str, data: BaseModel | dict | None) -> None:
+        audit = getattr(self, "audit", None)  # core.audit.AuditLog (org audit trail, §2.4); set in main
+        if audit is not None:
+            audit.observe(drt, type_, data)
         if drt is None:
             self.live.publish(None, None, type_, data)
         else:
@@ -1256,9 +1260,14 @@ class DeviceHub:
         trigger = row["trigger"]
         drt = self.rt_by_id(row.get("device_id"))
         live = VoiceResultLive(challenge_id=challenge_id, **result.model_dump(exclude={"spectrogram"}))
+        from app.core.voice_demo import voice_mode
+
+        if voice_mode() == "stub":  # §8 C2 stub honesty: canned/operator-chosen result, badge it
+            live.simulated = True
         if drt is not None:
             self.publish(drt, "voice_result", live)
-            self.feed(drt, "voice", f"Voice {trigger}: {result.decision} (conf {result.voice_confidence:.2f})",
+            sim = " — simulated (stub voice)" if live.simulated else ""
+            self.feed(drt, "voice", f"Voice {trigger}: {result.decision} (conf {result.voice_confidence:.2f}){sim}",
                       4 if result.decision.startswith("BLOCK") else 1)
         else:
             self.live.publish(None, row.get("user_id"), "voice_result", live)
@@ -1300,7 +1309,8 @@ class DeviceHub:
                         via: str) -> list[ResolvedDecision]:
         now = utcnow()
         if drt is not None:
-            if row["trigger"] == "unlock" and drt.dev.locked:
+            # an admin lock is an explicit human decision: only /admin/actions unlock (or /demo/reset) clears it
+            if row["trigger"] == "unlock" and drt.dev.locked and drt.dev.lock_reason != ADMIN_LOCK:
                 drt.dev.locked, drt.dev.locked_at, drt.dev.lock_reason = False, None, None
                 self.registry.save_device(drt.dev)
                 await self.send_agent(drt, AgentUnlock())
@@ -1355,6 +1365,8 @@ class DeviceHub:
 
     def can_request_unlock(self, device_id: UUID, session_created_at: datetime | None) -> bool:
         drt = self.rt_by_id(device_id)
+        if drt is not None and drt.dev.locked and drt.dev.lock_reason == ADMIN_LOCK:
+            raise HubError(409, "locked by your admin: only an admin can unlock this device")
         if drt is None or not drt.dev.locked or session_created_at is None or drt.dev.locked_at is None:
             return False
         return session_created_at > drt.dev.locked_at

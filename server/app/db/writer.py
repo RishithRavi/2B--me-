@@ -57,6 +57,8 @@ COLUMNS: dict[str, tuple[str, ...]] = {
         "prompt_first_get_at", "expires_at", "asv_cos", "cm_p_spoof", "spec_sim", "phrase_wer", "onset_ms",
         "voice_confidence", "decision", "findings", "decision_id",
     ),
+    # org audit trail (§2.4, migration 006)
+    "audit_log": ("time", "id", "kind", "device_id", "user_id", "handle", "actor", "summary", "severity", "ref_id"),
 }
 
 _CONN_ERRORS = (OSError, asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncio.TimeoutError)
@@ -144,7 +146,7 @@ class Writer:
                     by_table.setdefault(t, []).append(r)
                 # sessions/decisions/challenges first so later UPDATEs find their rows
                 order = ["sessions", "voice_challenges", "decisions", "markers", "anomalies",
-                         "trust_ticks", "feature_blocks"]
+                         "trust_ticks", "feature_blocks", "audit_log"]
                 for t in sorted(by_table, key=lambda x: order.index(x) if x in order else 99):
                     done += await self._insert_many(t, by_table[t])
                 for i, (sql, args) in enumerate(stmts):

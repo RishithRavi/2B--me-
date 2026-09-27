@@ -14,17 +14,19 @@ from fastapi import FastAPI
 
 from app.auth import hash_password
 from app.config import Settings, get_settings, insecure_secrets
+from app.core.audit import AuditLog
 from app.core.explain import Explainer
 from app.core.hub import DeviceHub, HubError
 from app.core.live import LiveBus
 from app.core.models import ModelManager
 from app.core.registry import Registry
 from app.core.runtime import Runtime, set_runtime
+from app.core.voice_demo import VoiceDemoMiddleware
 from app.db.migrate import run_migrations
 from app.db.pool import Db
 from app.db.repo_voice import RepoVoice
 from app.db.writer import Writer
-from app.routers import auth, decisions, demo, devices, enroll, history, ws
+from app.routers import admin, auth, decisions, demo, devices, enroll, history, ws
 from twobme_common.config import load_trust_config
 
 log = logging.getLogger("twobme")
@@ -64,6 +66,9 @@ def build_runtime(s: Settings) -> Runtime:
     r = Runtime(settings=s, db=db, writer=writer, registry=registry, live=live, models=models, hub=hub,
                 issuer=voice.issuer, repo_voice=repo_voice)
     r.extras["explainer_enabled"] = explainer.enabled
+    # org audit trail (§2.4): observes every event the hub publishes; admin actions emit directly
+    hub.audit = r.extras["audit"] = AuditLog(writer=writer, live=live, registry=registry, repo_voice=repo_voice,
+                                             models=models)
 
     async def _on_db() -> None:
         await registry.load_from_db(db)
@@ -123,10 +128,12 @@ def create_app() -> FastAPI:
                   docs_url="/api/docs", openapi_url="/api/openapi.json")
     from app import voice
 
-    for mod in (auth, devices, decisions, enroll, demo, history):
+    for mod in (auth, devices, decisions, enroll, demo, history, admin):
         app.include_router(mod.router, prefix="/api")
     app.include_router(voice.router, prefix="/api")
     app.include_router(ws.router)
+    # stub voice: X-Fake-Decision only from admin; operator override / label-aware default otherwise (§5.3)
+    app.add_middleware(VoiceDemoMiddleware)
 
     from fastapi.responses import JSONResponse
 
