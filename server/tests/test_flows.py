@@ -386,6 +386,41 @@ def test_unlock_verify_without_takeover_adds_no_marker(client):
     agent.close()
 
 
+def test_expired_proactive_challenge_has_one_feed_line(client):
+    """SC-6: an expired proactive challenge adds exactly one expiry line to the feed."""
+    from app.core.runtime import rt
+
+    _uid, dev_id, agent = setup_monitored(client)
+    for _ in range(12):
+        agent.tick("b")
+    ch = next(m for m in agent.pending if m["type"] == "challenge" and m["trigger"] == "proactive")
+    cid = uuid.UUID(ch["challenge_id"])
+    rt().repo_voice.challenges[cid]["expires_at"] = datetime.now(UTC) - timedelta(seconds=1)
+    drt = rt().hub.devices[uuid.UUID(dev_id)]
+    for _ in range(40):  # the hub loop sweeps once a second
+        if rt().repo_voice.challenges[cid]["status"] == "expired":
+            break
+        time.sleep(0.1)
+    time.sleep(0.2)
+    lines = [f.text for f in drt.feed if "expired" in f.text]
+    assert lines == ["Proactive challenge expired (no lock; actions keep stepping up)"], lines
+    agent.close()
+
+
+def test_demo_label_feed_line_is_human(client):
+    """SC-6: /demo/label reads as ground truth, never 'Label set to impostor/b'."""
+    from app.core.runtime import rt
+
+    _uid, dev_id, agent = setup_monitored(client)
+    for body, text in ((({"label": "impostor", "actor": "b"}), "Ground truth: someone else (B) at the keyboard"),
+                       (({"label": "genuine", "actor": "a"}), "Ground truth: owner (A) back")):
+        r = client.post("/api/demo/label", json={"device_id": dev_id, **body}, headers=ADMIN)
+        assert r.status_code == 200, r.text
+        feed = [f.text for f in rt().hub.devices[uuid.UUID(dev_id)].feed]
+        assert feed[-1] == text and not any(t.startswith("Label set to") for t in feed)
+    agent.close()
+
+
 def test_rearm_and_redteam_active_challenge(client):
     _uid, dev_id, agent = setup_monitored(client)
     tl = client.post("/api/demo/rearm", json={"device_id": dev_id, "confidence": 0.31}, headers=ADMIN).json()

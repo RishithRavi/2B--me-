@@ -94,8 +94,18 @@ CHALLENGE_FEED = {
     "expired": ("Voice challenge expired ({trigger})", 2),
     "cancelled": ("Voice challenge cancelled ({trigger})", 1),
 }
+# a proactive challenge that expires never locks: its one feed line says so (whichever path expired it)
+PROACTIVE_EXPIRED = ("Proactive challenge expired (no lock; actions keep stepping up)", 3)
 TERMINAL = {"verified", "blocked_spoof", "blocked_impostor", "expired", "cancelled"}
 ADMIN_LOCK = "admin_lock"  # lock_reason of an /admin/actions lock (only an admin unlock or /demo/reset clears it)
+
+
+def _label_text(label: str, actor: str) -> str:
+    """Operator feed wording for a ground-truth label change (/demo/label)."""
+    who = "guest" if actor == "guest" else actor.upper()
+    if label == "impostor":
+        return f"Ground truth: someone else ({who}) at the keyboard"
+    return f"Ground truth: owner ({who}) back" if actor == "a" else f"Ground truth: genuine ({who})"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -952,7 +962,7 @@ class DeviceHub:
         drt.label, drt.actor = label, actor
         self.publish(drt, "label", LabelLive(label=label, actor=actor))
         if announce:
-            self.feed(drt, "label", f"Label set to {label}/{actor}")
+            self.feed(drt, "label", _label_text(label, actor))
         self._persist(drt)
 
     async def os_event(self, drt: DeviceRuntime, event: str, t: datetime) -> None:
@@ -1232,7 +1242,8 @@ class DeviceHub:
                            expires_at=row.get("expires_at"), verify_url=self.s.verify_url(challenge_id))
         if drt is not None:
             self.publish(drt, "challenge", cl)
-            line = CHALLENGE_FEED.get(status)
+            proactive_expired = status == "expired" and row["trigger"] == "proactive"
+            line = PROACTIVE_EXPIRED if proactive_expired else CHALLENGE_FEED.get(status)
             if line and row["trigger"] not in ("redteam", "sandbox"):
                 self.feed(drt, "challenge", line[0].format(trigger=row["trigger"].replace("_", "-"), attempt=attempt),
                           line[1])
@@ -1453,11 +1464,12 @@ class DeviceHub:
             for row in self.repo_voice.open_for_device(drt.device_id, now):
                 exp = row.get("expires_at")
                 if exp is not None and exp < now:
-                    with contextlib.suppress(Exception):
+                    try:  # the "expired" status event carries the one feed line (on_challenge_status)
                         await self.issuer.expire(row["id"])
+                    except Exception:
+                        if row["trigger"] == "proactive":
+                            self.feed(drt, "challenge", *PROACTIVE_EXPIRED)
                     self._resolve_attached(row["id"], "block", "challenge_expired")
-                    if row["trigger"] == "proactive":
-                        self.feed(drt, "challenge", "Proactive challenge expired (no lock; actions keep stepping up)", 3)
             if (drt.agent_ws is None and drt.agent_disconnected_at is not None and drt.session_id is not None
                     and mono - drt.agent_disconnected_at > self.cfg.session.end_after_ws_close_s):
                 self._end_session(drt, "ws_timeout")
