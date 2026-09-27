@@ -89,7 +89,15 @@ export function KpiStrip({ kpis, loading }: { kpis: OrgKpis; loading?: boolean }
         label="At risk"
         short="At risk"
         value={kpis.atRisk}
-        sub={none ? "no trust data yet" : kpis.atRisk ? `${kpis.suspicious} suspicious · ${kpis.watch} watch` : "everyone above 80%"}
+        sub={
+          none
+            ? "no trust data yet"
+            : kpis.atRisk
+              ? `${kpis.suspicious} suspicious · ${kpis.watch} watch`
+              : kpis.locked
+                ? `no one else below 80% · ${kpis.locked} locked`
+                : "everyone above 80%"
+        }
         icon={ShieldAlert}
         color={kpis.suspicious ? "var(--trust-suspicious)" : "var(--trust-watch)"}
         hot={kpis.atRisk > 0}

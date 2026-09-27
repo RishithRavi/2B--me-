@@ -21,9 +21,25 @@ const LEGEND: { level: Level; text: string }[] = [
   { level: "learning", text: "enrolling" },
 ];
 
+const OWNER_TEAM = "Enrolled owner";
+
+function Legend({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex items-center gap-x-3", className)}>
+      {LEGEND.map((l) => (
+        <span key={l.level} className="inline-flex items-center gap-1.5 text-[11px] whitespace-nowrap text-muted-foreground">
+          <span className="size-2 rounded-sm" style={{ background: levelColor(l.level) }} />
+          {levelLabel(l.level)} <span className="hidden text-muted-foreground/60 md:inline">{l.text}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function Cell({ row, selected, onSelect }: { row: RosterRow; selected: boolean; onSelect: () => void }) {
   const color = levelColor(row.level);
   const hot = row.level === "suspicious" || row.level === "locked";
+  // Focus and selection use outline, not ring: the inline inset boxShadow below overrides a ring's box-shadow.
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -32,8 +48,8 @@ function Cell({ row, selected, onSelect }: { row: RosterRow; selected: boolean; 
           onClick={onSelect}
           aria-label={`${row.handle}: ${row.locked ? "locked" : `${row.display ?? "—"}% ${levelLabel(row.level)}`}`}
           className={cn(
-            "relative flex h-12 w-[52px] shrink-0 flex-col items-center justify-center rounded-md transition-transform outline-none hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring",
-            selected && "ring-2 ring-foreground",
+            "relative flex h-12 w-[52px] shrink-0 flex-col items-center justify-center rounded-md transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+            selected && "outline-2 outline-offset-2 outline-foreground",
             !row.online && "opacity-40",
           )}
           style={{
@@ -76,41 +92,40 @@ export function RiskMap({
 }) {
   const teams = new Map<string, RosterRow[]>();
   for (const r of rows) {
-    const team = r.synthetic ? (r.team ?? "Unassigned") : "Enrolled owner";
+    const team = r.synthetic ? (r.team ?? "Unassigned") : OWNER_TEAM;
     const list = teams.get(team) ?? [];
     list.push(r);
     teams.set(team, list);
   }
-  const groups = Array.from(teams.entries()).map(([team, list]) => ({
-    team,
-    list: list.slice().sort((a, b) => a.handle.localeCompare(b.handle, undefined, { numeric: true })),
-    risk: list.filter((r) => r.locked || r.level === "suspicious" || r.level === "watch").length,
-  }));
+  // A fixed order (owner first, then teams A→Z): Map insertion order follows the roster, which the 30 s re-sync reshuffles.
+  const groups = Array.from(teams.entries())
+    .map(([team, list]) => ({
+      team,
+      list: list.slice().sort((a, b) => a.handle.localeCompare(b.handle, undefined, { numeric: true })),
+      // Same definition as the "At risk" KPI (orgKpis): watch + suspicious; locked is counted on its own.
+      risk: list.filter((r) => !r.locked && (r.level === "suspicious" || r.level === "watch")).length,
+      locked: list.filter((r) => r.locked).length,
+    }))
+    .sort((a, b) => (a.team === OWNER_TEAM ? -1 : b.team === OWNER_TEAM ? 1 : a.team.localeCompare(b.team)));
 
   return (
     <Panel
       title="Org risk map"
       icon={Radar}
       hint="every employee by team · click to drill in"
-      action={
-        <div className="hidden items-center gap-3 md:flex">
-          {LEGEND.map((l) => (
-            <span key={l.level} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="size-2 rounded-sm" style={{ background: levelColor(l.level) }} />
-              {levelLabel(l.level)} <span className="text-muted-foreground/60">{l.text}</span>
-            </span>
-          ))}
-        </div>
-      }
+      action={<Legend className="hidden lg:flex" />}
     >
-      <div className="flex flex-wrap gap-2.5">
+      {/* Below lg the header has no room: the legend gets its own row above the grid. */}
+      <Legend className="mb-2.5 flex-wrap gap-y-1 lg:hidden" />
+      <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
         {groups.map((g) => (
           <div key={g.team} className="rounded-lg bg-muted/35 p-2 ring-1 ring-foreground/5">
             <div className="mb-1.5 flex items-center justify-between gap-3 px-0.5">
-              <span className="text-[11.5px] font-medium">{g.team}</span>
-              <span className={cn("tnum text-[10.5px]", g.risk ? "text-trust-watch" : "text-muted-foreground")}>
+              <span className="truncate text-[11.5px] font-medium">{g.team}</span>
+              <span className={cn("tnum shrink-0 text-[10.5px]", g.risk ? "text-trust-watch" : g.locked ? "text-trust-locked" : "text-muted-foreground")}>
                 {g.list.length}
                 {g.risk ? ` · ${g.risk} at risk` : ""}
+                {g.locked ? ` · ${g.locked} locked` : ""}
               </span>
             </div>
             <div className="flex flex-wrap gap-1.5">
