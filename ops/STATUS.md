@@ -316,3 +316,16 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   from fresh A/B trials, public deployment, real-voice calibration and hardware rehearsal.
 - Aligned the product wording with the implementation: the server scores privacy-safe aggregates, and
   the active identity model uses keyboard, mouse and scroll while workflow/temporal remain diagnostic.
+- 22:15 · Claude · **Visual dress rehearsal → fixes → integrated on branch `integ`** (ws-core's working tree holds another
+  session's uncommitted overlay redesign, left untouched by request).
+  - **Merged into `integ`:** QA fixes SC-1..6, SO-1..4, WA-1..11, WL-1..8, WO-1..8/11..14 (46 items); origin/main (PR #3: CI,
+    release checklist, e2e wait); stage-toast offset. `gate.sh all` PASSED: server, features, ml, agent, voice 124, hearsay 98,
+    web 167, overlay, e2e.
+  - **Verified on a fresh integ stack (:8955/:3955)** with A on twobme_ml v1 + 19 synthetic employees:
+    - landing, /lab (honest weak evidence, retired branches);
+    - /admin catching Employee 07's takeover live (1% suspicious, challenge open, alert) and Employee 13's drift (watch);
+    - stage drill-in fits 1440x900 and 1280x720.
+  - **Open:**
+    - WO-9/WO-10 wait for the overlay redesign.
+    - 6 requests to Codex 1/2 in REQUESTS.md: voice simulated badge, fixed stub phrase, mic field, /shop state, /enroll wiring and look.
+    - Humans: deploy (VM + DNS), push, Electron GUI smoke on the demo Mac, live enrollment + ≥5 takeover trials.
