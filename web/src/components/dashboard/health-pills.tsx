@@ -9,6 +9,8 @@ import { useNow } from "@/lib/hooks";
 import { modalityColor, modalityIcon, modalityLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
+import type { VoiceMode } from "./voice-mode";
+
 type Tone = "ok" | "warn" | "bad" | "off";
 
 const TONE: Record<Tone, string> = {
@@ -55,12 +57,15 @@ export function HealthPills({
   healthAt,
   presence,
   enabled,
+  voiceMode = null,
 }: {
   health: HealthLive | null;
   healthAt: number | null;
   presence: PresenceLive | null;
   /** the modalities the model scores (scoredModalities): the others get no last-block pill */
   enabled: readonly Modality[];
+  /** the server's VOICE_MODE: under "stub" the voice pill says simulated, never "warm" */
+  voiceMode?: VoiceMode;
 }) {
   const now = useNow(1000);
   if (!health) {
@@ -101,17 +106,23 @@ export function HealthPills({
         );
       })}
       <Pill tone={rtt === null ? "off" : rtt < 150 ? "ok" : rtt < 400 ? "warn" : "bad"} icon={<Radio />} hint="Agent ↔ server round-trip time">
-        {rtt === null ? "—" : `${Math.round(rtt)} ms`}
+        RTT {rtt === null ? "—" : `${Math.round(rtt)} ms`}
       </Pill>
-      <Pill tone={health.voice_warm ? "ok" : "warn"} icon={<AudioLines />} hint="Voice step-up models loaded and warm">
-        voice {health.voice_warm ? "warm" : "cold"}
-      </Pill>
+      {voiceMode === "stub" ? (
+        <Pill tone="warn" icon={<AudioLines />} hint="VOICE_MODE=stub: canned demo results">
+          voice simulated
+        </Pill>
+      ) : (
+        <Pill tone={health.voice_warm ? "ok" : "warn"} icon={<AudioLines />} hint="Voice step-up models loaded and warm">
+          voice {health.voice_warm ? "warm" : "cold"}
+        </Pill>
+      )}
       <Pill
         tone={quota === null ? "off" : quota >= 0.8 ? "warn" : "ok"}
         icon={<Gauge />}
         hint="ElevenLabs character quota used this period (amber at 80%)"
       >
-        11L {quota === null ? "—" : `${Math.round(quota * 100)}%`}
+        ElevenLabs {quota === null ? "—" : `${Math.round(quota * 100)}%`}
       </Pill>
       {presence && (
         <Pill

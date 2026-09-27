@@ -145,7 +145,7 @@ export function DashboardView({
       <div className="panel space-y-3 px-4 py-3">
         <Controls device={state.device} model={state.model} label={state.label} actions={actions} isAdmin={isAdmin} />
         <div className="border-t pt-3">
-          <HealthPills health={state.health} healthAt={state.healthAt} presence={state.presence} enabled={scored} />
+          <HealthPills health={state.health} healthAt={state.healthAt} presence={state.presence} enabled={scored} voiceMode={voiceMode} />
         </div>
       </div>
 
