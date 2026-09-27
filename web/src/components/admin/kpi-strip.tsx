@@ -27,17 +27,18 @@ function Tile({
 }) {
   return (
     <div
-      className={cn("panel relative overflow-hidden px-4 pt-3.5 pb-3 transition-shadow last:col-span-2 sm:last:col-span-1", hot && "ring-1")}
+      className={cn("panel relative overflow-hidden px-4 pt-3.5 pb-3 transition-shadow last:col-span-2 md:last:col-span-1", hot && "ring-1")}
       style={hot ? { boxShadow: `inset 0 0 0 1px color-mix(in oklch, ${color} 40%, transparent)`, background: `linear-gradient(180deg, color-mix(in oklch, ${color} 9%, var(--card)) 0%, var(--card) 70%)` } : undefined}
     >
       {hot && <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: color }} />}
       <div className="flex items-center justify-between gap-2">
         <span className="eyebrow truncate">
-          <span className="sm:hidden">{short}</span>
-          <span className="hidden sm:inline">{label}</span>
+          {/* short labels until lg: at md the five tiles share one row */}
+          <span className="lg:hidden">{short}</span>
+          <span className="hidden lg:inline">{label}</span>
         </span>
         <span
-          className="grid size-7 shrink-0 place-items-center rounded-lg"
+          className="grid size-7 shrink-0 place-items-center rounded-lg md:max-lg:hidden"
           style={{ color: hot ? color : "var(--muted-foreground)", background: hot ? `color-mix(in oklch, ${color} 15%, transparent)` : "var(--muted)" }}
         >
           <Icon className="size-3.5" />
@@ -56,7 +57,7 @@ function Tile({
         </motion.span>
         {of !== undefined && <span className="tnum text-sm text-muted-foreground">/ {of}</span>}
       </div>
-      <div className="mt-0.5 text-xs leading-snug text-muted-foreground sm:truncate">{sub}</div>
+      <div className="mt-0.5 text-xs leading-snug text-muted-foreground lg:truncate">{sub}</div>
     </div>
   );
 }
@@ -64,7 +65,7 @@ function Tile({
 export function KpiStrip({ kpis, loading }: { kpis: OrgKpis; loading?: boolean }) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {Array.from({ length: 5 }, (_, i) => (
           <div key={i} className="panel h-[104px] animate-pulse" />
         ))}
@@ -74,13 +75,13 @@ export function KpiStrip({ kpis, loading }: { kpis: OrgKpis; loading?: boolean }
   const offline = kpis.total - kpis.online;
   const none = kpis.total === 0;
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
       <Tile
         label="Employees online"
         short="Online"
         value={kpis.online}
         of={kpis.total}
-        sub={none ? "no devices on the roster" : offline ? `${offline} offline · heartbeat > 30 s` : "every device reporting"}
+        sub={none ? "no devices on the roster" : offline ? `${offline} offline · heartbeat > 30\u00a0s` : "every device reporting"}
         icon={Wifi}
         color="var(--trust-normal)"
         hot={false}

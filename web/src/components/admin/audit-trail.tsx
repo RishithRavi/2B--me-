@@ -227,7 +227,7 @@ export function AuditTrail({
       {/* Trace-back header */}
       {traced && (
         <div className="flex flex-col gap-2 rounded-lg bg-brand-2/8 px-3 py-2.5 ring-1 ring-brand-2/25 sm:flex-row sm:items-center">
-          <Route className="size-4 shrink-0 text-brand-2" />
+          <Route className="hidden size-4 shrink-0 text-brand-2 sm:block" />
           <div className="min-w-0 flex-1 text-[13px]">
             <span className="font-medium">Trace-back · {traced.handle}</span>
             <span className="text-muted-foreground">

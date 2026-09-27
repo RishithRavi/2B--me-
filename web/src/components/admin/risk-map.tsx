@@ -29,7 +29,7 @@ function Legend({ className }: { className?: string }) {
       {LEGEND.map((l) => (
         <span key={l.level} className="inline-flex items-center gap-1.5 text-[11px] whitespace-nowrap text-muted-foreground">
           <span className="size-2 rounded-sm" style={{ background: levelColor(l.level) }} />
-          {levelLabel(l.level)} <span className="hidden text-muted-foreground/60 md:inline">{l.text}</span>
+          {levelLabel(l.level)} <span className="hidden text-muted-foreground md:inline">{l.text}</span>
         </span>
       ))}
     </div>

@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 import { EmployeeAvatar, FlagChips, OrgSpark, SyntheticTag, TrustFigure } from "./org-bits";
 
-const COLS = "lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,1.35fr)_88px]";
+const COLS = "lg:grid-cols-[minmax(0,1.9fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,1.35fr)_88px]";
 
 function accent(row: RosterRow): string | null {
   if (row.locked || row.level === "suspicious" || row.level === "watch") return levelColor(row.level);
@@ -48,7 +48,7 @@ function Row({ row, lastAlert, now, selected, onSelect }: { row: RosterRow; last
             <SyntheticTag synthetic={row.synthetic} compact />
           </div>
           <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
-            <span className="truncate">{row.team ?? (row.synthetic ? "—" : "Enrolled owner")}</span>
+            <span className="truncate">{row.team ?? (row.synthetic ? "—" : "Owner")}</span>
             <span className="text-muted-foreground/50">·</span>
             <span className="truncate font-mono text-[10.5px]">{row.device_label}</span>
           </div>

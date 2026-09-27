@@ -174,7 +174,7 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
           ? `${lockReasonText(r.lock_reason)} · ${r.team ?? r.device_label}`
           : r.flags.includes("takeover_suspected")
             ? `Takeover suspected on ${r.device_label}. A voice check decides; behavior alone never blocks.`
-            : `${r.device_label} left the employee's baseline.`;
+            : `${r.handle}'s behavior no longer matches their baseline.`;
       toast.error(title, {
         id: `drop-${r.device_id}-${d.to}`,
         description,
@@ -333,7 +333,7 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
         )}
         {!mock && (
           <p className="text-[11.5px] text-muted-foreground">
-            Roster re-syncs every 30 s and on reconnect; events stream over <span className="font-mono">/ws/live?scope=org</span>.{" "}
+            Roster re-syncs every 30&nbsp;s; events stream live.{" "}
             <Link href="/dashboard?stage=1" className="underline underline-offset-4">
               Stage view
             </Link>
