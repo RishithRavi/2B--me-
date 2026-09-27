@@ -44,14 +44,14 @@ export function TtdStopwatch({
 
   return (
     <div
-      className={cn("rounded-xl border p-3", large && "p-5")}
+      className={cn("rounded-xl border p-3", large && "p-4")}
       style={{ borderColor: `color-mix(in oklch, ${color} 35%, transparent)`, background: `color-mix(in oklch, ${color} 6%, transparent)` }}
     >
       <div className="flex items-center justify-between gap-2">
         <span className={cn("eyebrow", large && "text-xs")}>Time to detection</span>
         <Icon className={cn("size-4", r.status === "running" && "animate-pulse")} style={{ color }} />
       </div>
-      <div className={cn("tnum mt-1 font-mono font-semibold tracking-tight", large ? "text-6xl" : "text-3xl")} style={{ color: r.status === "idle" ? undefined : color }}>
+      <div className={cn("tnum mt-1 font-mono font-semibold tracking-tight", large ? "text-[clamp(2.5rem,4vw,3.75rem)] leading-tight" : "text-3xl")} style={{ color: r.status === "idle" ? undefined : color }}>
         {clock(r.seconds)}
       </div>
       <div className={cn("mt-1 text-muted-foreground", large ? "text-base" : "text-xs")}>

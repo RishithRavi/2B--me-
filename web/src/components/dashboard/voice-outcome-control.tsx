@@ -76,6 +76,7 @@ export function VoiceOutcomeControl({
   voiceResults,
   markers,
   bare = false,
+  compact = false,
   className,
 }: {
   deviceId: string | null;
@@ -85,6 +86,8 @@ export function VoiceOutcomeControl({
   markers: MarkerPoint[];
   /** no panel chrome (inside the stage view's sticky control bar) */
   bare?: boolean;
+  /** one row (inline next to the stage buttons at xl): the status line moves into the label's tooltip */
+  compact?: boolean;
   className?: string;
 }) {
   // null = nothing picked from this screen (the server may still hold an older pick; Auto clears it)
@@ -152,17 +155,20 @@ export function VoiceOutcomeControl({
         : `${choice} for the next voice check only, then Auto`;
 
   return (
-    <div className={cn("flex flex-col gap-2.5 lg:flex-row lg:items-center", !bare && "panel px-4 py-3", className)}>
-      <div className="flex shrink-0 items-center gap-2">
+    <div className={cn("flex gap-2.5", compact ? "flex-wrap items-center" : "flex-col lg:flex-row lg:items-center", !bare && "panel px-4 py-3", className)}>
+      <div className="flex shrink-0 items-center gap-2" title={compact ? sub : undefined}>
         <FlaskConical className="size-4 text-trust-watch" />
         <div className="leading-tight">
-          <div className="text-sm font-medium">Voice outcome (simulated)</div>
-          <div className="text-[11px] text-muted-foreground" data-testid="voice-outcome-sub">
+          <div className="text-sm font-medium">
+            Voice outcome{!compact && " (simulated)"}
+          </div>
+          {compact && <div className="text-[11px] text-trust-watch">simulated · next check</div>}
+          <div className={cn("text-[11px] text-muted-foreground", compact && "hidden")} data-testid="voice-outcome-sub">
             {sub}
           </div>
         </div>
       </div>
-      <div role="radiogroup" aria-label="Simulated voice outcome" className="flex flex-wrap gap-1.5 lg:ml-auto">
+      <div role="radiogroup" aria-label="Simulated voice outcome" className={cn("flex flex-wrap gap-1.5", compact ? "ml-auto" : "lg:ml-auto")}>
         {CHOICES.map((c) => {
           const on = choice === c.value;
           return (
