@@ -74,7 +74,7 @@ export function StageView({
 
       <div className="flex flex-1 flex-col gap-5 p-6">
         <SecureInputBanner health={state.health} />
-        <ChallengeBanner challenge={state.open_challenge} large />
+        <ChallengeBanner challenge={state.open_challenge} large readOnly />
 
         <div className="grid flex-1 gap-5 xl:grid-cols-12">
           <div className="panel flex flex-col gap-5 p-6 xl:col-span-4">

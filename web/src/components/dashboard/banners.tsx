@@ -1,6 +1,6 @@
 "use client";
 
-import { AudioLines, ChevronDown, Lock, MonitorSmartphone, ShieldAlert } from "lucide-react";
+import { AudioLines, ChevronDown, Hourglass, Lock, MonitorSmartphone, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -25,12 +25,61 @@ const TRIGGER_TEXT: Record<ChallengeLive["trigger"], string> = {
   sandbox: "Sandbox challenge (no trust effect).",
 };
 
-/** Proactive/step-up challenge banner → /verify?c=… */
-export function ChallengeBanner({ challenge, large = false }: { challenge: ChallengeLive | null; large?: boolean }) {
+const mss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+/**
+ * Proactive/step-up challenge banner → /verify?c=…
+ * readOnly: an observer screen (stage view, an admin's drill-in) never answers someone else's voice check; it shows
+ * that the person at the laptop is being asked. compact: one row (the stage view).
+ */
+export function ChallengeBanner({
+  challenge,
+  large = false,
+  compact = false,
+  readOnly = false,
+}: {
+  challenge: ChallengeLive | null;
+  large?: boolean;
+  compact?: boolean;
+  readOnly?: boolean;
+}) {
   const now = useNow(1000);
   if (!challenge) return null;
   const expires = challenge.expires_at ? Math.max(0, Math.round((Date.parse(challenge.expires_at) - now) / 1000)) : null;
+  const expiring = expires === 0;
   const href = challenge.verify_url && challenge.verify_url.startsWith("/") ? challenge.verify_url : `/verify?c=${encodeURIComponent(challenge.challenge_id)}`;
+  const when = expires === null ? null : expiring ? " Expiring…" : ` Expires in ${mss(expires)}.`;
+  const action = readOnly ? (
+    <span className={cn("inline-flex shrink-0 items-center gap-2 text-muted-foreground", compact ? "text-sm" : large ? "text-base" : "text-xs")}>
+      <Hourglass className={cn("size-4 text-trust-watch", !expiring && "animate-pulse")} /> Waiting for the person at the laptop to answer
+    </span>
+  ) : expiring ? (
+    <Button size={large ? "lg" : "sm"} className="shrink-0" disabled>
+      <AudioLines /> Open voice check
+    </Button>
+  ) : (
+    <Button asChild size={large ? "lg" : "sm"} className="shrink-0">
+      <Link href={href}>
+        <AudioLines /> Open voice check
+      </Link>
+    </Button>
+  );
+  if (compact) {
+    return (
+      <div role="status" className="flex items-center gap-3 rounded-xl border border-trust-watch/45 bg-trust-watch/10 px-4 py-2">
+        <ShieldAlert className="size-5 shrink-0 text-trust-watch" />
+        <div className="min-w-0 flex-1 truncate text-base">
+          <span className="font-semibold">Voice check requested</span>
+          <span className="text-muted-foreground">
+            {" "}
+            · {challenge.trigger.replace("_", "-")} · attempt {challenge.attempt} · {challenge.status.replace("_", " ")}
+            {when && ` ·${when.replace(/\.$/, "")}`}
+          </span>
+        </div>
+        {action}
+      </div>
+    );
+  }
   return (
     <div
       role="status"
@@ -49,14 +98,10 @@ export function ChallengeBanner({ challenge, large = false }: { challenge: Chall
         </div>
         <div className={cn("text-muted-foreground", large ? "text-base" : "text-xs")}>
           {TRIGGER_TEXT[challenge.trigger]}
-          {expires !== null && ` Expires in ${expires}s.`}
+          {when}
         </div>
       </div>
-      <Button asChild size={large ? "lg" : "sm"} className="shrink-0">
-        <Link href={href}>
-          <AudioLines /> Open voice check
-        </Link>
-      </Button>
+      {action}
     </div>
   );
 }
