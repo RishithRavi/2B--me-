@@ -10,6 +10,7 @@ import { useDrill, useRefreshMeOnAuthClose, useResnapshotOnFirstDevice } from "@
 import { StageView } from "@/components/dashboard/stage-view";
 import { useDashboardActions } from "@/components/dashboard/use-actions";
 import { useServerInfo } from "@/components/dashboard/voice-mode";
+import { SIMULATED_TAKEOVER } from "@/components/landing/links";
 import { EmptyState } from "@/components/site/empty-state";
 import { Button } from "@/components/ui/button";
 import { useLive } from "@/lib/live";
@@ -21,6 +22,8 @@ function Dashboard() {
   const stage = params.get("stage") === "1";
   // Admin drill-in from /admin (§2.4): /dashboard?device_id=<id> focuses the stream on that device.
   const deviceParam = params.get("device_id");
+  const query = params.toString();
+  const here = query ? `/dashboard?${query}` : "/dashboard";
   const me = useMe();
   const { state, store, mock } = useLive({ enabled: authSettled(me.status) });
   const server = useServerInfo(mock, `${me.status}:${state.connected}`);
@@ -45,23 +48,25 @@ function Dashboard() {
         <div className="panel">
           <EmptyState
             icon={LogIn}
-            title="Sign in to see your live trust"
+            title="Sign in as the enrolled owner to see the live device"
             action={
-              <div className="flex gap-2">
+              <div className="flex flex-wrap justify-center gap-2">
                 <Button asChild size="sm">
-                  <Link href="/login">
+                  {/* back here after signing in (stage view and device kept) */}
+                  <Link href={`/login?next=${encodeURIComponent(here)}`}>
                     <LogIn /> Log in
                   </Link>
                 </Button>
                 <Button asChild size="sm" variant="outline">
-                  <Link href="/dashboard?mock=1">
-                    <FlaskConical /> Simulated stream
-                  </Link>
+                  {/* a full page load: mock mode is per tab and read on load (components/landing/links.ts) */}
+                  <a href={SIMULATED_TAKEOVER}>
+                    <FlaskConical /> Watch a simulated takeover
+                  </a>
                 </Button>
               </div>
             }
           >
-            The dashboard streams your devices&apos; trust over a cookie-authenticated WebSocket.
+            Or watch a simulated takeover — clearly labelled demo data.
           </EmptyState>
         </div>
       </div>
@@ -99,9 +104,9 @@ function Dashboard() {
       {me.status === "offline" && !mock && (
         <div className="mx-auto mt-4 flex w-full max-w-[1440px] items-center gap-2 px-4 text-sm text-trust-watch sm:px-6">
           <WifiOff className="size-4" /> The API is unreachable. Retrying the live stream in the background.{" "}
-          <Link href="/dashboard?mock=1" className="underline underline-offset-4">
-            Use the simulated stream
-          </Link>
+          <a href={SIMULATED_TAKEOVER} className="underline underline-offset-4">
+            Watch a simulated takeover
+          </a>
         </div>
       )}
       {stage ? (
