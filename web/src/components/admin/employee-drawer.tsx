@@ -266,21 +266,29 @@ export function EmployeeDrawer({
                 </p>
               </Section>
 
-              {/* Trace-back + links */}
+              {/* Trace-back + links (the demo org's devices exist only in this browser: no dashboard or history) */}
               <div className="grid grid-cols-2 gap-2">
                 <Button className="col-span-2" onClick={() => onTrace(row.device_id)}>
                   <Route /> Trace this device in the audit trail
                 </Button>
-                <Button asChild variant="secondary">
-                  <Link href={`/dashboard?device_id=${encodeURIComponent(row.device_id)}`}>
-                    <ExternalLink /> Open live dashboard
-                  </Link>
-                </Button>
-                <Button asChild variant="secondary">
-                  <Link href={`/history?device_id=${encodeURIComponent(row.device_id)}`}>
-                    <History /> Trace in history
-                  </Link>
-                </Button>
+                {mock ? (
+                  <p className="col-span-2 text-[11.5px] text-muted-foreground">
+                    Per-employee dashboard and history exist in the live org (this demo runs in your browser).
+                  </p>
+                ) : (
+                  <>
+                    <Button asChild variant="secondary">
+                      <Link href={`/dashboard?device_id=${encodeURIComponent(row.device_id)}`}>
+                        <ExternalLink /> Open live dashboard
+                      </Link>
+                    </Button>
+                    <Button asChild variant="secondary">
+                      <Link href={`/history?device_id=${encodeURIComponent(row.device_id)}`}>
+                        <History /> Trace in history
+                      </Link>
+                    </Button>
+                  </>
+                )}
               </div>
 
               {/* Device audit */}

@@ -310,7 +310,7 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
         </div>
 
         <div ref={auditRef} className="scroll-mt-20">
-          <AuditTrail audit={state.audit} rows={state.rows} filter={filter} onFilter={setFilter} onSelect={select} now={now} />
+          <AuditTrail audit={state.audit} rows={state.rows} filter={filter} onFilter={setFilter} onSelect={select} now={now} mock={mock} />
         </div>
 
         {!mock && state.loaded && state.error && state.rows.length > 0 && (

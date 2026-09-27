@@ -41,6 +41,7 @@ export function AuditTrail({
   onFilter,
   onSelect,
   now,
+  mock = false,
 }: {
   audit: AuditRow[];
   rows: readonly RosterRow[];
@@ -48,6 +49,8 @@ export function AuditTrail({
   onFilter: (f: AuditFilter) => void;
   onSelect: (deviceId: string) => void;
   now: number;
+  /** the demo org: its devices have no live dashboard or history */
+  mock?: boolean;
 }) {
   const byDevice = useMemo(() => (filter.device === "all" ? audit : audit.filter((r) => r.device_id === filter.device)), [audit, filter.device]);
   const counts = useMemo(() => {
@@ -64,6 +67,7 @@ export function AuditTrail({
   const first = byDevice.length ? byDevice[byDevice.length - 1] : null;
   const alerts = byDevice.filter((r) => r.kind === "alert").length; // same rows as the Alert filter chip
   const dashHref = traced ? `/dashboard?device_id=${encodeURIComponent(traced.device_id)}` : "/dashboard";
+  const historyHref = traced ? `/history?device_id=${encodeURIComponent(traced.device_id)}` : "/history";
 
   return (
     <Panel
@@ -143,18 +147,20 @@ export function AuditTrail({
               {first ? ` since ${fmtClock(first.t)}` : ""} · {alerts} alert{alerts === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="flex shrink-0 gap-1.5">
-            <Button asChild variant="outline" size="xs">
-              <Link href={dashHref}>
-                <ExternalLink /> Live dashboard
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="xs">
-              <Link href="/history">
-                <History /> History
-              </Link>
-            </Button>
-          </div>
+          {!mock && (
+            <div className="flex shrink-0 gap-1.5">
+              <Button asChild variant="outline" size="xs">
+                <Link href={dashHref}>
+                  <ExternalLink /> Live dashboard
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="xs">
+                <Link href={historyHref}>
+                  <History /> History
+                </Link>
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
