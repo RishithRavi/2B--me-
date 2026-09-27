@@ -293,3 +293,8 @@ html.overlay-mode main {
 .overlay-no-drag {
   -webkit-app-region: no-drag;
 }
+
+/* Stage view (dashboard ?stage=1): keep top-right toasts clear of the stage header's buttons. */
+html[data-stage] [data-sonner-toaster][data-y-position="top"] {
+  top: 5.5rem !important;
+}

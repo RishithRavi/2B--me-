@@ -229,6 +229,11 @@ function useInertChrome() {
     const els = Array.from(document.querySelectorAll<HTMLElement>("header.sticky, footer.fixed"));
     const before = els.map((el) => el.inert);
     for (const el of els) el.inert = true;
-    return () => els.forEach((el, i) => (el.inert = before[i]));
+    // toasts drop below the stage header so they never cover its drawer/exit buttons (globals.css)
+    document.documentElement.dataset.stage = "1";
+    return () => {
+      els.forEach((el, i) => (el.inert = before[i]));
+      delete document.documentElement.dataset.stage;
+    };
   }, []);
 }
