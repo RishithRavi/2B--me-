@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 
 import { Nav } from "@/components/site/nav";
+import { PresenceMount } from "@/components/site/presence-mount";
 import { StatusFooter } from "@/components/site/status-footer";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <Nav />
           <main className="flex flex-1 flex-col pb-10">{children}</main>
           <StatusFooter />
+          <PresenceMount />
           <Toaster position="top-right" richColors closeButton />
         </TooltipProvider>
       </body>

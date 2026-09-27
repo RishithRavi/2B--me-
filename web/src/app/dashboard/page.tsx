@@ -3,11 +3,13 @@
 import { FlaskConical, LogIn, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 
 import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { useRefreshMeOnAuthClose, useResnapshotOnFirstDevice } from "@/components/dashboard/live-hooks";
 import { StageView } from "@/components/dashboard/stage-view";
 import { useDashboardActions } from "@/components/dashboard/use-actions";
+import { useServerInfo } from "@/components/dashboard/voice-mode";
 import { EmptyState } from "@/components/site/empty-state";
 import { Button } from "@/components/ui/button";
 import { useLive } from "@/lib/live";
@@ -16,9 +18,18 @@ import { useMe } from "@/lib/session";
 function Dashboard() {
   const params = useSearchParams();
   const stage = params.get("stage") === "1";
+  // Admin drill-in from /admin (§2.4): /dashboard?device_id=<id> focuses the stream on that device.
+  const deviceParam = params.get("device_id");
   const me = useMe();
   const { state, store, mock } = useLive({ enabled: authSettled(me.status) });
-  const actions = useDashboardActions(store, state.device?.id ?? state.focus);
+  const server = useServerInfo(mock, `${me.status}:${state.connected}`);
+  const actions = useDashboardActions(store, state.device?.id ?? state.focus, { voiceStub: server.voiceMode === "stub" });
+
+  useEffect(() => {
+    if (store && !mock && deviceParam) store.setFocus(deviceParam);
+  }, [store, mock, deviceParam]);
+  useResnapshotOnFirstDevice(state, store, mock);
+  useRefreshMeOnAuthClose(state.closeCode, mock);
 
   if (!mock && (me.status === "anon" || state.closeCode === 4401)) {
     return (
@@ -62,9 +73,17 @@ function Dashboard() {
         </div>
       )}
       {stage ? (
-        <StageView state={state} mock={mock} actions={actions} />
+        <StageView state={state} mock={mock} actions={actions} isAdmin={isAdmin} voiceMode={server.voiceMode} />
       ) : (
-        <DashboardView state={state} store={store} mock={mock} actions={actions} isAdmin={isAdmin} />
+        <DashboardView
+          state={state}
+          store={store}
+          mock={mock}
+          actions={actions}
+          isAdmin={isAdmin}
+          voiceMode={server.voiceMode}
+          serverBackend={server.modelBackend}
+        />
       )}
     </>
   );

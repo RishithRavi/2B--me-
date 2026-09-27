@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { fmtAgo } from "@/lib/ui";
 
 /** Minimal JSON syntax coloring (keys / strings / numbers / literals) without any HTML injection. */
-function highlight(json: string): ReactNode[] {
+export function highlightJson(json: string): ReactNode[] {
   const out: ReactNode[] = [];
   const re = /("(?:\\.|[^"\\])*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b/g;
   let last = 0;
@@ -111,7 +111,7 @@ export function TickDrawer({
         </SheetHeader>
         <div className="scrollbar-thin min-h-0 flex-1 overflow-auto bg-surface">
           {json ? (
-            <pre className="p-4 font-mono text-[11.5px] leading-relaxed text-muted-foreground">{highlight(json)}</pre>
+            <pre className="p-4 font-mono text-[11.5px] leading-relaxed text-muted-foreground">{highlightJson(json)}</pre>
           ) : (
             <p className="p-6 text-sm text-muted-foreground">No tick received yet. Start the agent on the laptop.</p>
           )}

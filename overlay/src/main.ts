@@ -1,21 +1,27 @@
 // 2bME overlay shell. One transparent, frameless, always-on-top window that loads <origin>/overlay and
 // resizes itself when the page asks for a mode:
-//   pill   → small, top-right, never steals focus
-//   panel  → centered sign-in card
+//   pill    → small, top-right, never steals focus
+//   details → "My behavior": the pill expanded in place (top-right), shown without stealing focus from other apps
+//   panel   → centered sign-in card
 //   prompt → full display, focused (suspected takeover → voice check; dismissible)
 //   lock   → full display, focused, refocuses on blur, can't be closed (optional kiosk with --hard-lock)
 // Operator escape hatch: ⌃⌥⌘⇧Q quits even while locked (demo safety). No input is captured here; the macOS
 // agent does behavior capture, and this shell only talks to the 2bME API through the page.
+// Hardening (§6 A6): no application menu at all (the default menu's ⌘H / ⌘W / ⌥⌘I would hide or inspect the lock
+// screen), and DevTools exist only with --dev.
 import * as path from "node:path";
 
-import { app, BrowserWindow, globalShortcut, ipcMain, screen, session, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, session, shell, systemPreferences } from "electron";
 
-import { boundsFor, isMode, type Mode, parseArgs, sameOrigin } from "./geometry";
+import { boundsFor, type Mode, ModeSync, parseArgs, sameOrigin, shellPolicy } from "./geometry";
 
 const args = parseArgs(process.argv, process.env);
+const policy = shellPolicy(args, process.argv);
 const PARTITION = "persist:twobme-overlay"; // keeps the cookie session across restarts
 let win: BrowserWindow | null = null;
-let mode: Mode = "pill";
+// The page's mode. A request that arrives before ready-to-show (a remembered lock at startup) is kept and applied
+// when the window is first shown, never overwritten by a default pill (the page doesn't resend an unchanged mode).
+const sync = new ModeSync("pill");
 let allowQuit = false;
 
 if (!app.requestSingleInstanceLock()) {
@@ -30,7 +36,6 @@ function currentDisplay(): Electron.Display {
 
 function applyMode(next: Mode): void {
   if (!win) return;
-  mode = next;
   const d = currentDisplay();
   const full = next === "prompt" || next === "lock";
   if (args.hardLock && !full) win.setKiosk(false);
@@ -43,6 +48,8 @@ function applyMode(next: Mode): void {
     win.show();
     win.focus();
     app.focus({ steal: true });
+  } else if (next === "details") {
+    win.show(); // the user just clicked the pill: keep focus, but don't pull the app forward
   } else {
     win.showInactive();
   }
@@ -76,6 +83,7 @@ function createWindow(): void {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      devTools: policy.devTools,
       additionalArguments: [`--twobme-hard-lock=${args.hardLock ? 1 : 0}`],
     },
   });
@@ -94,18 +102,18 @@ function createWindow(): void {
   });
 
   win.on("close", (e) => {
-    if (mode === "lock" && !allowQuit) e.preventDefault();
+    if (sync.mode === "lock" && !allowQuit) e.preventDefault();
   });
   win.on("blur", () => {
-    if (mode === "lock") setTimeout(() => win?.focus(), 150);
+    if (sync.mode === "lock") setTimeout(() => win?.focus(), 150);
   });
   win.webContents.on("render-process-gone", () => setTimeout(load, 1000));
   win.webContents.on("did-fail-load", (_e, _code, _desc, _url, isMainFrame) => {
     if (isMainFrame) setTimeout(load, 3000);
   });
-  win.once("ready-to-show", () => applyMode("pill"));
+  win.once("ready-to-show", () => applyMode(sync.markReady()));
   load();
-  if (process.argv.includes("--devtools")) win.webContents.openDevTools({ mode: "detach" });
+  if (policy.openDevToolsOnStart) win.webContents.openDevTools({ mode: "detach" });
 }
 
 function setupSession(): void {
@@ -121,18 +129,20 @@ function setupSession(): void {
 
 ipcMain.on("overlay:mode", (e, next: unknown) => {
   if (!e.senderFrame || !sameOrigin(e.senderFrame.url, args.url)) return;
-  if (isMode(next) && next !== mode) applyMode(next);
+  const apply = sync.request(next);
+  if (apply) applyMode(apply);
 });
 
 app.on("before-quit", (e) => {
-  if (mode === "lock" && !allowQuit) e.preventDefault();
+  if (sync.mode === "lock" && !allowQuit) e.preventDefault();
 });
 
 app.on("second-instance", () => {
-  if (win && mode !== "pill") win.focus();
+  if (win && sync.mode !== "pill") win.focus();
 });
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(policy.applicationMenu);
   if (process.platform === "darwin") {
     app.dock?.hide();
     try {
@@ -144,14 +154,17 @@ app.whenReady().then(async () => {
   setupSession();
   createWindow();
   for (const ev of ["display-added", "display-removed", "display-metrics-changed"] as const) {
-    screen.on(ev as "display-added", () => applyMode(mode));
+    screen.on(ev as "display-added", () => {
+      const again = sync.reapply();
+      if (again) applyMode(again);
+    });
   }
   globalShortcut.register("Control+Alt+Command+Shift+Q", () => {
     allowQuit = true;
     if (args.hardLock) win?.setKiosk(false);
     app.quit();
   });
-  if (args.dev) {
+  if (policy.devTools) {
     globalShortcut.register("Control+Alt+Command+O", () => win?.webContents.toggleDevTools());
   }
 });

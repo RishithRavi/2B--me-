@@ -219,3 +219,11 @@ export function shortId(id: string | null | undefined): string {
   if (!id) return "—";
   return id.length > 8 ? id.slice(0, 8) : id;
 }
+
+/** ModelInfo.backend → what actually scores behavior: "one-class ensemble (twobme_ml)" | "fallback (median/MAD)". */
+export function modelBackendLabel(backend: string | null | undefined): string | null {
+  if (!backend) return null;
+  if (backend === "twobme_ml") return "one-class ensemble (twobme_ml)";
+  if (backend === "fallback") return "fallback (median/MAD)";
+  return backend;
+}

@@ -13,8 +13,11 @@ export type ActionName = "mode" | "train" | "retrain" | "takeover" | "reset" | "
 /**
  * Operator actions for the dashboard. Real mode → REST (contracts/api.md); mock mode → the in-browser simulator.
  * Every action toasts its outcome; `busy` names the action in flight.
+ * `voiceStub`: the server runs stub voice, so Reset also clears the operator's simulated voice outcome (the server
+ * keeps it until cleared, and a leftover BLOCK_* would also decide the owner's unlock).
  */
-export function useDashboardActions(store: LiveStore | null, deviceId: string | null) {
+export function useDashboardActions(store: LiveStore | null, deviceId: string | null, opts: { voiceStub?: boolean } = {}) {
+  const voiceStub = !!opts.voiceStub;
   const router = useRouter();
   const [busy, setBusy] = useState<ActionName | null>(null);
   const mock = store?.mock ?? null;
@@ -56,7 +59,16 @@ export function useDashboardActions(store: LiveStore | null, deviceId: string | 
         },
         on ? "Takeover marked — B is at the keyboard (ground truth only)" : "Takeover ended — A is back",
       ),
-    reset: () => run("reset", () => (mock ? mock.reset() : api.demoReset(id)), "Demo reset — new session at 97%"),
+    reset: () =>
+      run(
+        "reset",
+        async () => {
+          if (mock) return mock.reset();
+          await api.demoReset(id);
+          if (voiceStub) await api.demoVoiceOutcome(id, null).catch(() => undefined); // best effort (older server: 404)
+        },
+        voiceStub && !mock ? "Demo reset — new session at 97%, simulated voice outcome back to Auto" : "Demo reset — new session at 97%",
+      ),
     rearm: () => run("rearm", () => (mock ? mock.rearm(0.31) : api.demoRearm(id, 0.31)), "Re-armed at 31%"),
     unlockWithVoice: () =>
       run("unlock", async () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { boundsFor, isMode, parseArgs, sameOrigin } from "./geometry";
+import { boundsFor, isMode, ModeSync, parseArgs, sameOrigin, shellPolicy } from "./geometry";
 
 const display = { x: 0, y: 0, width: 1512, height: 982 };
 const work = { x: 0, y: 25, width: 1512, height: 890 };
@@ -16,6 +16,14 @@ test("panel is centered in the work area", () => {
   assert.equal(b.y, Math.round(25 + (890 - 540) / 2));
 });
 
+test("details expands the pill in place: top-right, clamped to the work area height", () => {
+  assert.deepEqual(boundsFor("details", display, work), { x: 1512 - 400 - 12, y: 25 + 12, width: 400, height: 700 });
+  const short = { x: 0, y: 25, width: 1280, height: 600 };
+  const b = boundsFor("details", display, short);
+  assert.equal(b.height, 600 - 24);
+  assert.equal(b.x + b.width, 1280 - 12);
+});
+
 test("prompt and lock cover the whole display", () => {
   assert.deepEqual(boundsFor("prompt", display, work), display);
   assert.deepEqual(boundsFor("lock", { ...display, x: 1512 }, work), { ...display, x: 1512 });
@@ -23,6 +31,7 @@ test("prompt and lock cover the whole display", () => {
 
 test("isMode guards IPC input", () => {
   assert.ok(isMode("lock"));
+  assert.ok(isMode("details"));
   assert.ok(!isMode("fullscreen"));
   assert.ok(!isMode(42));
 });
@@ -41,4 +50,34 @@ test("sameOrigin", () => {
   assert.ok(sameOrigin("https://2bme.tech/verify?c=1", "https://2bme.tech"));
   assert.ok(!sameOrigin("https://evil.example/2bme.tech", "https://2bme.tech"));
   assert.ok(!sameOrigin("not a url", "https://2bme.tech"));
+});
+
+test("shellPolicy: no app menu ever; DevTools only with --dev", () => {
+  const prod = parseArgs(["--devtools"], {});
+  assert.deepEqual(shellPolicy(prod, ["--devtools"]), { devTools: false, openDevToolsOnStart: false, applicationMenu: null });
+  const dev = parseArgs(["--dev", "--devtools"], {});
+  assert.deepEqual(shellPolicy(dev, ["--dev", "--devtools"]), { devTools: true, openDevToolsOnStart: true, applicationMenu: null });
+  assert.equal(shellPolicy(parseArgs(["--dev"], {}), ["--dev"]).openDevToolsOnStart, false);
+});
+
+test("startup race: a lock the page asks for before ready-to-show is what the window first shows", () => {
+  const s = new ModeSync("pill");
+  assert.equal(s.request("lock"), null); // not shown yet: kept, not applied
+  assert.equal(s.mode, "lock"); // close / blur / quit guards already treat it as locked
+  assert.equal(s.reapply(), null); // a display change before the first show doesn't show the window either
+  assert.equal(s.markReady(), "lock"); // never the hard-coded pill
+  assert.equal(s.request("lock"), null); // unchanged: nothing to do
+  assert.equal(s.request("pill"), "pill");
+  assert.equal(s.reapply(), "pill");
+});
+
+test("no request before ready-to-show → the pill; bad or foreign requests are ignored", () => {
+  const s = new ModeSync("pill");
+  assert.equal(s.markReady(), "pill");
+  assert.equal(s.request("fullscreen"), null);
+  assert.equal(s.request(42), null);
+  assert.equal(s.request("pill"), null);
+  assert.equal(s.request("prompt"), "prompt");
+  assert.equal(s.request("lock"), "lock");
+  assert.equal(s.mode, "lock");
 });
