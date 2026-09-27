@@ -11,7 +11,7 @@ dependencies = ["numpy>=2", "soundfile==0.14.0", "soxr>=0.5", "PyYAML>=6"]
 
 [project.optional-dependencies]
 detect = ["torch", "transformers==4.57.6", "huggingface-hub", "einops>=0.8", "librosa==0.11.0"]
-server = ["hearsay[detect]", "speechbrain==1.1.1", "silero-vad==6.2.3", "elevenlabs==2.69.0", "faster-whisper==1.2.1"]
+server = ["hearsay[detect]", "torchaudio", "speechbrain==1.1.1", "silero-vad==6.2.3", "elevenlabs==2.69.0", "faster-whisper==1.2.1"]
 test = ["pytest>=8", "ruff>=0.11"]
 
 [project.scripts]
