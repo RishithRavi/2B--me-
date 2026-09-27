@@ -6,7 +6,7 @@ import os
 
 import pytest
 from conftest import ADMIN_TOKEN, login
-from test_flows import setup_monitored
+from test_flows import Agent, setup_monitored
 
 pytestmark = pytest.mark.skipif(not os.environ.get("TEST_TIGER_URL"), reason="needs TEST_TIGER_URL")
 ADMIN = {"X-Admin-Token": ADMIN_TOKEN}
@@ -85,4 +85,49 @@ def test_train_from_tiger_rows(client):
     assert mi["n_blocks"]["keyboard"] >= 20
     t = agent.tick("a")
     assert t["level"] != "learning"
+    agent.close()
+
+
+def test_history_device_filter(client):
+    """SC-1: ?device_id= scopes /history/sessions and /history/anomalies (breach trace-back). An admin filters
+    any device; a user stays scoped to their own devices, so a foreign device id returns []."""
+    _uid, dev1, agent = setup_monitored(client)
+    for _ in range(4):
+        agent.tick("a")
+    for _ in range(8):
+        agent.tick("b")  # dev1: trust drop -> anomalies
+    r = client.post("/api/devices/register", json={"label": "second laptop", "pointer": "trackpad"})
+    dev2 = r.json()["device_id"]
+    agent2 = Agent(client, r.json()["device_token"])
+    for _ in range(3):
+        agent2.tick("a")
+    flush(client)
+
+    # existing callers (no device_id) still see both devices
+    both = {x["device_id"] for x in client.get("/api/history/sessions?limit=200").json()}
+    assert {dev1, dev2} <= both
+    rows2 = client.get(f"/api/history/sessions?limit=200&device_id={dev2}").json()
+    assert rows2 and all(x["device_id"] == dev2 for x in rows2)
+    # dev2's session is the newest; with the filter dev1's session is still returned at limit=1
+    newest = client.get("/api/history/sessions?limit=1").json()
+    assert [x["device_id"] for x in newest] == [dev2]
+    only1 = client.get(f"/api/history/sessions?limit=1&device_id={dev1}").json()
+    assert [x["device_id"] for x in only1] == [dev1]
+
+    an1 = client.get(f"/api/history/anomalies?limit=500&device_id={dev1}").json()
+    assert an1 and all(a["device_id"] == dev1 for a in an1)
+    assert all(a["device_id"] == dev2 for a in client.get(f"/api/history/anomalies?device_id={dev2}").json())
+    assert client.get("/api/history/sessions?device_id=not-a-uuid").status_code == 422
+
+    # a non-admin is still scoped to their own user: another user's device id returns nothing
+    login(client, "b")
+    assert client.get(f"/api/history/sessions?device_id={dev1}").json() == []
+    assert client.get(f"/api/history/anomalies?device_id={dev1}").json() == []
+    # the observer (admin) filters any device
+    login(client, "admin")
+    adm = client.get(f"/api/history/sessions?limit=200&device_id={dev1}").json()
+    assert adm and all(x["device_id"] == dev1 for x in adm)
+    adm_an = client.get(f"/api/history/anomalies?limit=500&device_id={dev1}").json()
+    assert {a["id"] for a in adm_an} == {a["id"] for a in an1}
+    agent2.close()
     agent.close()

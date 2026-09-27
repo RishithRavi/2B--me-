@@ -29,7 +29,8 @@ from twobme_common.types import (
 HYPERTABLES = ("feature_blocks", "trust_ticks", "anomalies", "markers")
 
 
-async def sessions(db: Db, user_id: UUID | None, limit: int) -> list[SessionRow] | None:
+async def sessions(db: Db, user_id: UUID | None, limit: int,
+                   device_id: UUID | None = None) -> list[SessionRow] | None:
     rows = await db.fetch(
         """
         SELECT s.id, s.device_id, s.user_id, s.channel, s.status, s.started_at, s.ended_at,
@@ -46,11 +47,12 @@ async def sessions(db: Db, user_id: UUID | None, limit: int) -> list[SessionRow]
         LEFT JOIN LATERAL (
             SELECT count(*) AS n_markers FROM markers mk WHERE mk.session_id = s.id AND mk.time >= s.started_at
         ) m ON true
-        WHERE ($1::uuid IS NULL OR s.user_id = $1) AND s.status <> 'purged' AND s.channel = 'desktop'
+        WHERE ($1::uuid IS NULL OR s.user_id = $1) AND ($3::uuid IS NULL OR s.device_id = $3)
+          AND s.status <> 'purged' AND s.channel = 'desktop'
         ORDER BY s.started_at DESC
         LIMIT $2
         """,
-        user_id, limit,
+        user_id, limit, device_id,
     )
     if rows is None:
         return None
@@ -128,18 +130,19 @@ def timedelta_str(bucket: str) -> timedelta:
             "day": timedelta(days=n)}[unit]
 
 
-async def anomalies(db: Db, user_id: UUID | None, limit: int) -> list[AnomalyRow] | None:
+async def anomalies(db: Db, user_id: UUID | None, limit: int,
+                    device_id: UUID | None = None) -> list[AnomalyRow] | None:
     rows = await db.fetch(
         """
         SELECT a.time, a.id, a.kind, a.severity, a.device_id, a.session_id, a.trust_before, a.trust_after,
                a.top_features, a.action, a.challenge_id, a.explanation, a.resolution, vc.decision AS challenge_decision
         FROM anomalies a
         LEFT JOIN voice_challenges vc ON vc.id = a.challenge_id
-        WHERE ($1::uuid IS NULL OR a.user_id = $1)
+        WHERE ($1::uuid IS NULL OR a.user_id = $1) AND ($3::uuid IS NULL OR a.device_id = $3)
         ORDER BY a.time DESC
         LIMIT $2
         """,
-        user_id, limit,
+        user_id, limit, device_id,
     )
     if rows is None:
         return None

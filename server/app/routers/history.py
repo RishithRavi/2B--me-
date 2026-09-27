@@ -49,9 +49,11 @@ def _scope(p) -> UUID | None:  # noqa: ANN001
 
 
 @router.get("/history/sessions", response_model=list[SessionRow])
-async def history_sessions(p: CurrentPrincipal, response: Response, limit: int = 30) -> Any:
+async def history_sessions(p: CurrentPrincipal, response: Response, limit: int = 30,
+                           device_id: UUID | None = None) -> Any:
     uid = _scope(p)
-    return _cached(f"sessions:{uid}:{limit}", await H.sessions(rt().db, uid, min(limit, 200)), response)
+    return _cached(f"sessions:{uid}:{device_id}:{limit}",
+                   await H.sessions(rt().db, uid, min(limit, 200), device_id=device_id), response)
 
 
 @router.get("/history/trust", response_model=TrustSeries)
@@ -89,9 +91,11 @@ async def history_trust(p: CurrentPrincipal, response: Response, session_id: UUI
 
 
 @router.get("/history/anomalies", response_model=list[AnomalyRow])
-async def history_anomalies(p: CurrentPrincipal, response: Response, limit: int = 50) -> Any:
+async def history_anomalies(p: CurrentPrincipal, response: Response, limit: int = 50,
+                            device_id: UUID | None = None) -> Any:
     uid = _scope(p)
-    return _cached(f"anom:{uid}:{limit}", await H.anomalies(rt().db, uid, min(limit, 500)), response)
+    return _cached(f"anom:{uid}:{device_id}:{limit}",
+                   await H.anomalies(rt().db, uid, min(limit, 500), device_id=device_id), response)
 
 
 @router.get("/history/baseline", response_model=BaselineOut)
