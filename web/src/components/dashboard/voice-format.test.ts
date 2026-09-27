@@ -96,6 +96,17 @@ describe("currentVoiceView", () => {
     expect(currentVoiceView({ ...empty, voiceResults: [spoof], markers: reset }, now)).toBeNull();
   });
 
+  it("hides a result older than the latest Re-arm or takeover start (the next run of the story)", () => {
+    const at = (ms: number) => new Date(Date.parse(spoof.t) + ms).toISOString();
+    const rearm = [{ t: at(2_000), label: "rearm" as const, text: null }];
+    const takeover = [{ t: at(2_000), label: "takeover_start" as const, text: null }];
+    expect(currentVoiceView({ ...empty, voiceResults: [spoof], markers: rearm }, now)).toBeNull();
+    expect(currentVoiceView({ ...empty, voiceResults: [spoof], markers: takeover }, now)).toBeNull();
+    // a result that came after the marker still shows
+    const before = [{ t: at(-2_000), label: "rearm" as const, text: null }];
+    expect(currentVoiceView({ ...empty, voiceResults: [spoof], markers: before }, now)?.result?.decision).toBe("BLOCK_SPOOF");
+  });
+
   it("shows a check being scored on the open challenge before its result", () => {
     const oc = { challenge_id: "c2", trigger: "step_up" as const, status: "scoring" as const, attempt: 1, expires_at: null, verify_url: null };
     const v = currentVoiceView({ ...empty, voiceResults: [spoof], open_challenge: oc, voiceStages: { c2: [] } }, now);

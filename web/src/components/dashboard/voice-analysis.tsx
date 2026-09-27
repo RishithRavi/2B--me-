@@ -46,15 +46,22 @@ export interface VoiceView {
 
 const MAX_AGE_MS = 10 * 60 * 1000;
 
+/** A voice result older than the latest Reset, Re-arm or takeover start belongs to an earlier run of the story. */
+function voiceCutoff(markers: LiveState["markers"]): number {
+  let t = lastResetAt(markers);
+  for (const m of markers) if (m.label === "rearm" || m.label === "takeover_start") t = Math.max(t, Date.parse(m.t));
+  return t;
+}
+
 /**
  * What the voice panel shows right now: a check being scored on the open challenge (live stages, no result yet),
- * else the newest voice result since the last Reset (≤ 10 min old), else nothing.
+ * else the newest voice result since the last Reset / Re-arm / takeover start (≤ 10 min old), else nothing.
  */
 export function currentVoiceView(
   s: Pick<LiveState, "voiceResults" | "voiceStages" | "open_challenge" | "markers">,
   now: number = Date.now(),
 ): VoiceView | null {
-  const resetAt = lastResetAt(s.markers);
+  const resetAt = voiceCutoff(s.markers);
   const latest = s.voiceResults[0] ?? null;
   const at = latest ? Date.parse(latest.t) : NaN;
   const fresh = latest && at > resetAt && now - at < MAX_AGE_MS ? latest : null;
