@@ -23,12 +23,15 @@ import { cn } from "@/lib/utils";
 
 import { Wordmark } from "./logo";
 
+// "Admin" (the org control panel, §2.4) is visible to everyone: admins get the live org, everyone else lands on
+// its gate, whose primary action is the synthetic org demo.
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/enroll", label: "Enroll" },
   { href: "/shop", label: "Shop" },
   { href: "/history", label: "History" },
   { href: "/lab", label: "Lab" },
+  { href: "/admin", label: "Admin" },
 ] as const;
 
 export function Nav() {
@@ -37,7 +40,6 @@ export function Nav() {
   const { status, me } = useMe();
   const mock = useMockMode();
   const theme = useTheme();
-  const links = mock || me?.role === "admin" ? [...LINKS, { href: "/admin", label: "Admin" }] : LINKS;
 
   async function logout() {
     try {
@@ -60,7 +62,7 @@ export function Nav() {
         </Link>
 
         <nav className="scrollbar-thin -mx-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 sm:ml-4">
-          {links.map((l) => {
+          {LINKS.map((l) => {
             const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
             return (
               <Link
