@@ -18,6 +18,7 @@ then, use the checked-in setup command from a clean checkout on the Linux amd64
 batch box or serving VM:
 
 ```sh
+scripts/voice_setup_box.sh --preflight-only
 scripts/voice_setup_box.sh --resolve-only
 scripts/voice_setup_box.sh --skip-smoke
 scripts/voice_setup_box.sh \
@@ -25,10 +26,17 @@ scripts/voice_setup_box.sh \
   --synth-dir /private/consented/elevenlabs
 ```
 
-The first command installs the locked workspace dependencies and resolves the
-current model refs to full commit SHAs without downloading weights. The second
-downloads and warms the pinned models. The third runs the required 20+20
-consented direction and timing smoke test. Artifacts are written under ignored
+The supported production host is the runbook's 8-vCPU/16-GiB Linux amd64 VM.
+Setup refuses smaller machines before installing dependencies or downloading
+weights. `--allow-undersized` is an explicit measurement-only escape hatch; it
+does not waive the real-mode latency, warm-up or reliability gates and must not
+be used to describe an undersized deployment as production-ready.
+
+The preflight command makes no changes. The resolve-only command installs the
+locked workspace dependencies and resolves the current model refs to full
+commit SHAs without downloading weights. The next command downloads and warms
+the pinned models. The final command runs the required 20+20 consented direction
+and timing smoke test. Artifacts are written under ignored
 `data/voice-runtime/`: `model-revisions.json`, `voice-runtime.env`, and reports.
 Later runs reuse the recorded revisions; `--refresh-revisions` is required to
 resolve mutable `main` refs again. The environment file contains no API keys.

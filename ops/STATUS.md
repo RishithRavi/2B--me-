@@ -329,3 +329,16 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
     - WO-9/WO-10 wait for the overlay redesign.
     - 6 requests to Codex 1/2 in REQUESTS.md: voice simulated badge, fixed stub phrase, mic field, /shop state, /enroll wiring and look.
     - Humans: deploy (VM + DNS), push, Electron GUI smoke on the demo Mac, live enrollment + ≥5 takeover trials.
+
+## 2026-09-27 — Real-voice Vultr preflight
+
+- Audited the live Vultr host without exposing secrets: the deployed API is
+  healthy in explicit stub mode, but the VM has 2 vCPUs and 1.6 GiB RAM versus
+  the documented 8-vCPU/16-GiB production shape. No CM/ECAPA revision pins,
+  model cache, measured calibration, or local-STT model is installed.
+- Added a no-change `scripts/voice_setup_box.sh --preflight-only` check. Real
+  setup now refuses undersized hosts before installing dependencies or fetching
+  weights; `--allow-undersized` is explicitly measurement-only and does not
+  waive latency or reliability gates.
+- Real mode remains fail-closed. Manual blockers are a VM resize and a consented
+  20-genuine/20-synthetic calibration run bound to the resolved model revisions.
