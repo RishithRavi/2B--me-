@@ -27,19 +27,28 @@ from twobme_common.types import (
 )
 
 HYPERTABLES = ("feature_blocks", "trust_ticks", "anomalies", "markers")
+# A trust tick that only restates the 0.30 anchor (first tick of a new device of an enrolled user, restart_stale):
+# delta_logit ~0 at exactly 0.30. It carries no evidence, so it is never a session's avg/min or a timeline point.
+ANCHOR_TICK = "coalesce(abs({t}delta_logit) < 1e-6 AND abs({t}confidence - 0.30) < 0.005, false)"
 
 
 async def sessions(db: Db, user_id: UUID | None, limit: int,
                    device_id: UUID | None = None) -> list[SessionRow] | None:
     rows = await db.fetch(
-        """
+        f"""
         SELECT s.id, s.device_id, s.user_id, s.channel, s.status, s.started_at, s.ended_at,
                t.n_ticks, t.avg_conf, t.min_conf, a.n_anom, m.n_markers
         FROM sessions s
         LEFT JOIN LATERAL (
-            SELECT count(*) AS n_ticks, avg(confidence) AS avg_conf, min(confidence) AS min_conf
-            FROM trust_ticks tt
-            WHERE tt.session_id = s.id AND tt.device_id = s.device_id AND tt.time >= s.started_at
+            -- a tick that only restates the 0.30 anchor (new device of an enrolled user, restart_stale)
+            -- carries no evidence: it counts in n_ticks but never in avg/min (no red "Min 30%")
+            SELECT count(*) AS n_ticks, avg(q.confidence) FILTER (WHERE NOT q.is_anchor) AS avg_conf,
+                   min(q.confidence) FILTER (WHERE NOT q.is_anchor) AS min_conf
+            FROM (
+                SELECT tt.confidence, {ANCHOR_TICK.format(t="tt.")} AS is_anchor
+                FROM trust_ticks tt
+                WHERE tt.session_id = s.id AND tt.device_id = s.device_id AND tt.time >= s.started_at
+            ) q
         ) t ON true
         LEFT JOIN LATERAL (
             SELECT count(*) AS n_anom FROM anomalies an WHERE an.session_id = s.id AND an.time >= s.started_at
@@ -83,11 +92,14 @@ async def trust_series(db: Db, *, device_id: UUID, session_id: UUID | None, star
     bucket = bucket or _auto_bucket(start, end)
     raw = bucket.endswith("seconds") or bucket.endswith("second")
     if raw:
+        anchor = ANCHOR_TICK.format(t="")  # anchor ticks never draw a point (their step-ups still count)
         rows = await db.fetch(
-            """
+            f"""
             SELECT time_bucket_gapfill($1::interval, time, $3::timestamptz, $4::timestamptz) AS t,
-                   avg(confidence) AS avg, min(confidence) AS min, max(confidence) AS max,
-                   locf(last(confidence, time)) AS last,
+                   avg(confidence) FILTER (WHERE NOT {anchor}) AS avg,
+                   min(confidence) FILTER (WHERE NOT {anchor}) AS min,
+                   max(confidence) FILTER (WHERE NOT {anchor}) AS max,
+                   locf(last(confidence, time) FILTER (WHERE NOT {anchor})) AS last,
                    count(*) FILTER (WHERE challenge_issued) AS n_stepups
             FROM trust_ticks
             WHERE device_id = $2 AND time >= $3 AND time < $4 AND ($5::uuid IS NULL OR session_id = $5)
