@@ -2,7 +2,7 @@ import json
 
 import numpy as np
 import pytest
-from hearsay.dsp import analyze, findings, spectral_similarity
+from hearsay.dsp import analyze, findings, spectral_similarity, spectral_vector
 
 
 def tone(hz, seconds=1):
@@ -17,6 +17,7 @@ def test_fft_frequency_pitch_and_output_shapes():
     assert result["dsp"]["f0_median_hz"] == pytest.approx(200, abs=3)
     assert len(result["ltas_db"]) == 64
     assert len(result["mfcc_mean"]) == len(result["mfcc_std"]) == 20
+    assert spectral_vector(result["ltas_db"], result["mfcc_mean"]).shape == (83,)
     assert np.shape(result["spectrogram"]["db"]) == (64, 128)
     assert len(result["spectrogram"]["t_s"]) == 128
     json.dumps(result, allow_nan=False)

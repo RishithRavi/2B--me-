@@ -342,3 +342,17 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
   waive latency or reliability gates.
 - Real mode remains fail-closed. Manual blockers are a VM resize and a consented
   20-genuine/20-synthetic calibration run bound to the resolved model revisions.
+
+## 2026-09-27 — Measured three-corpus voice calibration
+
+- The Vultr host now meets the documented 8-vCPU/16-GiB production shape. The
+  user supplied 20 ordered owner recordings and an authorized ElevenLabs voice;
+  20 matching synthetic clips were generated into private ignored storage.
+- Added the missing revision-bound calibration fitter. It requires owner,
+  different-human and synthetic-clone corpora; uses leave-one-out owner scores;
+  fits a positive synthetic-high CM mapping; and records all operating-point
+  evidence in the JSON without storing audio.
+- Aligned spectral identity with the runbook (mean-centered LTAS plus MFCC
+  1–19) and made the measured enrollment speech/cosine gates loadable. Real
+  voice remains fail-closed until a consenting different speaker records at
+  least 10 challenge clips and the live model smoke/calibration passes.
