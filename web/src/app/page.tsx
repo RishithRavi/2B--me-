@@ -1,10 +1,10 @@
 "use client";
 
-import { ArrowRight, Building2, FlaskConical, MonitorPlay } from "lucide-react";
+import { Building2, FlaskConical } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Hero } from "@/components/landing/hero";
-import { EVIDENCE, LIVE_DASHBOARD, ORG_CONSOLE_DEMO } from "@/components/landing/links";
+import { Hero, PrimaryCta } from "@/components/landing/hero";
+import { EVIDENCE, ORG_CONSOLE_DEMO } from "@/components/landing/links";
 import { Problem } from "@/components/landing/problem";
 import { SafeLoop } from "@/components/landing/safe-loop";
 import { HowItWorks, PrivacyPromise, RiskExamples, SponsorStrip } from "@/components/landing/sections";
@@ -37,7 +37,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col">
-      <Hero state={state} simulated={simulated} />
+      <Hero state={state} simulated={simulated} signedIn={!simulated} />
 
       <Section
         id="problem"
@@ -119,11 +119,7 @@ export default function HomePage() {
             </a>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button asChild size="lg" className="h-10 px-4">
-              <a href={LIVE_DASHBOARD}>
-                <MonitorPlay /> Watch the live dashboard <ArrowRight />
-              </a>
-            </Button>
+            <PrimaryCta signedIn={!simulated} />
             <Button asChild size="lg" variant="outline" className="h-10 px-4">
               <a href={ORG_CONSOLE_DEMO}>
                 <Building2 /> Open the org console demo

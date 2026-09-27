@@ -6,3 +6,5 @@ export const LIVE_DASHBOARD = "/dashboard?stage=1&mock=0";
 export const SIMULATED_TAKEOVER = "/dashboard?stage=1&mock=1";
 export const ORG_CONSOLE_DEMO = "/admin?mock=1";
 export const EVIDENCE = "/lab?mock=0";
+/** Sign in, then land on the owner's live stage view (login honours a same-site ?next=). */
+export const SIGN_IN_LIVE = "/login?next=%2Fdashboard%3Fstage%3D1%26mock%3D0";
