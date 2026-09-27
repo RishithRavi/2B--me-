@@ -2,7 +2,7 @@
 
 > Login proves who you *were*. 2bME keeps checking who you *are*.
 
-Deploying to **https://2bme.tech** (not live yet) · HackGT 13
+Deploying to **https://2bme.tech** on Vultr (not live yet) · HackGT 13
 
 <!-- HEARSAY JUDGE BOX (Codex 2 fills in at C6):
 | NSA Hearsay | |
@@ -27,10 +27,10 @@ one-class, 1:1 check against a single person's own baseline, so it needs no data
    speaker and synthetic speech, or a TOTP code. **Behavior alone never blocks**; only that check can.
 4. **Safe learning.** Only high-confidence genuine blocks (trust ≥ 95% over the last minute, no open or
    failed challenge) become update candidates, and blocks marked as a takeover never do. The loop is
-   designed so an attacker can't teach the model their habits, but it isn't airtight yet: candidates from
-   the minutes before an alert aren't revoked, and enroll-mode rows are trusted without evaluation
-   (IMPLEMENTATION.md §7 B7). Retraining is operator-triggered ("Retrain now") and versioned; an
-   automatic schedule is roadmap.
+   designed so an attacker can't teach the model their habits: candidates from the 2 minutes before any
+   alert or block are revoked, and once a model exists only an admin can put a device back into enroll
+   mode (IMPLEMENTATION.md §7 B7, §5.3). Retraining is operator-triggered ("Retrain now"), guarded
+   (anchor share, change cap, regression check) and versioned; an automatic schedule is roadmap.
 
 Tiger Data stores the behavior history, baselines, anomalies and the audit trail.
 
@@ -65,6 +65,23 @@ agent (PyObjC tap → key classes → evidence blocks) ──wss──▶ FastAP
                                                                ├─▶ Tiger (hypertables, columnstore, caggs, audit trail)
                                                                └─▶ voice step-up (prompt, STT, ECAPA, DF_Arena, DSP/FFT) or TOTP
 ```
+
+## Vultr integration
+
+Vultr is a concrete deployment and inference integration in this repository, not a requirement for the
+local demo:
+
+- **Vultr Compute target:** `infra/docker-compose.yml`, `infra/Caddyfile` and `infra/deploy.sh` package
+  the FastAPI hub, static web app and Tiger Data connection for a small Ubuntu VM behind HTTPS.
+- **Vultr Serverless Inference:** `server/app/core/explain.py` uses Vultr's OpenAI-compatible endpoint
+  to turn the trust change and five largest feature deviations into a short anomaly explanation. Raw
+  keystrokes, audio and activity streams are never included in that request.
+- **Graceful local fallback:** without `VULTR_SERVERLESS_INFERENCE_API_KEY` and
+  `VULTR_INFERENCE_MODEL`, the same flow produces a deterministic template explanation. `/api/status`
+  reports the active explanation backend as `vultr` or `template`.
+
+The integration path is implemented and ready to configure; this README does not claim that the public
+domain or the full production stack is currently live.
 
 ## Privacy promise
 We never record typed content, passwords, clipboard, document text, window titles, URLs or key

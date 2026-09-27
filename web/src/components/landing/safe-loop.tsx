@@ -134,7 +134,7 @@ export function SafeLoop() {
         </p>
         <p>
           <b className="text-foreground">In this demo,</b> retraining is operator-triggered (&ldquo;Retrain now&rdquo;) and every model is versioned.
-          Still to come: dropping candidates from the minutes just before an alert, and an automatic schedule.
+          Candidates from the 2 minutes before any alert are dropped, and retraining is guarded and versioned. Still to come: an automatic schedule.
         </p>
       </div>
     </div>
