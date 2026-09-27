@@ -463,7 +463,7 @@ class Sim implements OrgSim {
       seq: ++e.seq,
       locked: e.locked,
     };
-    e.spark = [...e.spark, confidence].slice(-SPARK_MAX);
+    if (!e.locked) e.spark = [...e.spark, confidence].slice(-SPARK_MAX); // as applyOrg: a lock is not behavior
     if (!reasons?.some((r) => r === "admin_lock" || r === "admin_unlock")) {
       e.online = true;
       e.lastSeen = now;
@@ -690,6 +690,17 @@ class Sim implements OrgSim {
     );
     if (e.anomaly) e.anomaly.challenge_id = c.live.challenge_id;
     this.emitAnomaly(out, e, now);
+    // Like the live audit log, every anomaly is one detection row (the rail and the open-alerts KPI read these).
+    this.emitAudit(
+      out,
+      e,
+      now,
+      "alert",
+      spoof ? "Synthetic voice on the voice check: the phrase was right, the voice was generated" : "Different speaker on the voice check: the voice didn't match the owner",
+      5,
+      "system",
+      e.anomaly?.id ?? null,
+    );
     e.locked = true;
     e.lockReason = spoof ? "voice_spoof" : "voice_impostor"; // the hub's own lock reasons (hub._blocked)
     this.setFlag(e, "admin_locked", false);
@@ -739,7 +750,7 @@ class Sim implements OrgSim {
     if (e.plan.role === "insider" && level === "watch" && !e.flags.includes("insider_drift")) {
       this.setFlag(e, "insider_drift", true);
       const devs = INSIDER_SIGNATURE.map(([n, z]) => deviation(n, z + (this.rng() - 0.5) * 0.3));
-      this.raiseAnomaly(
+      const drift = this.raiseAnomaly(
         e,
         now,
         "trust_drop",
@@ -749,6 +760,7 @@ class Sim implements OrgSim {
         devs,
         "Slow, sustained drift over 25 minutes in typing and pointer rhythm (more pauses, more hesitation before clicks) rather than a sudden change of hands: the insider-threat pattern.",
       );
+      drift.action = "insider_drift"; // how the hub marks an insider-drift trust_drop
       this.emitAnomaly(out, e, now);
       this.emitAudit(out, e, now, "alert", `Insider drift: 25 min of sustained deviation · ${fmtDevs(devs)} — no takeover signature, review activity`, 3, "system", e.anomaly?.id ?? null);
     }
@@ -826,7 +838,9 @@ class Sim implements OrgSim {
         if (e.challenge) throw new Error(`${e.handle} already has an open challenge`);
         if (!e.online) throw new Error(`${e.handle} is offline`);
         row = this.emitAudit(out, e, now, "admin_action", "Forced a voice re-verification", 2, actor);
-        this.issueChallenge(out, e, now, "proactive", null, TRUST_CONFIG.arming.proactive_expiry_s);
+        const c = this.issueChallenge(out, e, now, "proactive", null, TRUST_CONFIG.arming.proactive_expiry_s);
+        // As the hub's audit (_on_challenge): the forced challenge's issued row, keyed by its challenge_id.
+        this.emitAudit(out, e, now, "challenge", "Voice re-verify requested by admin", 3, "system", c.live.challenge_id);
         break;
       }
       case "ack_alert": {

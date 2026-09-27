@@ -118,6 +118,13 @@ export const LOCK_REASONS: readonly string[] = ["admin_lock", "voice_spoof", "vo
 /** Trust pushes that server-side actions cause; they say nothing about whether the agent is online. */
 const NON_PRESENCE_REASONS: readonly string[] = ["admin_lock", "admin_unlock"];
 
+/**
+ * Trust pushes that re-anchor the device (hub: operator reset, or a fresh voice/TOTP VERIFY): whatever the takeover
+ * and insider-drift heuristics saw before no longer describes this session, so their flags clear at once instead of
+ * lingering until the next 30 s roster re-sync.
+ */
+export const REANCHOR_REASONS: readonly string[] = ["operator_reset", "voice_verify", "totp_verify"];
+
 export function lockReasonFrom(reasons: readonly string[] | null | undefined): string | null {
   return reasons?.find((r) => LOCK_REASONS.includes(r)) ?? null;
 }
@@ -220,11 +227,14 @@ export function applyOrg(prev: OrgState, ev: LiveEvent, receivedAt: number = Dat
         // own lock never renders (or toasts) as an unexplained lock in between. A reason already on a locked row wins.
         const inferred = lockReasonFrom(d.reasons);
         const lockReason = !locked ? null : row.locked && row.lock_reason ? row.lock_reason : (inferred ?? row.lock_reason);
-        const flags = !locked
+        let flags = !locked
           ? setFlag(row.flags, "admin_locked", false)
           : lockReason === "admin_lock"
             ? setFlag(row.flags, "admin_locked", true)
             : row.flags;
+        if (d.reasons?.some((r) => REANCHOR_REASONS.includes(r))) {
+          flags = setFlag(setFlag(flags, "takeover_suspected", false), "insider_drift", false);
+        }
         const presence = !d.reasons?.some((r) => NON_PRESENCE_REASONS.includes(r));
         return {
           ...row,
@@ -235,7 +245,9 @@ export function applyOrg(prev: OrgState, ev: LiveEvent, receivedAt: number = Dat
           locked,
           lock_reason: lockReason,
           level: rowLevel({ locked, mode: row.mode, confidence, level: d.level }),
-          sparkline: [...row.sparkline, confidence].slice(-SPARK_MAX),
+          // While locked the hub pins L at its floor (admin lock included): that is state, not behavior, so it stays
+          // out of the "last 5 min" line instead of drawing a fake crash to 0. The gauge and chips show the lock.
+          sparkline: locked ? row.sparkline : [...row.sparkline, confidence].slice(-SPARK_MAX),
           flags,
         };
       });
@@ -347,19 +359,71 @@ export function sortRoster(rows: readonly RosterRow[], by: RosterSort = "risk"):
     if (by === "risk") {
       const d = severityRank(a) - severityRank(b);
       if (d) return d;
-      const ca = a.confidence ?? 1;
-      const cb = b.confidence ?? 1;
-      if (ca !== cb) return ca - cb;
+      // The DISPLAYED percentage, not the raw confidence: 0.99 vs 0.995 jitter must not reshuffle the roster every
+      // tick. Rows move only when the % the admin sees (or the level) changes.
+      const da = a.display ?? 100;
+      const db = b.display ?? 100;
+      if (da !== db) return da - db;
     }
     return byName(a, b);
   });
 }
 
-export const ALERT_SEVERITY = 3;
+const HOUR_MS = 60 * 60 * 1000;
 
-/** Alerts rail: every audit row at severity ≥ 3 (alert, high, lock), newest first. */
-export function alertRows(audit: readonly AuditRow[], limit = 40): AuditRow[] {
-  return audit.filter((r) => r.severity >= ALERT_SEVERITY).slice(0, limit);
+/**
+ * Alerts rail: detections only (kind "alert", one per anomaly the hub raised), collapsed to the newest per device,
+ * newest first. Admin actions, locks and challenges are never alerts, whatever their severity, and a re-armed
+ * incident stays one entry (alertCounts carries the ×N).
+ */
+export function alertRows(audit: readonly AuditRow[], limit = Infinity): AuditRow[] {
+  const seen = new Set<string>();
+  const out: AuditRow[] = [];
+  for (const r of audit) {
+    if (r.kind !== "alert") continue;
+    const key = r.device_id ?? `row:${r.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Detections per device in the last hour (the rail's ×N). */
+export function alertCounts(audit: readonly AuditRow[], now: number = Date.now()): Map<string, number> {
+  const since = now - HOUR_MS;
+  const out = new Map<string, number>();
+  for (const r of audit) {
+    if (r.kind === "alert" && r.device_id && tms(r.t) >= since) out.set(r.device_id, (out.get(r.device_id) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** A device an alert can still be about: below Normal, locked, flagged, or mid-challenge. */
+export function stillAtRisk(row: RosterRow): boolean {
+  return (
+    row.locked ||
+    row.level === "watch" ||
+    row.level === "suspicious" ||
+    row.level === "locked" ||
+    row.flags.includes("takeover_suspected") ||
+    row.flags.includes("insider_drift") ||
+    row.open_challenge !== null
+  );
+}
+
+/**
+ * Open alerts: the newest detection per device that no admin acknowledged, on a device that is still at risk. A
+ * device that recovered (back to Normal, flags cleared) counts as resolved. The KPI and the rail both use this.
+ */
+export function openAlerts(alerts: readonly AuditRow[], acked: ReadonlyMap<string, AuditRow>, rows: readonly RosterRow[]): AuditRow[] {
+  const byDevice = new Map(rows.map((r) => [r.device_id, r]));
+  return alertRows(alerts).filter((a) => {
+    if (a.ref_id && acked.has(a.ref_id)) return false;
+    const row = a.device_id ? byDevice.get(a.device_id) : undefined;
+    return row !== undefined && stillAtRisk(row);
+  });
 }
 
 /** Anomaly ids an admin has acknowledged (an admin_action audit row whose ref_id is that anomaly). */
@@ -379,12 +443,15 @@ export interface OrgKpis {
   watch: number;
   locked: number;
   openChallenges: number;
+  /** unacknowledged detections on devices still at risk (openAlerts) */
+  openAlerts: number;
+  /** detections (kind "alert") in the last hour, re-arms included */
   alertsLastHour: number;
   synthetic: number;
 }
 
 export function orgKpis(rows: readonly RosterRow[], audit: readonly AuditRow[], now: number = Date.now()): OrgKpis {
-  const hourAgo = now - 60 * 60 * 1000;
+  const hourAgo = now - HOUR_MS;
   let online = 0;
   let suspicious = 0;
   let watch = 0;
@@ -399,8 +466,9 @@ export function orgKpis(rows: readonly RosterRow[], audit: readonly AuditRow[], 
     else if (r.level === "watch") watch++;
     if (r.open_challenge) openChallenges++;
   }
-  const alertsLastHour = audit.filter((a) => a.severity >= ALERT_SEVERITY && tms(a.t) >= hourAgo).length;
-  return { total: rows.length, online, atRisk: suspicious + watch, suspicious, watch, locked, openChallenges, alertsLastHour, synthetic };
+  const alertsLastHour = audit.filter((a) => a.kind === "alert" && tms(a.t) >= hourAgo).length;
+  const open = openAlerts(alertRows(audit), ackedRefs(audit), rows).length;
+  return { total: rows.length, online, atRisk: suspicious + watch, suspicious, watch, locked, openChallenges, openAlerts: open, alertsLastHour, synthetic };
 }
 
 export interface LevelDrop {
@@ -466,6 +534,45 @@ export function auditKindLabel(kind: AuditKind | string): string {
     default:
       return String(kind);
   }
+}
+
+/**
+ * The live org's scenario engine writes audit rows as "org-demo engine (API token)": every loop it resets the scripted
+ * employees (operator reset, cancelled challenge, trust back to 97%). That is demo plumbing, not an authentication, so
+ * the trail folds each burst into one muted "scenario restarted" line unless the admin asks to see the rows.
+ */
+export const ENGINE_ACTOR_PREFIX = "org-demo engine";
+
+export function isEngineRow(r: Pick<AuditRow, "actor">): boolean {
+  return r.actor.startsWith(ENGINE_ACTOR_PREFIX);
+}
+
+export interface EngineRestart {
+  id: string;
+  /** time of the burst's newest row */
+  t: string;
+  /** engine rows folded into this line */
+  rows: number;
+}
+
+/** One entry per engine burst (rows within `gapMs` of each other), newest first; `audit` is newest first. */
+export function engineRestarts(audit: readonly AuditRow[], gapMs = 60_000): EngineRestart[] {
+  const out: EngineRestart[] = [];
+  let cur: EngineRestart | null = null;
+  let oldest = 0;
+  for (const r of audit) {
+    if (!isEngineRow(r)) continue;
+    const t = tms(r.t);
+    if (cur && oldest - t <= gapMs) {
+      cur.rows++;
+      oldest = t;
+      continue;
+    }
+    cur = { id: `engine-${r.id}`, t: r.t, rows: 1 };
+    oldest = t;
+    out.push(cur);
+  }
+  return out;
 }
 
 /** CSV for the breach trace-back export (the filtered audit rows, oldest first). */

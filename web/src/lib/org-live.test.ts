@@ -3,15 +3,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuditRow, LiveEvent, RosterRow, TrustLive } from "./contracts";
 import {
   ackedRefs,
+  alertCounts,
   alertingDrops,
   alertRows,
   applyOrg,
   auditCsv,
+  engineRestarts,
   initialOrgState,
+  isEngineRow,
   levelDrops,
   mergeAudit,
   mergeRoster,
   normalizeRow,
+  openAlerts,
   OrgStore,
   orgKpis,
   parseOrgEvent,
@@ -226,6 +230,33 @@ describe("applyOrg", () => {
     expect(s.rows[0].flags).toEqual([]);
   });
 
+  it("clears takeover and insider-drift flags on a re-anchoring trust push (operator reset, voice or TOTP VERIFY)", () => {
+    const flagged = () => state([row({ confidence: 0.3, display: 30, level: "suspicious", flags: ["takeover_suspected", "insider_drift", "challenge_open"] })]);
+    for (const reason of ["operator_reset", "voice_verify", "totp_verify"]) {
+      const s = applyOrg(flagged(), trust(0.97, { reasons: [reason] }));
+      expect(s.rows[0]).toMatchObject({ display: 97, level: "normal", flags: ["challenge_open"] });
+    }
+    // An ordinary tick, a recovery or an admin action says nothing about the takeover: the flags stay.
+    for (const reasons of [[], ["behavior_drift"], ["admin_unlock"], ["screen_unlock"]]) {
+      const s = applyOrg(flagged(), trust(0.97, { reasons }));
+      expect(s.rows[0].flags).toEqual(["takeover_suspected", "insider_drift", "challenge_open"]);
+    }
+  });
+
+  it("keeps a lock's pinned trust out of the sparkline (no fake crash to 0)", () => {
+    const lock: LiveEvent = { type: "lock", device_id: DEV, t: new Date(T0).toISOString(), data: { reason: "admin_lock" } };
+    const unlock: LiveEvent = { type: "unlock", device_id: DEV, t: new Date(T0).toISOString(), data: {} };
+    let s = state([row({ sparkline: [0.95, 0.96] })]);
+    s = applyOrg(s, trust(0.0001, { locked: true, reasons: ["admin_lock"] }));
+    s = applyOrg(s, lock);
+    s = applyOrg(s, trust(0.0001, { locked: true }));
+    expect(s.rows[0]).toMatchObject({ locked: true, level: "locked", confidence: 0.0001, sparkline: [0.95, 0.96] });
+    s = applyOrg(s, unlock);
+    s = applyOrg(s, trust(0.96, { reasons: ["admin_unlock"] }));
+    expect(s.rows[0].sparkline).toEqual([0.95, 0.96, 0.96]);
+    expect(Math.min(...s.rows[0].sparkline)).toBeGreaterThan(0.9);
+  });
+
   it("keeps the first-seen time when an anomaly is re-sent with the same id", () => {
     const a = (t: number, action: string | null): LiveEvent => ({
       type: "anomaly",
@@ -299,8 +330,19 @@ describe("derived views", () => {
       row({ device_id: "d", level: "locked", locked: true }),
       row({ device_id: "e", online: false }),
     ];
-    const k = orgKpis(rows, [audit("1", -5), audit("2", -90), audit("3", -1, { severity: 1 })], T0);
-    expect(k).toMatchObject({ total: 5, online: 4, atRisk: 2, suspicious: 1, watch: 1, locked: 1, openChallenges: 1, alertsLastHour: 1, synthetic: 5 });
+    const k = orgKpis(
+      rows,
+      [
+        audit("1", -5, { device_id: "b", ref_id: "an-b" }),
+        audit("2", -90, { device_id: "c", ref_id: "an-c" }),
+        audit("3", -1, { device_id: "a", severity: 2 }),
+        audit("4", -2, { kind: "admin_action", device_id: "d", severity: 4, summary: "Admin lock" }),
+        audit("5", -3, { kind: "lock", device_id: "d", severity: 5 }),
+      ],
+      T0,
+    );
+    // Open: b (watch) and c (suspicious). a recovered (normal, no flags); d has no detection, only admin/lock rows.
+    expect(k).toMatchObject({ total: 5, online: 4, atRisk: 2, suspicious: 1, watch: 1, locked: 1, openChallenges: 1, openAlerts: 2, alertsLastHour: 2, synthetic: 5 });
   });
 
   it("sorts the real device first, then by risk", () => {
@@ -314,6 +356,18 @@ describe("derived views", () => {
     ];
     expect(sortRoster(rows).map((r) => r.device_id)).toEqual(["a", "l", "s", "w", "n", "off"]);
     expect(sortRoster(rows, "name").map((r) => r.device_id)).toEqual(["a", "n", "off", "w", "l", "s"]);
+  });
+
+  it("orders equal displayed trust by name, whatever the raw confidence jitter", () => {
+    const rows = [
+      row({ device_id: "x", handle: "Employee 09", confidence: 0.9949, display: 99 }),
+      row({ device_id: "y", handle: "Employee 02", confidence: 0.9951, display: 99 }),
+      row({ device_id: "z", handle: "Employee 05", confidence: 0.97, display: 97 }),
+    ];
+    expect(sortRoster(rows).map((r) => r.device_id)).toEqual(["z", "y", "x"]);
+    // The same rows a tick later with the jitter flipped: the order doesn't move.
+    const flipped = rows.map((r) => (r.device_id === "x" ? { ...r, confidence: 0.9951 } : r.device_id === "y" ? { ...r, confidence: 0.9949 } : r));
+    expect(sortRoster(flipped).map((r) => r.device_id)).toEqual(["z", "y", "x"]);
   });
 
   it("reports level drops only after the first load", () => {
@@ -339,7 +393,61 @@ describe("derived views", () => {
       audit("3", 1, { kind: "admin_action", summary: "Note: hi", ref_id: null, severity: 0 }),
     ];
     expect([...ackedRefs(rows).keys()].sort()).toEqual(["an1", "an2"]);
-    expect(alertRows(rows).map((r) => r.id)).toEqual(["5", "2"]);
+    // Detections only: admin actions (even a severity-4 lock) are never alerts.
+    expect(alertRows(rows).map((r) => r.id)).toEqual(["2"]);
+  });
+
+  it("collapses re-armed detections to the newest per device and counts them", () => {
+    const OTHER = "33333333-3333-4333-8333-333333333333";
+    const trail = [
+      audit("r3", -1, { ref_id: "an3", severity: 4 }),
+      audit("x", -2, { kind: "challenge", ref_id: "c1", severity: 3 }),
+      audit("o1", -3, { device_id: OTHER, handle: "Employee 02", ref_id: "ano", severity: 3 }),
+      audit("r2", -4, { ref_id: "an2", severity: 4 }),
+      audit("r1", -70, { ref_id: "an1", severity: 4 }),
+    ];
+    expect(alertRows(trail).map((r) => r.id)).toEqual(["r3", "o1"]);
+    expect(alertCounts(trail, T0)).toEqual(new Map([[DEV, 2], [OTHER, 1]]));
+  });
+
+  it("opens an alert only while its device is still at risk and nobody acknowledged it", () => {
+    const OTHER = "33333333-3333-4333-8333-333333333333";
+    const trail = [
+      audit("a1", -1, { ref_id: "an1", severity: 4 }),
+      audit("o1", -2, { device_id: OTHER, ref_id: "ano", severity: 3 }),
+    ];
+    const risky = row({ level: "suspicious", confidence: 0.2, display: 20, flags: ["takeover_suspected"] });
+    const fine = row({ device_id: OTHER, handle: "Employee 02" });
+    const acked = (id: string) => new Map([[id, audit("k", 0, { kind: "admin_action", ref_id: id, summary: "Acknowledged alert: trust drop" })]]);
+    expect(openAlerts(trail, new Map(), [risky, fine]).map((r) => r.id)).toEqual(["a1"]);
+    expect(openAlerts(trail, acked("an1"), [risky, fine])).toEqual([]);
+    // Flags alone keep it open (insider drift in the watch band, or a pending challenge), recovery resolves it.
+    expect(openAlerts(trail, new Map(), [row({ flags: ["insider_drift"] }), fine]).map((r) => r.id)).toEqual(["a1"]);
+    expect(openAlerts(trail, new Map(), [row(), fine])).toEqual([]);
+  });
+
+  it("folds each burst of org-demo engine rows into one restart line", () => {
+    const ENGINE = "org-demo engine (API token)";
+    const sec = (id: string, s: number, over: Partial<AuditRow> = {}) => audit(id, s / 60, { kind: "marker", actor: ENGINE, severity: 1, ...over });
+    const trail = mergeAudit([], [
+      audit("x1", 9, { actor: "system" }),
+      sec("e5", 480.004),
+      sec("e4", 480.003, { kind: "trust_change", severity: 0 }),
+      audit("x2", 480.002 / 60, { actor: "Observer", kind: "admin_action" }), // an admin row in between doesn't split the burst
+      sec("e3", 480, { kind: "challenge", severity: 0 }),
+      audit("x3", 4, { actor: "system" }),
+      sec("e2", 0.5),
+      sec("e1", 0, { kind: "admin_action", summary: "Org demo seeded" }),
+    ]);
+    expect(trail.map((r) => r.id)).toEqual(["x1", "e5", "e4", "x2", "e3", "x3", "e2", "e1"]);
+    expect(trail.filter(isEngineRow).map((r) => r.id)).toEqual(["e5", "e4", "e3", "e2", "e1"]);
+    const restarts = engineRestarts(trail);
+    expect(restarts).toEqual([
+      { id: "engine-e5", t: trail.find((r) => r.id === "e5")?.t, rows: 3 },
+      { id: "engine-e2", t: trail.find((r) => r.id === "e2")?.t, rows: 2 },
+    ]);
+    expect(isEngineRow({ actor: "Observer" })).toBe(false);
+    expect(engineRestarts(trail.filter((r) => !isEngineRow(r)))).toEqual([]);
   });
 
   it("exports CSV oldest first with escaping", () => {

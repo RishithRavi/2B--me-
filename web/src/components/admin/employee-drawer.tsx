@@ -10,8 +10,8 @@ import { TrustGauge } from "@/components/dashboard/trust-gauge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import type { AdminActionIn, AuditRow, RosterRow, TrustLive } from "@/lib/contracts";
-import { trustDisplay } from "@/lib/org-live";
+import type { AdminActionIn, AnomalyLive, AuditRow, RosterRow, TrustLive } from "@/lib/contracts";
+import { rowLevel, trustDisplay } from "@/lib/org-live";
 import { fmtAgo, fmtClock, fmtPct, fmtZ, levelColor } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,12 @@ const ANOMALY_LABEL: Record<string, string> = {
   redteam_tool: "red-team tool read",
 };
 const anomalyLabel = (kind: string) => ANOMALY_LABEL[kind] ?? kind.replace(/_/g, " ");
+/** The hub writes insider drift as a trust_drop whose action is "insider_drift". */
+const alertLabel = (a: AnomalyLive) => (a.action === "insider_drift" ? "insider drift" : anomalyLabel(a.kind));
+/** Sentence case ("Takeover suspected"), not CSS capitalize's Title Case. */
+const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** hub audit (_on_challenge): the issued row of an admin's force_reverify, ref_id = challenge_id */
+const ADMIN_REVERIFY = /requested by admin/i;
 
 const CHALLENGE_TEXT: Record<string, string> = {
   proactive: "Proactive voice check",
@@ -94,12 +100,17 @@ export function EmployeeDrawer({
   }
 
   const open = row !== null;
-  const deviceAudit = row ? audit.filter((a) => a.device_id === row.device_id).slice(0, 14) : [];
+  const allDeviceAudit = row ? audit.filter((a) => a.device_id === row.device_id) : [];
+  const deviceAudit = allDeviceAudit.slice(0, 14);
+  const challengeId = row?.open_challenge?.challenge_id ?? null;
+  // An admin's force_reverify reaches the device as a "proactive" challenge: title it for what it is.
+  const adminReverify = challengeId !== null && allDeviceAudit.some((a) => a.ref_id === challengeId && ADMIN_REVERIFY.test(a.summary));
   const anomaly = row?.last_anomaly ?? null;
   const ack = anomaly ? acked.get(anomaly.id) : undefined;
   const adminLocked = Boolean(row?.locked && row.lock_reason === "admin_lock");
   const voiceLocked = Boolean(row?.locked && !adminLocked);
-  const color = row ? levelColor(row.level) : "var(--muted-foreground)";
+  // The alert's "after" value in its own band's color (a recovered row is green now; the 1% it fell to is not).
+  const afterColor = anomaly?.trust_after != null ? levelColor(rowLevel({ locked: false, confidence: anomaly.trust_after })) : "var(--muted-foreground)";
   const expires = row?.open_challenge?.expires_at ? Math.max(0, Math.round((Date.parse(row.open_challenge.expires_at) - now) / 1000)) : null;
 
   return (
@@ -137,13 +148,13 @@ export function EmployeeDrawer({
             <div className="space-y-6 px-5 py-5">
               {/* Trust */}
               <div className="grid grid-cols-1 items-center gap-4 sm:grid-cols-[210px_minmax(0,1fr)]">
-                <TrustGauge
-                  trust={asTrust(row)}
-                  locked={row.locked}
-                  learning={row.level === "learning"}
-                  caption={null}
-                  className="max-w-[210px]"
-                />
+                <div>
+                  {/* Offline: the last value the device reported, greyed so it doesn't read as live. */}
+                  <div className={cn(!row.online && "opacity-45 grayscale")}>
+                    <TrustGauge trust={asTrust(row)} locked={row.locked} learning={row.level === "learning"} caption={null} className="max-w-[210px]" />
+                  </div>
+                  {!row.online && <p className="-mt-2 text-center text-[11px] text-muted-foreground">last known · offline</p>}
+                </div>
                 <div className="min-w-0 space-y-3">
                   <div>
                     <div className="eyebrow mb-1">Last 5 min</div>
@@ -168,7 +179,7 @@ export function EmployeeDrawer({
                   <div className="flex items-start gap-2.5 rounded-lg bg-trust-watch/10 px-3 py-2.5 ring-1 ring-trust-watch/35">
                     <AudioLines className="mt-0.5 size-4 shrink-0 text-trust-watch" />
                     <div className="text-[13px]">
-                      <div className="font-medium">{CHALLENGE_TEXT[row.open_challenge.trigger] ?? row.open_challenge.trigger}</div>
+                      <div className="font-medium">{adminReverify ? "Admin-requested re-verify" : (CHALLENGE_TEXT[row.open_challenge.trigger] ?? row.open_challenge.trigger)}</div>
                       <div className="text-muted-foreground">
                         {row.open_challenge.status.replace(/_/g, " ")} · attempt {row.open_challenge.attempt}
                         {expires !== null ? ` · expires in ${expires}s` : ""}
@@ -184,13 +195,19 @@ export function EmployeeDrawer({
                   <div className="space-y-2.5 rounded-lg p-3 ring-1 ring-foreground/10" style={{ background: `color-mix(in oklch, ${severityColor(anomaly.severity)} 6%, transparent)` }}>
                     <div className="flex items-center gap-2 text-[13px]">
                       <ShieldAlert className="size-4" style={{ color: severityColor(anomaly.severity) }} />
-                      <span className="font-medium capitalize">{anomalyLabel(anomaly.kind)}</span>
+                      <span className="font-medium">{sentence(alertLabel(anomaly))}</span>
                       <span className="text-muted-foreground">· severity {anomaly.severity}</span>
                       <time className="tnum ml-auto text-[11px] text-muted-foreground">{fmtAgo(row.last_anomaly_at, now)}</time>
                     </div>
-                    {(anomaly.trust_before !== null || anomaly.trust_after !== null) && (
+                    {anomaly.trust_before === null ? (
+                      anomaly.trust_after !== null && (
+                        <div className="tnum text-[13px]">
+                          Trust now <span style={{ color: afterColor }}>{fmtPct(anomaly.trust_after)}</span>
+                        </div>
+                      )
+                    ) : (
                       <div className="tnum text-[13px]">
-                        Trust {fmtPct(anomaly.trust_before)} → <span style={{ color }}>{fmtPct(anomaly.trust_after)}</span>
+                        Trust {fmtPct(anomaly.trust_before)} → <span style={{ color: afterColor }}>{fmtPct(anomaly.trust_after)}</span>
                       </div>
                     )}
                     {anomaly.top_features.length > 0 && (
@@ -243,7 +260,7 @@ export function EmployeeDrawer({
                     disabled={busy !== null || !anomaly || Boolean(ack)}
                     onClick={() => anomaly && run({ device_id: row.device_id, action: "ack_alert", anomaly_id: anomaly.id }, "Alert acknowledged")}
                   >
-                    <CheckCheck /> {ack ? "Alert acknowledged" : anomaly ? `Acknowledge alert: ${anomalyLabel(anomaly.kind)}` : "No alert to acknowledge"}
+                    <CheckCheck /> {ack ? "Alert acknowledged" : anomaly ? `Acknowledge alert: ${alertLabel(anomaly)}` : "No alert to acknowledge"}
                   </Button>
                 </div>
                 <form
@@ -254,7 +271,7 @@ export function EmployeeDrawer({
                     if (text) void run({ device_id: row.device_id, action: "note", text }, "Note added");
                   }}
                 >
-                  <Input value={note} maxLength={80} onChange={(e) => setNote(e.target.value)} placeholder="Add a note to the audit trail (≤ 80 chars)" aria-label="Note" />
+                  <Input value={note} maxLength={80} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (≤ 80 chars)" aria-label="Note" />
                   <Button type="submit" variant="secondary" disabled={busy !== null || !note.trim()}>
                     <StickyNote /> Add
                   </Button>
@@ -266,21 +283,29 @@ export function EmployeeDrawer({
                 </p>
               </Section>
 
-              {/* Trace-back + links */}
+              {/* Trace-back + links (the demo org's devices exist only in this browser: no dashboard or history) */}
               <div className="grid grid-cols-2 gap-2">
                 <Button className="col-span-2" onClick={() => onTrace(row.device_id)}>
                   <Route /> Trace this device in the audit trail
                 </Button>
-                <Button asChild variant="secondary">
-                  <Link href={`/dashboard?device_id=${encodeURIComponent(row.device_id)}`}>
-                    <ExternalLink /> Open live dashboard
-                  </Link>
-                </Button>
-                <Button asChild variant="secondary">
-                  <Link href={`/history?device_id=${encodeURIComponent(row.device_id)}`}>
-                    <History /> Trace in history
-                  </Link>
-                </Button>
+                {mock ? (
+                  <p className="col-span-2 text-[11.5px] text-muted-foreground">
+                    Per-employee dashboard and history exist in the live org (this demo runs in your browser).
+                  </p>
+                ) : (
+                  <>
+                    <Button asChild variant="secondary">
+                      <Link href={`/dashboard?device_id=${encodeURIComponent(row.device_id)}`}>
+                        <ExternalLink /> Open live dashboard
+                      </Link>
+                    </Button>
+                    <Button asChild variant="secondary">
+                      <Link href={`/history?device_id=${encodeURIComponent(row.device_id)}`}>
+                        <History /> Trace in history
+                      </Link>
+                    </Button>
+                  </>
+                )}
               </div>
 
               {/* Device audit */}

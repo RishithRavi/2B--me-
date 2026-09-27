@@ -18,6 +18,7 @@ import type { AdminActionIn, Level } from "@/lib/contracts";
 import { useNow } from "@/lib/hooks";
 import {
   ackedRefs,
+  alertCounts,
   alertingDrops,
   alertRows,
   levelDrops,
@@ -102,6 +103,7 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
   const kpis = useMemo(() => orgKpis(state.rows, state.audit, now), [state.rows, state.audit, now]);
   const alerts = useMemo(() => alertRows(state.audit), [state.audit]);
   const acked = useMemo(() => ackedRefs(state.audit), [state.audit]);
+  const alertCountBy = useMemo(() => alertCounts(state.audit, now), [state.audit, now]);
   const lastAlertBy = useMemo(() => {
     const m = new Map<string, string>();
     for (const a of alerts) if (a.device_id && !m.has(a.device_id)) m.set(a.device_id, a.t);
@@ -142,12 +144,27 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
     if (hit) setSelectedId(hit.device_id);
   }, [params, preview, state.loaded, state.rows]);
 
-  // Toast when anyone drops to Suspicious or gets locked (never for the state on arrival).
+  // Toast when anyone drops to Suspicious, gets locked or starts drifting (never for the state on arrival).
   const prevLevels = useRef<Map<string, Level> | null>(null);
+  const prevFlags = useRef<Map<string, readonly string[]> | null>(null);
   useEffect(() => {
     if (preview || !state.loaded || state.rows.length === 0) return;
     const drops = levelDrops(prevLevels.current, state.rows);
     prevLevels.current = new Map(state.rows.map((r) => [r.device_id, r.level]));
+    const flagsBefore = prevFlags.current;
+    prevFlags.current = new Map(state.rows.map((r) => [r.device_id, r.flags]));
+    if (flagsBefore) {
+      for (const r of state.rows) {
+        const was = flagsBefore.get(r.device_id);
+        if (!was || was.includes("insider_drift") || !r.flags.includes("insider_drift")) continue;
+        toast.warning(`${r.handle} · insider drift`, {
+          id: `drift-${r.device_id}`,
+          description: "Sustained deviation over 5 min. Review activity; behavior alone never blocks.",
+          duration: 9000,
+          action: { label: "Inspect", onClick: () => select(r.device_id) },
+        });
+      }
+    }
     const alerting = alertingDrops(drops);
     for (const d of alerting.slice(0, 3)) {
       const r = d.row;
@@ -157,7 +174,7 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
           ? `${lockReasonText(r.lock_reason)} · ${r.team ?? r.device_label}`
           : r.flags.includes("takeover_suspected")
             ? `Takeover suspected on ${r.device_label}. A voice check decides; behavior alone never blocks.`
-            : `${r.device_label} left the employee's baseline.`;
+            : `${r.handle}'s behavior no longer matches their baseline.`;
       toast.error(title, {
         id: `drop-${r.device_id}-${d.to}`,
         description,
@@ -303,12 +320,12 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
             />
           </div>
           <div className="min-w-0 lg:col-span-4">
-            <AlertsRail alerts={alerts} acked={acked} now={now} onSelect={select} className="lg:sticky lg:top-18 lg:max-h-[calc(100dvh-5.5rem)]" />
+            <AlertsRail alerts={alerts} acked={acked} rows={state.rows} counts={alertCountBy} now={now} onSelect={select} className="lg:sticky lg:top-18 lg:max-h-[calc(100dvh-5.5rem)]" />
           </div>
         </div>
 
         <div ref={auditRef} className="scroll-mt-20">
-          <AuditTrail audit={state.audit} rows={state.rows} filter={filter} onFilter={setFilter} onSelect={select} now={now} />
+          <AuditTrail audit={state.audit} rows={state.rows} filter={filter} onFilter={setFilter} onSelect={select} now={now} mock={mock} />
         </div>
 
         {!mock && state.loaded && state.error && state.rows.length > 0 && (
@@ -316,7 +333,7 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
         )}
         {!mock && (
           <p className="text-[11.5px] text-muted-foreground">
-            Roster re-syncs every 30 s and on reconnect; events stream over <span className="font-mono">/ws/live?scope=org</span>.{" "}
+            Roster re-syncs every 30&nbsp;s; events stream live.{" "}
             <Link href="/dashboard?stage=1" className="underline underline-offset-4">
               Stage view
             </Link>
