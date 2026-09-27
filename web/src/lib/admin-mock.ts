@@ -838,7 +838,9 @@ class Sim implements OrgSim {
         if (e.challenge) throw new Error(`${e.handle} already has an open challenge`);
         if (!e.online) throw new Error(`${e.handle} is offline`);
         row = this.emitAudit(out, e, now, "admin_action", "Forced a voice re-verification", 2, actor);
-        this.issueChallenge(out, e, now, "proactive", null, TRUST_CONFIG.arming.proactive_expiry_s);
+        const c = this.issueChallenge(out, e, now, "proactive", null, TRUST_CONFIG.arming.proactive_expiry_s);
+        // As the hub's audit (_on_challenge): the forced challenge's issued row, keyed by its challenge_id.
+        this.emitAudit(out, e, now, "challenge", "Voice re-verify requested by admin", 3, "system", c.live.challenge_id);
         break;
       }
       case "ack_alert": {
