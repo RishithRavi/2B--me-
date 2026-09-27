@@ -69,7 +69,8 @@ export function AdminGate({ status, me }: { status: MeStatus; me: MeOut | null }
               </a>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-10 text-sm">
-              <Link href="/login">
+              {/* ?next: the login page returns here after a successful sign-in */}
+              <Link href="/login?next=/admin">
                 <LogIn /> Admin sign-in
               </Link>
             </Button>
