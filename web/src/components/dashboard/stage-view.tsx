@@ -1,13 +1,13 @@
 "use client";
 
-import { Building2, Flag, FlagOff, Loader2, RotateCcw, Target, X } from "lucide-react";
+import { Building2, Flag, FlagOff, Loader2, PackageOpen, RotateCcw, Target, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { Wordmark } from "@/components/site/logo";
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/lib/hooks";
-import type { LiveState } from "@/lib/live";
+import type { LiveState, LiveStore } from "@/lib/live";
 import { takeoverOpen } from "@/lib/ttd";
 import { scoredModalities } from "@/lib/ui";
 
@@ -17,6 +17,7 @@ import { EventFeed } from "./event-feed";
 import { SecureInputBanner } from "./health-pills";
 import { agentOffline, type Drill } from "./live-hooks";
 import { ModalityBars } from "./modality-bars";
+import { TickDrawer } from "./tick-drawer";
 import { TrustChart } from "./trust-chart";
 import { TrustGauge } from "./trust-gauge";
 import { TtdStopwatch } from "./ttd-stopwatch";
@@ -41,6 +42,7 @@ export function StageView({
   isAdmin,
   voiceMode,
   drill = null,
+  store = null,
 }: {
   state: LiveState;
   mock: boolean;
@@ -49,6 +51,8 @@ export function StageView({
   voiceMode: VoiceMode;
   /** an admin viewing a device from the org console (/dashboard?stage=1&device_id=) */
   drill?: Drill | null;
+  /** live store: the "What left this laptop" drawer's Refresh re-snapshots it */
+  store?: LiveStore | null;
 }) {
   const learning = !state.model || state.model.status !== "ready" || state.device?.mode === "enroll";
   const open = takeoverOpen(state.markers) || state.label === "impostor";
@@ -67,14 +71,24 @@ export function StageView({
 
   return (
     <div className="bg-console-grid fixed inset-0 z-50 flex flex-col overflow-hidden bg-background">
-      <div className="flex shrink-0 items-center gap-4 border-b bg-background/80 px-4 py-2 backdrop-blur xl:px-5">
+      <div className="flex shrink-0 items-center gap-3 border-b bg-background/80 px-4 py-2 backdrop-blur sm:gap-4 xl:px-5">
         <Wordmark className="text-xl" />
         <span className="hidden text-sm text-muted-foreground md:inline">
           Login proves who you <em>were</em>. 2bME keeps checking who you <em>are</em>.
         </span>
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-4">
           {synthetic && <SyntheticBadge />}
-          <span className="text-sm text-muted-foreground">{drillTitle(drill, state.device?.label) ?? "no device"}</span>
+          <span className="min-w-0 truncate text-sm text-muted-foreground">{drillTitle(drill, state.device?.label) ?? "no device"}</span>
+          {/* §13 0:00: the literal payload the agent last sent (timing aggregates only) */}
+          <TickDrawer
+            tick={state.last_tick_json}
+            onRefresh={() => store?.reconnect()}
+            trigger={
+              <Button variant="outline" size="sm" aria-label="What left this laptop">
+                <PackageOpen /> <span className="hidden sm:inline">What left this laptop</span>
+              </Button>
+            }
+          />
           <ConnectionBadge state={state} mock={mock} />
           <Button asChild variant="ghost" size="icon-sm" aria-label="Exit stage view">
             <Link href={stageLink(mock, state.focus, false)}>

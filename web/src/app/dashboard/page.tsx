@@ -105,7 +105,7 @@ function Dashboard() {
         </div>
       )}
       {stage ? (
-        <StageView state={state} mock={mock} actions={actions} isAdmin={isAdmin} voiceMode={server.voiceMode} drill={drill} />
+        <StageView state={state} store={store} mock={mock} actions={actions} isAdmin={isAdmin} voiceMode={server.voiceMode} drill={drill} />
       ) : (
         <DashboardView
           state={state}
