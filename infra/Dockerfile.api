@@ -2,10 +2,16 @@
 # API image: FROM the prebuilt base, code copied last so a deploy takes seconds.
 ARG BASE=twobme-base:latest
 FROM ${BASE}
+# Must match the base image's UV_EXTRAS (uv sync is exact: a mismatch would uninstall the voice stack).
+# "" = stub voice (default, no torch); "--extra voice" = real voice (hearsay[server], CPU torch).
+ARG UV_EXTRAS=""
 WORKDIR /app
 COPY . /app
+# twobme-server + its workspace deps (twobme-common, twobme-features, twobme-ml, hearsay); fail the build
+# if the identity model or the voice package can't be imported (MODEL_BACKEND=auto would silently fall back)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --package twobme-server
+    uv sync --frozen --no-dev --package twobme-server ${UV_EXTRAS} \
+ && python -c "import twobme_ml, twobme_features, hearsay.phrases"
 ENV TWOBME_CONTRACTS_DIR=/app/contracts \
     MIGRATIONS_DIR=/app/infra/migrations \
     REPORTS_DIR=/app/reports \

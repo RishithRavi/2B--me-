@@ -17,6 +17,18 @@ import asyncpg
 
 log = logging.getLogger("twobme.db")
 
+# Errors that mean "Tiger is unavailable" rather than "this query is wrong": connection loss plus the
+# PostgresError subclasses a server raises while (re)connecting — starting up / shutting down
+# (CannotConnectNow, AdminShutdown, CrashShutdown), out of connection slots (TooManyConnections) or not
+# accepting connections (ObjectNotInPrerequisiteState). They degrade to "db down", never raise into a caller
+# on the hot path (agent hello → enroll counts).
+DB_DOWN_ERRORS: tuple[type[BaseException], ...] = (
+    OSError, asyncio.TimeoutError, asyncpg.PostgresConnectionError, asyncpg.InterfaceError,
+    asyncpg.exceptions.CannotConnectNowError, asyncpg.exceptions.TooManyConnectionsError,
+    asyncpg.exceptions.ObjectNotInPrerequisiteStateError, asyncpg.exceptions.AdminShutdownError,
+    asyncpg.exceptions.CrashShutdownError,
+)
+
 
 async def _init_conn(conn: asyncpg.Connection) -> None:
     await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
@@ -127,7 +139,7 @@ class Db:
             return None
         try:
             return await self.pool.fetch(sql, *args)
-        except (OSError, asyncpg.PostgresConnectionError, asyncpg.InterfaceError) as e:
+        except DB_DOWN_ERRORS as e:
             self.mark_down(e)
             return None
 
@@ -141,6 +153,6 @@ class Db:
         try:
             await self.pool.execute(sql, *args)
             return True
-        except (OSError, asyncpg.PostgresConnectionError, asyncpg.InterfaceError) as e:
+        except DB_DOWN_ERRORS as e:
             self.mark_down(e)
             return False

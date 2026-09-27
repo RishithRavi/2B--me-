@@ -168,7 +168,19 @@ async def status() -> StatusOut:
         elevenlabs=r.extras.get("elevenlabs"),
         inference={"model_backend": r.models.backend_name, "trust_engine": _engine_kind(),
                    "explanations": "vultr" if r.extras.get("explainer_enabled") else "template"},
+        voice_mode=_voice_mode(r.settings.demo_mode), model_backend=r.models.backend_name,
     )
+
+
+def _voice_mode(demo: bool) -> str:
+    """What the voice layer actually runs (stub results are badged "simulated"); "stub" on any error."""
+    try:
+        from app.voice.config import VoiceSettings
+
+        mode = VoiceSettings().mode(demo=demo)
+        return mode if mode in ("stub", "real") else "stub"
+    except Exception:
+        return "stub"
 
 
 def _engine_kind() -> str:

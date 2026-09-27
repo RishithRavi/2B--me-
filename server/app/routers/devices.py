@@ -12,9 +12,12 @@ router = APIRouter(tags=["devices"])
 @router.post("/devices/register", response_model=DeviceRegisterOut)
 async def register(body: DeviceRegisterIn, p: CurrentPrincipal) -> DeviceRegisterOut:
     r = rt()
+    # §5.3/§5.4: a new device of a user who already has an active model starts in monitor at 0.30 (a stolen
+    # cookie can't register an anchored enrolling device); a user's first device enrolls (learning)
+    mode = "monitor" if r.models.scorer(p.user.id) is not None else "enroll"
     dev, token = r.registry.register_device(
-        p.user.id, body.label, body.os, body.pointer, body.display.model_dump() if body.display else None)
-    r.hub.rt(dev)  # new device: 0.97 in enroll mode (§5.4)
+        p.user.id, body.label, body.os, body.pointer, body.display.model_dump() if body.display else None, mode=mode)
+    r.hub.rt(dev)  # anchors from trust_config: new_device_monitor 0.30 / new_device_enroll (learning)
     r.registry.save_mirror(force=True)
     return DeviceRegisterOut(device_id=dev.id, device_token=token)
 
