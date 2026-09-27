@@ -118,6 +118,13 @@ export const LOCK_REASONS: readonly string[] = ["admin_lock", "voice_spoof", "vo
 /** Trust pushes that server-side actions cause; they say nothing about whether the agent is online. */
 const NON_PRESENCE_REASONS: readonly string[] = ["admin_lock", "admin_unlock"];
 
+/**
+ * Trust pushes that re-anchor the device (hub: operator reset, or a fresh voice/TOTP VERIFY): whatever the takeover
+ * and insider-drift heuristics saw before no longer describes this session, so their flags clear at once instead of
+ * lingering until the next 30 s roster re-sync.
+ */
+export const REANCHOR_REASONS: readonly string[] = ["operator_reset", "voice_verify", "totp_verify"];
+
 export function lockReasonFrom(reasons: readonly string[] | null | undefined): string | null {
   return reasons?.find((r) => LOCK_REASONS.includes(r)) ?? null;
 }
@@ -220,11 +227,14 @@ export function applyOrg(prev: OrgState, ev: LiveEvent, receivedAt: number = Dat
         // own lock never renders (or toasts) as an unexplained lock in between. A reason already on a locked row wins.
         const inferred = lockReasonFrom(d.reasons);
         const lockReason = !locked ? null : row.locked && row.lock_reason ? row.lock_reason : (inferred ?? row.lock_reason);
-        const flags = !locked
+        let flags = !locked
           ? setFlag(row.flags, "admin_locked", false)
           : lockReason === "admin_lock"
             ? setFlag(row.flags, "admin_locked", true)
             : row.flags;
+        if (d.reasons?.some((r) => REANCHOR_REASONS.includes(r))) {
+          flags = setFlag(setFlag(flags, "takeover_suspected", false), "insider_drift", false);
+        }
         const presence = !d.reasons?.some((r) => NON_PRESENCE_REASONS.includes(r));
         return {
           ...row,
@@ -524,6 +534,45 @@ export function auditKindLabel(kind: AuditKind | string): string {
     default:
       return String(kind);
   }
+}
+
+/**
+ * The live org's scenario engine writes audit rows as "org-demo engine (API token)": every loop it resets the scripted
+ * employees (operator reset, cancelled challenge, trust back to 97%). That is demo plumbing, not an authentication, so
+ * the trail folds each burst into one muted "scenario restarted" line unless the admin asks to see the rows.
+ */
+export const ENGINE_ACTOR_PREFIX = "org-demo engine";
+
+export function isEngineRow(r: Pick<AuditRow, "actor">): boolean {
+  return r.actor.startsWith(ENGINE_ACTOR_PREFIX);
+}
+
+export interface EngineRestart {
+  id: string;
+  /** time of the burst's newest row */
+  t: string;
+  /** engine rows folded into this line */
+  rows: number;
+}
+
+/** One entry per engine burst (rows within `gapMs` of each other), newest first; `audit` is newest first. */
+export function engineRestarts(audit: readonly AuditRow[], gapMs = 60_000): EngineRestart[] {
+  const out: EngineRestart[] = [];
+  let cur: EngineRestart | null = null;
+  let oldest = 0;
+  for (const r of audit) {
+    if (!isEngineRow(r)) continue;
+    const t = tms(r.t);
+    if (cur && oldest - t <= gapMs) {
+      cur.rows++;
+      oldest = t;
+      continue;
+    }
+    cur = { id: `engine-${r.id}`, t: r.t, rows: 1 };
+    oldest = t;
+    out.push(cur);
+  }
+  return out;
 }
 
 /** CSV for the breach trace-back export (the filtered audit rows, oldest first). */

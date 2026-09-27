@@ -8,7 +8,9 @@ import {
   alertRows,
   applyOrg,
   auditCsv,
+  engineRestarts,
   initialOrgState,
+  isEngineRow,
   levelDrops,
   mergeAudit,
   mergeRoster,
@@ -228,6 +230,19 @@ describe("applyOrg", () => {
     expect(s.rows[0].flags).toEqual([]);
   });
 
+  it("clears takeover and insider-drift flags on a re-anchoring trust push (operator reset, voice or TOTP VERIFY)", () => {
+    const flagged = () => state([row({ confidence: 0.3, display: 30, level: "suspicious", flags: ["takeover_suspected", "insider_drift", "challenge_open"] })]);
+    for (const reason of ["operator_reset", "voice_verify", "totp_verify"]) {
+      const s = applyOrg(flagged(), trust(0.97, { reasons: [reason] }));
+      expect(s.rows[0]).toMatchObject({ display: 97, level: "normal", flags: ["challenge_open"] });
+    }
+    // An ordinary tick, a recovery or an admin action says nothing about the takeover: the flags stay.
+    for (const reasons of [[], ["behavior_drift"], ["admin_unlock"], ["screen_unlock"]]) {
+      const s = applyOrg(flagged(), trust(0.97, { reasons }));
+      expect(s.rows[0].flags).toEqual(["takeover_suspected", "insider_drift", "challenge_open"]);
+    }
+  });
+
   it("keeps a lock's pinned trust out of the sparkline (no fake crash to 0)", () => {
     const lock: LiveEvent = { type: "lock", device_id: DEV, t: new Date(T0).toISOString(), data: { reason: "admin_lock" } };
     const unlock: LiveEvent = { type: "unlock", device_id: DEV, t: new Date(T0).toISOString(), data: {} };
@@ -409,6 +424,30 @@ describe("derived views", () => {
     // Flags alone keep it open (insider drift in the watch band, or a pending challenge), recovery resolves it.
     expect(openAlerts(trail, new Map(), [row({ flags: ["insider_drift"] }), fine]).map((r) => r.id)).toEqual(["a1"]);
     expect(openAlerts(trail, new Map(), [row(), fine])).toEqual([]);
+  });
+
+  it("folds each burst of org-demo engine rows into one restart line", () => {
+    const ENGINE = "org-demo engine (API token)";
+    const sec = (id: string, s: number, over: Partial<AuditRow> = {}) => audit(id, s / 60, { kind: "marker", actor: ENGINE, severity: 1, ...over });
+    const trail = mergeAudit([], [
+      audit("x1", 9, { actor: "system" }),
+      sec("e5", 480.004),
+      sec("e4", 480.003, { kind: "trust_change", severity: 0 }),
+      audit("x2", 480.002 / 60, { actor: "Observer", kind: "admin_action" }), // an admin row in between doesn't split the burst
+      sec("e3", 480, { kind: "challenge", severity: 0 }),
+      audit("x3", 4, { actor: "system" }),
+      sec("e2", 0.5),
+      sec("e1", 0, { kind: "admin_action", summary: "Org demo seeded" }),
+    ]);
+    expect(trail.map((r) => r.id)).toEqual(["x1", "e5", "e4", "x2", "e3", "x3", "e2", "e1"]);
+    expect(trail.filter(isEngineRow).map((r) => r.id)).toEqual(["e5", "e4", "e3", "e2", "e1"]);
+    const restarts = engineRestarts(trail);
+    expect(restarts).toEqual([
+      { id: "engine-e5", t: trail.find((r) => r.id === "e5")?.t, rows: 3 },
+      { id: "engine-e2", t: trail.find((r) => r.id === "e2")?.t, rows: 2 },
+    ]);
+    expect(isEngineRow({ actor: "Observer" })).toBe(false);
+    expect(engineRestarts(trail.filter((r) => !isEngineRow(r)))).toEqual([]);
   });
 
   it("exports CSV oldest first with escaping", () => {
