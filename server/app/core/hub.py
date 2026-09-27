@@ -1356,7 +1356,9 @@ class DeviceHub:
                 if subject is not None and subject.role != "admin":
                     self.registry.revoke_user_sessions(subject.id)
                     self.live.close_user(subject.id)
-                self.anomaly(drt, kind, 5, before, drt.engine.confidence, drt.last_top, action="lock",
+                # a voice verdict is not a behavioral one: the deviations belong to the takeover anomaly
+                top = [] if kind in ("voice_spoof", "voice_impostor") else drt.last_top
+                self.anomaly(drt, kind, 5, before, drt.engine.confidence, top, action="lock",
                              challenge_id=row["id"])
             else:  # BLOCK_* on an unlock challenge: stays locked, severity-5 anomaly
                 self.anomaly(drt, kind, 5, before, drt.engine.confidence, [], action="unlock_denied",

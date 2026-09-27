@@ -23,10 +23,42 @@ KIND_TEXT = {
 }
 
 
+VOICE_KINDS = ("voice_spoof", "voice_impostor")
+VOICE_ACTION_TEXT = {
+    "lock": ", so the device was locked and the session signed out.",
+    "unlock_denied": ", so the unlock was refused and the device stays locked.",
+}
+
+
+def _pct(p: float) -> int:
+    return round(p * 100)
+
+
+def _voice_simulated() -> bool:
+    """True when the voice layer on this server is the stub (its verdicts are canned, badged "simulated")."""
+    try:
+        from app.core.voice_demo import voice_mode
+
+        return voice_mode() == "stub"
+    except Exception:
+        return True  # voice_mode() itself falls back to "stub"
+
+
 def template(a: AnomalyLive) -> str:
     head = KIND_TEXT.get(a.kind, a.kind.replace("_", " ").capitalize())
-    if a.trust_before is not None and a.trust_after is not None:
-        head += f" from {round(a.trust_before * 100)}% to {round(a.trust_after * 100)}%"
+    moved = (a.trust_before is not None and a.trust_after is not None
+             and _pct(a.trust_before) != _pct(a.trust_after))
+    if a.kind in VOICE_KINDS:
+        # a voice verdict: never explained with keyboard/mouse deviations (those belong to the takeover anomaly)
+        text = head + VOICE_ACTION_TEXT.get(a.action or "", ".")
+        if moved:
+            verb = "fell" if a.trust_after < a.trust_before else "rose"
+            text += f" Trust {verb} from {_pct(a.trust_before)}% to {_pct(a.trust_after)}%."
+        if _voice_simulated():
+            text += " The voice check on this server is simulated."
+        return text
+    if moved:
+        head += f" from {_pct(a.trust_before)}% to {_pct(a.trust_after)}%"
     if a.top_features:
         parts = [f"{d.label} {d.z:+.1f}σ" for d in a.top_features[:3]]
         return f"{head}. The biggest departures from the enrolled profile were {', '.join(parts)}."
@@ -53,8 +85,8 @@ class Explainer:
         return self._client
 
     async def explain(self, a: AnomalyLive) -> str:
-        if a.kind == "redteam_tool":
-            return template(a)
+        if a.kind == "redteam_tool" or a.kind in VOICE_KINDS:
+            return template(a)  # the Vultr prompt only sees behavior features: a voice verdict stays templated
         if not self.enabled:
             return template(a)
         feats = "; ".join(f"{d.label}: z={d.z:+.2f}" for d in a.top_features[:5]) or "none"

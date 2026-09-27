@@ -228,6 +228,81 @@ def test_block_spoof_locks_and_attacker_order_stays_N_after_owner_verify(client)
     agent.close()
 
 
+def _spy_anomalies(monkeypatch) -> list:
+    from app.core.runtime import rt
+
+    hub = rt().hub
+    seen: list = []
+    orig = hub.publish
+
+    def spy(drt, type_, data):  # noqa: ANN001
+        if type_ == "anomaly":
+            seen.append(data)
+        return orig(drt, type_, data)
+
+    monkeypatch.setattr(hub, "publish", spy)
+    return seen
+
+
+def test_blocked_voice_spoof_anomaly_has_no_behavior_features_and_says_simulated(client, monkeypatch):
+    """SC-3: a BLOCK_SPOOF verdict is explained as a voice verdict, never with keyboard z-scores."""
+    seen = _spy_anomalies(monkeypatch)
+    _uid, _dev, agent = setup_monitored(client)
+    for _ in range(10):
+        agent.tick("b")
+    d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
+    r = client.post(f"/api/voice/challenges/{d['challenge_id']}/response",
+                    files={"wav": ("a.wav", b"RIFF0000", "audio/wav")},
+                    headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
+    assert r.json()["outcome"]["device_locked"] is True
+    for _ in range(50):  # the explanation is published by a background task
+        spoof = [a for a in seen if a.kind == "voice_spoof"]
+        if any(a.explanation for a in spoof):
+            break
+        time.sleep(0.02)
+    assert spoof and all(a.top_features == [] for a in spoof)
+    text = next(a.explanation for a in spoof if a.explanation)
+    assert "σ" not in text and "from 1% to 1%" not in text
+    assert text.startswith("The voice reply was flagged as synthetic, so the device was locked")
+    assert text.endswith("The voice check on this server is simulated.")
+    # the takeover anomaly still carries the behavioral deviations
+    assert any(a.kind in ("trust_drop", "takeover_suspected") and a.top_features for a in seen)
+    agent.close()
+
+
+def test_explain_template_voice_kinds_and_unchanged_trust():
+    """SC-3: equal rounded trust drops the 'from X% to Y%' clause; voice kinds never list behavior features."""
+    import uuid as _uuid
+
+    from app.core import explain
+    from twobme_common.types import AnomalyLive, DeviationOut
+
+    top = [DeviationOut(feature="kb.hold_p50", label="Key hold", unit="ms", z=4.2)]
+
+    def a(kind: str, before: float | None, after: float | None, action: str | None = None) -> AnomalyLive:
+        return AnomalyLive(id=_uuid.uuid4(), kind=kind, severity=5, trust_before=before, trust_after=after,
+                           top_features=top, action=action)
+
+    spoof = explain.template(a("voice_spoof", 0.012, 0.01, "lock"))
+    assert "σ" not in spoof and "Key hold" not in spoof and "from 1% to 1%" not in spoof
+    assert spoof.startswith("The voice reply was flagged as synthetic, so the device was locked and the session")
+    assert "simulated" in spoof  # the test server runs stub voice
+    imp = explain.template(a("voice_impostor", 0.97, 0.01, "lock"))
+    assert imp.startswith("The voice reply did not match the enrolled speaker, so the device was locked")
+    assert "Trust fell from 97% to 1%." in imp and "σ" not in imp
+    denied = explain.template(a("voice_spoof", 0.01, 0.01, "unlock_denied"))
+    assert "unlock was refused" in denied and "Trust" not in denied
+    drop = explain.template(a("trust_drop", 0.30, 0.301))
+    assert drop.startswith("Trust fell.") and "30% to 30%" not in drop and "Key hold +4.2σ" in drop
+    assert explain.template(a("trust_drop", 0.95, 0.40)).startswith("Trust fell from 95% to 40%.")
+    # the Vultr path is never used for a voice verdict (its prompt only sees behavior features)
+    ex = explain.Explainer("key", "http://127.0.0.1:9", "model", timeout_s=0.01)
+    ex._get_client = lambda: (_ for _ in ()).throw(AssertionError("Vultr called for a voice verdict"))
+    import asyncio
+
+    assert asyncio.run(ex.explain(a("voice_spoof", 0.9, 0.01, "lock"))).startswith("The voice reply was flagged")
+
+
 def test_owner_stepup_verify_resolves_same_session_only(client):
     _uid, _dev, agent = setup_monitored(client)
     d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
