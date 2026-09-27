@@ -1,7 +1,16 @@
 // Pure helpers for /lab: operating points read off a report's ROC, and the report's own provenance notes.
 // Everything here is derived from reports/eval.json as served; nothing is invented when a field is missing.
 import type { EvalReport, Modality } from "@/lib/contracts";
-import { MODALITIES } from "@/lib/ui";
+/**
+ * The branches the identity model scores. Workflow and temporal were retired from it (commit 544dfe1): the agent
+ * still captures them, but they are not scored, so /lab never counts them as missing evidence.
+ */
+export const ACTIVE: readonly Modality[] = ["keyboard", "mouse", "scroll"];
+export const RETIRED: readonly Modality[] = ["workflow", "temporal"];
+
+export function isRetired(m: Modality | string): boolean {
+  return (RETIRED as readonly string[]).includes(m);
+}
 
 /** [fpr, tpr] as written by twobme_ml.evaluation.roc_metrics (sklearn order: thresholds descending). */
 export type RocPoint = readonly [number, number];
@@ -66,7 +75,7 @@ export interface OperatingRow {
 /** Per-branch operating points from each ROC, plus the fused EER (the report carries no fused curve). */
 export function operatingRows(report: EvalReport, farBudget: number): OperatingRow[] {
   const rows: OperatingRow[] = [];
-  for (const m of MODALITIES) {
+  for (const m of ACTIVE) {
     const r = report.modalities[m];
     if (!r || r.auc === null || !r.roc?.length) continue;
     rows.push({ m, eer: eerPoint(r.roc)?.far ?? r.eer, frrAtBudget: frrAtFar(r.roc, farBudget) });
@@ -77,7 +86,8 @@ export function operatingRows(report: EvalReport, farBudget: number): OperatingR
 
 /**
  * "Disabled A modalities: {'keyboard': 'Need 100 eligible blocks; have 39', …}" (a Python dict repr written by
- * twobme_ml.evaluation) → { keyboard: "Need 100 eligible blocks; have 39", … }.
+ * twobme_ml.evaluation) → { keyboard: "Need 100 eligible blocks; have 39", … }. Retired branches are skipped: they
+ * are not waiting for data, they are not scored.
  */
 export function disabledReasons(notes: readonly string[], who: "A" | "B" = "A"): Partial<Record<Modality, string>> {
   const out: Partial<Record<Modality, string>> = {};
@@ -85,7 +95,7 @@ export function disabledReasons(notes: readonly string[], who: "A" | "B" = "A"):
   if (!note) return out;
   for (const match of note.matchAll(/['"](\w+)['"]\s*:\s*['"]([^'"]*)['"]/g)) {
     const m = match[1] as Modality;
-    if ((MODALITIES as readonly string[]).includes(m)) out[m] = match[2];
+    if ((ACTIVE as readonly string[]).includes(m)) out[m] = match[2];
   }
   return out;
 }
@@ -107,8 +117,9 @@ export function blockTotals(report: EvalReport): { a: number; b: number } {
   return { a: sum("a"), b: sum("b") };
 }
 
+/** Scored branches with a held-out curve in this report (retired branches never count). */
 export function measuredModalities(report: EvalReport): Modality[] {
-  return MODALITIES.filter((m) => {
+  return ACTIVE.filter((m) => {
     const r = report.modalities[m];
     return !!r && r.auc !== null;
   });

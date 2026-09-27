@@ -4,6 +4,8 @@ import type { EvalReport } from "@/lib/contracts";
 import { sampleEval } from "@/lib/sample-data";
 
 import {
+  ACTIVE,
+  RETIRED,
   blockTotals,
   dataKind,
   disabledReasons,
@@ -12,6 +14,7 @@ import {
   frrAtFar,
   identificationRan,
   impostorReuse,
+  isRetired,
   liveTrialStats,
   measuredModalities,
   operatingRows,
@@ -99,12 +102,28 @@ describe("ROC operating points", () => {
 });
 
 describe("report provenance", () => {
-  it("parses the evaluator's disabled-modality note", () => {
+  it("parses the evaluator's disabled-modality note, skipping retired branches", () => {
+    // workflow is in the note, but it is retired from the identity model: not "waiting for data"
     expect(disabledReasons(realLike().notes)).toEqual({
       keyboard: "Need 100 eligible blocks; have 39",
-      workflow: "Need 20 eligible blocks; have 8",
     });
     expect(disabledReasons(["nothing here"])).toEqual({});
+  });
+
+  it("scores keyboard, mouse and scroll only; workflow and temporal are retired", () => {
+    expect(ACTIVE).toEqual(["keyboard", "mouse", "scroll"]);
+    expect(RETIRED).toEqual(["workflow", "temporal"]);
+    expect(isRetired("workflow")).toBe(true);
+    expect(isRetired("mouse")).toBe(false);
+    // an older report that still carries a workflow curve: it is never counted or turned into an operating row
+    const r = realLike();
+    const old = {
+      ...r,
+      modalities: { ...r.modalities, workflow: { ...r.modalities.mouse!, auc: 0.6, eer: 0.4 } },
+    } as EvalReport;
+    expect(measuredModalities(old)).toEqual(["mouse"]);
+    expect(operatingRows(old, 0.1).map((x) => x.m)).toEqual(["mouse", "fused"]);
+    expect(measuredModalities(sampleEval())).toEqual(["keyboard", "mouse", "scroll"]);
   });
 
   it("classifies real, sample and synthetic reports from their own notes", () => {

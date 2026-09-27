@@ -91,7 +91,8 @@ export default function HomePage() {
         lead={
           <>
             Each leaf comes straight from our feature spec, and the count beside it is how many features back it. A dot lights up when a recent evidence
-            block carried that signal{simulated ? " (simulated stream)" : ""}. Hover or tap a leaf to see its features.
+            block carried that signal{simulated ? " (simulated stream)" : ""}. Hover or tap a leaf to see its features. The identity model scores keyboard,
+            pointer and scroll; workflow and temporal are still captured but retired from scoring.
           </>
         }
       >

@@ -18,8 +18,9 @@ Most security checks happen once, at login. 2bME keeps asking one question for t
 **is the person at this keyboard still the enrolled owner?** It never tries to identify anyone. It is a
 one-class, 1:1 check against a single person's own baseline, so it needs no database of other people.
 
-1. **Enroll one person.** A macOS agent turns keyboard, trackpad, scroll and app-switching **timing** into
-   privacy-safe aggregate blocks. The server learns a baseline from that one person's blocks.
+1. **Enroll one person.** A macOS agent turns keyboard, trackpad and scroll **timing** into privacy-safe
+   aggregate blocks (app-switch and overall event-rhythm blocks are still captured, but retired from the identity
+   model and not scored). The server learns a baseline from that one person's blocks.
 2. **Continuous trust.** Every 5 s, fresh blocks are scored against the baseline and accumulated into a
    calibrated trust score, P(still the owner). A password never raises it.
 3. **Risk-based step-up.** When trust falls below 40%, or a risky action needs more (a $2,000 checkout
@@ -54,7 +55,7 @@ Tiger Data stores the behavior history, baselines, anomalies and the audit trail
 | Where it runs | per user, one-class, but scored and trained **on the server** from Tiger history. On-device scoring is roadmap | — |
 | Voice step-up | `VOICE_MODE=stub`: canned demo outcomes, labelled **"Voice: simulated (stub)"** in the site footer; never narrate them as a live analysis. `VOICE_MODE=real`: Hearsay VAD, anti-spoof (DF_Arena), ECAPA speaker match, DSP/FFT and speech-to-text, which needs pinned model revisions and a measured calibration | footer, `GET /api/status` → `voice_mode` |
 | Anomaly explanations | a local template unless a Vultr Serverless Inference key is set | footer "explanations template/vultr" |
-| Evidence (`/lab`) | real recordings of two teammates, and weak so far: fused A-vs-not-A EER 37.5% (AUC 0.78); mouse near chance; keyboard, workflow and temporal not measured yet; 0 of 5 live takeover trials. Not a blind test: not-A's blocks also fitted β and were used to choose the detector, so the EERs are optimistic. FAR/FRR at the 40% cut needs the splice replay (not run) | `reports/eval.json`, rendered at `/lab` |
+| Evidence (`/lab`) | real recordings of two teammates, and weak so far: fused A-vs-not-A EER 37.5% (AUC 0.78); mouse near chance; keyboard not measured yet; workflow and temporal retired from the identity model (captured, not scored); 0 of 5 live takeover trials. Not a blind test: not-A's blocks also fitted β and were used to choose the detector, so the EERs are optimistic. FAR/FRR at the 40% cut needs the splice replay (not run) | `reports/eval.json`, rendered at `/lab` |
 
 The synthetic end-to-end test (`scripts/core_e2e_local.sh`) separates people by construction. It proves the
 plumbing, never discrimination, so its numbers are never quoted as evidence.

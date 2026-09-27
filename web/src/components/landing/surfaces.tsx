@@ -134,7 +134,7 @@ type Row = { who: string; team: string; pct: number; locked?: boolean; alert: st
 const ROSTER: Row[] = [
   { who: "Employee 12", team: "Finance", pct: 31, alert: "takeover suspected · 2 min ago" },
   { who: "Employee 07", team: "Support", pct: 0, locked: true, alert: "synthetic voice blocked · 6 min ago" },
-  { who: "Employee 03", team: "Sales", pct: 64, alert: "unusual app switching · 21 min ago" },
+  { who: "Employee 03", team: "Sales", pct: 64, alert: "unusual pointer rhythm · 21 min ago" },
   { who: "Employee 18", team: "Engineering", pct: 97, alert: "none today" },
   { who: "Employee 01", team: "Finance", pct: 98, alert: "none today" },
   { who: "Employee 15", team: "Ops", pct: 95, alert: "none today" },

@@ -27,8 +27,10 @@ import { MODALITIES, fmtClock, fmtPct, modalityColor, modalityIcon, modalityLabe
 import { cn } from "@/lib/utils";
 
 import {
+  ACTIVE,
   ALERT_THRESHOLD,
   LIVE_TRIALS_TARGET,
+  RETIRED,
   blockTotals,
   dataKind,
   disabledReasons,
@@ -36,6 +38,7 @@ import {
   eerStrength,
   identificationRan,
   impostorReuse,
+  isRetired,
   liveTrialStats,
   measuredModalities,
   operatingRows,
@@ -101,7 +104,8 @@ export function EvidenceSummary({ report }: { report: EvalReport }) {
   const disabled = disabledReasons(report.notes);
   const trials = liveTrialStats(report);
   const blocks = blockTotals(report);
-  const missing = MODALITIES.filter((m) => !measured.includes(m));
+  const missing = ACTIVE.filter((m) => !measured.includes(m));
+  const retired = RETIRED.map((m) => modalityLabel(m, true).toLowerCase()).join(" and ");
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Stat
@@ -120,17 +124,18 @@ export function EvidenceSummary({ report }: { report: EvalReport }) {
         value={
           <>
             {measured.length}
-            <span className="text-lg text-muted-foreground"> of {MODALITIES.length}</span>
+            <span className="text-lg text-muted-foreground"> of {ACTIVE.length}</span>
           </>
         }
         sub={
-          missing.length ? (
-            <>
-              {missing.map((m) => modalityLabel(m, true).toLowerCase()).join(", ")}: {Object.keys(disabled).length ? "not enough of A's data yet" : "no curve in this report"}
-            </>
-          ) : (
-            "every branch of the signature has a held-out curve"
-          )
+          <>
+            <div>
+              {missing.length
+                ? `${missing.map((m) => modalityLabel(m, true).toLowerCase()).join(", ")}: ${missing.some((m) => disabled[m]) ? "not enough of A's data yet" : "no curve in this report"}`
+                : "every scored branch has a held-out curve"}
+            </div>
+            <div className="mt-0.5 text-muted-foreground/80">{retired}: retired from the identity model (captured, not scored)</div>
+          </>
         }
       />
       <Stat
@@ -186,7 +191,7 @@ function RocTip({ active, payload }: TipProps) {
 export function RocChart({ report, height = 320 }: { report: EvalReport; height?: number }) {
   const series = useMemo(
     () =>
-      MODALITIES.filter((m) => report.modalities[m]?.roc?.length).map((m) => ({
+      ACTIVE.filter((m) => report.modalities[m]?.roc?.length).map((m) => ({
         m,
         data: (report.modalities[m]?.roc ?? []).map(([fpr, tpr]) => ({ fpr, tpr, m })),
         eer: eerPoint(report.modalities[m]?.roc ?? []),
@@ -261,7 +266,7 @@ export function RocChart({ report, height = 320 }: { report: EvalReport; height?
         </ResponsiveContainer>
       </div>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        Dashed diagonal = chance. Dots mark each curve&apos;s equal-error point on the dotted EER line; the white dot is the fused score (the report
+        Dashed diagonal = chance. Dots mark each curve&apos;s equal-error point on the dotted EER line; the larger round marker is the fused score (the report
         carries its EER, not a fused curve). Up and to the left is better.
       </p>
     </div>
@@ -290,6 +295,16 @@ export function EerTable({ report }: { report: EvalReport }) {
               {modalityLabel(m, true)}
             </span>
           );
+          if (isRetired(m)) {
+            return (
+              <TableRow key={m} className="text-muted-foreground">
+                <TableCell className="opacity-70">{label}</TableCell>
+                <TableCell colSpan={3} className="text-right text-xs whitespace-normal">
+                  retired · not scored
+                </TableCell>
+              </TableRow>
+            );
+          }
           if (!r || r.auc === null) {
             return (
               <TableRow key={m}>
@@ -474,7 +489,7 @@ export function AblationChart({ report, height = 200 }: { report: EvalReport; he
   const data: AblRow[] = all
     .filter((a) => measured.has(a.removed))
     .map((a) => ({ label: modalityLabel(a.removed, true), m: a.removed, eer: a.fused_eer as number, delta: (a.fused_eer as number) - (full ?? 0) }));
-  const inert = all.filter((a) => !measured.has(a.removed)).map((a) => modalityLabel(a.removed, true).toLowerCase());
+  const inert = all.filter((a) => !measured.has(a.removed) && !isRetired(a.removed)).map((a) => modalityLabel(a.removed, true).toLowerCase());
   if (full === null || !data.length) {
     return <NotMeasured title="No ablation yet">Ablation needs a fused score and at least one measured branch.</NotMeasured>;
   }
@@ -514,7 +529,9 @@ export function AblationChart({ report, height = 200 }: { report: EvalReport; he
       </div>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         Fused EER with one branch removed (points vs all branches in brackets). Higher than the dashed line means that branch carries signal.
-        {inert.length > 0 && <> Not shown: {inert.join(", ")} (not in the fused score yet, so removing them changes nothing).</>}
+        {inert.length > 0 && (
+          <> Not shown: {inert.join(", ")} (not in the fused score yet, so removing {inert.length === 1 ? "it" : "them"} changes nothing).</>
+        )}
       </p>
     </div>
   );
@@ -795,6 +812,10 @@ export function HonestyPanel({ report }: { report: EvalReport }) {
               <b className="text-foreground">{modalityLabel(m, true)}:</b> not measured ({why.toLowerCase()}).
             </li>
           ))}
+          <li className="text-muted-foreground/80">
+            <b className="font-medium">{RETIRED.map((m) => modalityLabel(m, true)).join(" and ")}:</b> retired · not scored. The agent still captures
+            them, but the identity model uses keyboard, pointer and scroll only.
+          </li>
           {chance.map((m) => (
             <li key={m}>
               <b className="text-foreground">{modalityLabel(m, true)}:</b> near chance (AUC {num(report.modalities[m]?.auc)}) on this data.

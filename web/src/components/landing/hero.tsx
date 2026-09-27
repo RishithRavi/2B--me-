@@ -54,7 +54,7 @@ export function Hero({ state, simulated, signedIn }: { state: LiveState; simulat
             <span className="text-brand-gradient">2bME</span> keeps checking who you <em className="text-brand">are</em>.
           </h1>
           <p className="max-w-xl text-lg text-pretty text-muted-foreground">
-            2bME learns how one person types, points, scrolls and switches apps, from timing alone and never content. It keeps a live trust score for
+            2bME learns how one person types, points and scrolls, from timing alone and never content. It keeps a live trust score for
             whoever is at the keyboard. When the rhythm stops matching, it asks for an independent check, a spoken phrase or a one-time code, instead of
             trusting the login.
           </p>

@@ -30,7 +30,7 @@ const STEPS = [
   {
     icon: Fingerprint,
     title: "Enroll one person",
-    body: "Work normally for a few minutes. The agent on your Mac turns keyboard, pointer, scroll and app-switch timing into privacy-safe evidence blocks, and 2bME learns a baseline that is yours alone.",
+    body: "Work normally for a few minutes. The agent on your Mac turns keyboard, pointer and scroll timing (app switches are captured but not scored) into privacy-safe evidence blocks, and 2bME learns a baseline that is yours alone.",
   },
   {
     icon: TrendingDown,
