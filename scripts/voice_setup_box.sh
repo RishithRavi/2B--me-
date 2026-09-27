@@ -12,6 +12,8 @@ Options:
   --model NAME          df-arena or fallback (default: df-arena)
   --real-dir PATH       Directory with at least 20 consented genuine clips
   --synth-dir PATH      Directory with at least 20 consented ElevenLabs clips
+  --preflight-only      Validate host architecture, capacity and disk, then exit
+  --allow-undersized    Continue below the planned 8-vCPU/16-GiB VM shape
   --refresh-revisions   Resolve main again instead of reusing recorded revisions
   --resolve-only        Install dependencies and resolve pins; do not download weights
   --skip-smoke          Preload models but do not run the consented corpus smoke test
@@ -27,6 +29,8 @@ synth_dir=
 resolve_only=0
 skip_smoke=0
 refresh_revisions=0
+preflight_only=0
+allow_undersized=0
 threads=6
 while (($#)); do
   case "$1" in
@@ -34,6 +38,8 @@ while (($#)); do
     --model) model=${2:?missing model}; shift 2 ;;
     --real-dir) real_dir=${2:?missing real directory}; shift 2 ;;
     --synth-dir) synth_dir=${2:?missing synthetic directory}; shift 2 ;;
+    --preflight-only) preflight_only=1; shift ;;
+    --allow-undersized) allow_undersized=1; shift ;;
     --refresh-revisions) refresh_revisions=1; shift ;;
     --resolve-only) resolve_only=1; shift ;;
     --skip-smoke) skip_smoke=1; shift ;;
@@ -51,9 +57,32 @@ done
   echo "run from the 2bME repository root" >&2
   exit 2
 }
-command -v uv >/dev/null || { echo "uv is required" >&2; exit 2; }
 available_kib=$(df -Pk . | awk 'NR == 2 {print $4}')
 ((available_kib >= 12582912)) || { echo "at least 12 GiB free disk is required" >&2; exit 2; }
+
+cpu_count=$(getconf _NPROCESSORS_ONLN)
+memory_kib=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+minimum_cpu=8
+# A marketed 16-GiB VM exposes slightly less to Linux. Twelve GiB is the
+# conservative hard floor; the supported production shape remains 16 GiB.
+minimum_memory_kib=$((12 * 1024 * 1024))
+if ((cpu_count < minimum_cpu || memory_kib < minimum_memory_kib)); then
+  memory_gib=$(awk -v kib="$memory_kib" 'BEGIN {printf "%.1f", kib / 1024 / 1024}')
+  if ((allow_undersized == 0)); then
+    echo "real voice setup refused on ${cpu_count} vCPU / ${memory_gib} GiB RAM" >&2
+    echo "resize to the documented 8-vCPU/16-GiB production shape first" >&2
+    echo "--allow-undersized is for measurement only and does not satisfy the latency gate" >&2
+    exit 2
+  fi
+  echo "WARNING: continuing on ${cpu_count} vCPU / ${memory_gib} GiB RAM; latency and reliability are unsupported" >&2
+fi
+
+if ((preflight_only)); then
+  echo "voice runtime host preflight passed (${cpu_count} vCPU; memory and disk checks passed)"
+  exit 0
+fi
+
+command -v uv >/dev/null || { echo "uv is required" >&2; exit 2; }
 
 mkdir -p "$runtime_root" "$runtime_root/calibration" "$runtime_root/reports"
 uv sync --frozen --all-packages --all-extras --no-default-groups
