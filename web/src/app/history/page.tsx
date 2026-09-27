@@ -1,6 +1,6 @@
 "use client";
 
-import { Database, History as HistoryIcon, ListTree, RefreshCw, Ruler, TrendingUp } from "lucide-react";
+import { Database, FlaskConical, History as HistoryIcon, ListTree, LogIn, RefreshCw, Ruler, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -114,13 +114,16 @@ function HistoryInner() {
   const isAdmin = mock || me.me?.role === "admin";
   const [picked, setPicked] = useState<string | null>(null);
   const [modality, setModality] = useState<Modality>("keyboard");
+  // History needs a session cookie: wait for /me, and never fire requests that can only 401 for a visitor.
+  const anon = !mock && me.status === "anon";
+  const ready = mock || me.status === "ok" || me.status === "offline";
   const voiceSimulated = useVoiceMode(mock) === "stub";
   const explanations = useExplanationSource(mock);
 
   // Trace-back: ask the server for this device only, and filter here as well so an older server can't leak others in.
   const byDevice = Boolean(deviceParam && !mock);
   const sessions = useResource(
-    `history:sessions:${deviceParam ?? "all"}`,
+    ready ? `history:sessions:${deviceParam ?? "all"}` : null,
     (s) =>
       byDevice
         ? request<SessionRow[]>("GET", "/history/sessions", { query: { limit: 50, device_id: deviceParam }, signal: s })
@@ -133,11 +136,11 @@ function HistoryInner() {
   );
   const linked = sessionParam ?? (sessionRows?.find(substantial) ?? sessionRows?.[0])?.session_id ?? null;
   const sessionId = picked ?? linked;
-  const trust = useResource(sessionId ? `history:trust:${sessionId}` : null, (s) => api.historyTrust({ session_id: sessionId }, s), {
+  const trust = useResource(ready && sessionId ? `history:trust:${sessionId}` : null, (s) => api.historyTrust({ session_id: sessionId }, s), {
     sample: () => sampleTrust(sessionId ?? ""),
   });
   const anomalies = useResource(
-    `history:anomalies:${deviceParam ?? "all"}`,
+    ready ? `history:anomalies:${deviceParam ?? "all"}` : null,
     (s) =>
       byDevice
         ? request<AnomalyRow[]>("GET", "/history/anomalies", { query: { limit: 50, device_id: deviceParam }, signal: s })
@@ -148,10 +151,10 @@ function HistoryInner() {
     () => (anomalies.data && deviceParam ? anomalies.data.filter((a) => a.device_id === deviceParam) : anomalies.data),
     [anomalies.data, deviceParam],
   );
-  const baseline = useResource(`history:baseline:${modality}:${sessionId ?? "all"}`, (s) => api.historyBaseline(modality, sessionId, s), {
+  const baseline = useResource(ready ? `history:baseline:${modality}:${sessionId ?? "all"}` : null, (s) => api.historyBaseline(modality, sessionId, s), {
     sample: () => sampleBaseline(modality, sessionId),
   });
-  const tiger = useResource("tiger:stats", (s) => api.tigerStats(s), { sample: () => sampleTiger() });
+  const tiger = useResource(ready ? "tiger:stats" : null, (s) => api.tigerStats(s), { sample: () => sampleTiger() });
 
   // Name devices: admins see the org roster; a user only ever sees their own device.
   const roster = useResource(!mock && me.me?.role === "admin" ? "admin:roster" : null, (s) => api.adminRoster(s));
@@ -165,6 +168,35 @@ function HistoryInner() {
   const nameOf = (id: string | null) => (id ? devices.get(id) : undefined);
   const traced = deviceParam ? nameOf(deviceParam) : undefined;
   const selectedDevice = nameOf(sessionRows?.find((r) => r.session_id === sessionId)?.device_id ?? deviceParam);
+
+  if (anon) {
+    return (
+      <div className="mx-auto w-full max-w-lg px-4 py-20">
+        <div className="panel">
+          <EmptyState
+            icon={LogIn}
+            title="Sign in to see behavior history"
+            action={
+              <div className="flex gap-2">
+                <Button asChild size="sm">
+                  <Link href="/login?next=/history">
+                    <LogIn /> Log in
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <a href="/history?mock=1">
+                    <FlaskConical /> Sample data
+                  </a>
+                </Button>
+              </div>
+            }
+          >
+            Sessions, trust timelines, anomalies and baselines come from Tiger for your own devices (admins: the whole org).
+          </EmptyState>
+        </div>
+      </div>
+    );
+  }
 
   const reloadAll = () => {
     sessions.reload();

@@ -273,15 +273,23 @@ export function TigerCard({ stats, isAdmin, onCompressed, mock }: { stats: Tiger
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-6">
-        <div>
-          <div className="eyebrow">Columnstore</div>
-          <div className="tnum mt-1 text-3xl font-semibold tracking-tight">
-            {totalAfter > 0 ? `${(totalBefore / totalAfter).toFixed(1)}×` : "—"}
+        {totalAfter > 0 ? (
+          <div>
+            <div className="eyebrow">Columnstore</div>
+            <div className="tnum mt-1 text-3xl font-semibold tracking-tight">{`${(totalBefore / totalAfter).toFixed(1)}×`}</div>
+            <div className="text-xs text-muted-foreground">
+              {fmtBytes(totalBefore)} → {fmtBytes(totalAfter)}
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            {fmtBytes(totalBefore)} → {fmtBytes(totalAfter)}
+        ) : (
+          <div className="max-w-xs">
+            <div className="eyebrow">Columnstore</div>
+            <div className="mt-1 text-xl font-semibold tracking-tight">Not compressed yet</div>
+            <div className="text-xs leading-snug text-muted-foreground">
+              No chunk is old enough yet (policy: after 2 h). Admins: Compress now compresses chunks older than 1 h.
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex flex-wrap gap-1.5">
           {stats.caggs.map((c) => (
             <Badge key={c} variant="outline" className="font-mono text-[10px]">
@@ -325,7 +333,7 @@ export function TigerCard({ stats, isAdmin, onCompressed, mock }: { stats: Tiger
                 </div>
               </TableCell>
               <TableCell className="tnum text-right font-mono text-xs text-muted-foreground">
-                {fmtBytes(h.before_bytes)} → {fmtBytes(h.after_bytes)}
+                {(h.after_bytes ?? 0) > 0 ? `${fmtBytes(h.before_bytes)} → ${fmtBytes(h.after_bytes)}` : "uncompressed"}
               </TableCell>
               <TableCell className="tnum text-right font-mono text-xs">{h.ratio !== null ? `${h.ratio.toFixed(1)}×` : "—"}</TableCell>
             </TableRow>
@@ -355,7 +363,7 @@ export function TigerCard({ stats, isAdmin, onCompressed, mock }: { stats: Tiger
                     className="font-mono text-[11px]"
                     style={{ color: j.last_run_status === "Success" ? "var(--trust-normal)" : j.last_run_status ? "var(--trust-suspicious)" : "var(--muted-foreground)" }}
                   >
-                    {j.last_run_status ?? "never"}
+                    {j.last_run_status ?? "not run yet"}
                   </span>
                 </TableCell>
               </TableRow>
