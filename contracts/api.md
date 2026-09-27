@@ -67,10 +67,10 @@ locked the device. Every stub result is published with `VoiceResultLive.simulate
 An unlock challenge on an **admin-locked** device returns 409 (only an admin unlocks it).
 
 ## History (Tiger)
-| GET | `/history/sessions?limit=` | → `SessionRow[]` |
+| GET | `/history/sessions?limit=&device_id=` | → `SessionRow[]`; optional `device_id` filters to one device (admin: any device; a user: only their own, a foreign id → `[]`) |
 |---|---|---|
 | GET | `/history/trust?session_id=&from=&to=&bucket=` | → `TrustSeries` (gap-filled) |
-| GET | `/history/anomalies?limit=` | → `AnomalyRow[]` |
+| GET | `/history/anomalies?limit=&device_id=` | → `AnomalyRow[]`; optional `device_id` filter, same scoping as `/history/sessions` |
 | GET | `/history/baseline?modality=&session_id=` | → `BaselineOut` (session medians vs enrollment baseline) |
 | GET | `/history/drift` | → `DriftRow[]` (P1) |
 | GET | `/tiger/stats` | → `TigerStats` |

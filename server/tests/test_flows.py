@@ -228,6 +228,81 @@ def test_block_spoof_locks_and_attacker_order_stays_N_after_owner_verify(client)
     agent.close()
 
 
+def _spy_anomalies(monkeypatch) -> list:
+    from app.core.runtime import rt
+
+    hub = rt().hub
+    seen: list = []
+    orig = hub.publish
+
+    def spy(drt, type_, data):  # noqa: ANN001
+        if type_ == "anomaly":
+            seen.append(data)
+        return orig(drt, type_, data)
+
+    monkeypatch.setattr(hub, "publish", spy)
+    return seen
+
+
+def test_blocked_voice_spoof_anomaly_has_no_behavior_features_and_says_simulated(client, monkeypatch):
+    """SC-3: a BLOCK_SPOOF verdict is explained as a voice verdict, never with keyboard z-scores."""
+    seen = _spy_anomalies(monkeypatch)
+    _uid, _dev, agent = setup_monitored(client)
+    for _ in range(10):
+        agent.tick("b")
+    d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
+    r = client.post(f"/api/voice/challenges/{d['challenge_id']}/response",
+                    files={"wav": ("a.wav", b"RIFF0000", "audio/wav")},
+                    headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
+    assert r.json()["outcome"]["device_locked"] is True
+    for _ in range(50):  # the explanation is published by a background task
+        spoof = [a for a in seen if a.kind == "voice_spoof"]
+        if any(a.explanation for a in spoof):
+            break
+        time.sleep(0.02)
+    assert spoof and all(a.top_features == [] for a in spoof)
+    text = next(a.explanation for a in spoof if a.explanation)
+    assert "σ" not in text and "from 1% to 1%" not in text
+    assert text.startswith("The voice reply was flagged as synthetic, so the device was locked")
+    assert text.endswith("The voice check on this server is simulated.")
+    # the takeover anomaly still carries the behavioral deviations
+    assert any(a.kind in ("trust_drop", "takeover_suspected") and a.top_features for a in seen)
+    agent.close()
+
+
+def test_explain_template_voice_kinds_and_unchanged_trust():
+    """SC-3: equal rounded trust drops the 'from X% to Y%' clause; voice kinds never list behavior features."""
+    import uuid as _uuid
+
+    from app.core import explain
+    from twobme_common.types import AnomalyLive, DeviationOut
+
+    top = [DeviationOut(feature="kb.hold_p50", label="Key hold", unit="ms", z=4.2)]
+
+    def a(kind: str, before: float | None, after: float | None, action: str | None = None) -> AnomalyLive:
+        return AnomalyLive(id=_uuid.uuid4(), kind=kind, severity=5, trust_before=before, trust_after=after,
+                           top_features=top, action=action)
+
+    spoof = explain.template(a("voice_spoof", 0.012, 0.01, "lock"))
+    assert "σ" not in spoof and "Key hold" not in spoof and "from 1% to 1%" not in spoof
+    assert spoof.startswith("The voice reply was flagged as synthetic, so the device was locked and the session")
+    assert "simulated" in spoof  # the test server runs stub voice
+    imp = explain.template(a("voice_impostor", 0.97, 0.01, "lock"))
+    assert imp.startswith("The voice reply did not match the enrolled speaker, so the device was locked")
+    assert "Trust fell from 97% to 1%." in imp and "σ" not in imp
+    denied = explain.template(a("voice_spoof", 0.01, 0.01, "unlock_denied"))
+    assert "unlock was refused" in denied and "Trust" not in denied
+    drop = explain.template(a("trust_drop", 0.30, 0.301))
+    assert drop.startswith("Trust fell.") and "30% to 30%" not in drop and "Key hold +4.2σ" in drop
+    assert explain.template(a("trust_drop", 0.95, 0.40)).startswith("Trust fell from 95% to 40%.")
+    # the Vultr path is never used for a voice verdict (its prompt only sees behavior features)
+    ex = explain.Explainer("key", "http://127.0.0.1:9", "model", timeout_s=0.01)
+    ex._get_client = lambda: (_ for _ in ()).throw(AssertionError("Vultr called for a voice verdict"))
+    import asyncio
+
+    assert asyncio.run(ex.explain(a("voice_spoof", 0.9, 0.01, "lock"))).startswith("The voice reply was flagged")
+
+
 def test_owner_stepup_verify_resolves_same_session_only(client):
     _uid, _dev, agent = setup_monitored(client)
     d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
@@ -254,6 +329,95 @@ def test_unlock_only_via_voice_or_reset(client):
     snap = client.post("/api/demo/reset", json={"device_id": dev_id}, headers=ADMIN).json()
     assert snap["device"]["locked"] is False and abs(snap["trust"]["confidence"] - 0.97) < 1e-6
     assert "operator_reset" in snap["trust"]["reasons"]
+    agent.close()
+
+
+def test_owner_unlock_verify_ends_the_open_takeover(client):
+    """SC-5: takeover_start -> proactive BLOCK_SPOOF (lock) -> the owner's unlock VERIFY ends the takeover:
+    label genuine/a, a takeover_end marker, "Takeover ended (voice unlock)" in the feed."""
+    from app.core.runtime import rt
+
+    _uid, dev_id, agent = setup_monitored(client)
+    for _ in range(4):
+        agent.tick("a")
+    assert client.post("/api/demo/marker", json={"device_id": dev_id, "label": "takeover_start"}).status_code == 200
+    for _ in range(12):
+        agent.tick("b")
+    ch = next(m for m in agent.pending if m["type"] == "challenge" and m["trigger"] == "proactive")
+    r = client.post(f"/api/voice/challenges/{ch['challenge_id']}/response",
+                    files={"wav": ("a.wav", b"RIFF0000", "audio/wav")},
+                    headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
+    assert r.json()["outcome"]["device_locked"] is True
+    drt = rt().hub.devices[uuid.UUID(dev_id)]
+    assert (drt.label, drt.actor) == ("impostor", "b")  # a lock alone does not end the takeover
+    login(client, "a")  # the lock revoked A's web sessions
+    un = client.post("/api/voice/challenges", json={"reason": "unlock"})
+    assert un.status_code == 200, un.text
+    r = client.post(f"/api/voice/challenges/{un.json()['challenge_id']}/response",
+                    files={"wav": ("a.wav", b"RIFF0000", "audio/wav")})  # stub default for unlock: VERIFY
+    assert r.json()["outcome"]["device_locked"] is False
+    assert (drt.label, drt.actor) == ("genuine", "a")
+    assert [m.label for m in drt.markers if m.label.startswith("takeover")] == ["takeover_start", "takeover_end"]
+    feed = [f.text for f in drt.feed]
+    assert "Takeover ended (voice unlock)" in feed
+    assert rt().hub.snapshot(drt).label == "genuine"
+    agent.close()
+
+
+def test_unlock_verify_without_takeover_adds_no_marker(client):
+    """SC-5: an unlock VERIFY with no open takeover (label genuine) adds no takeover_end marker."""
+    from app.core.runtime import rt
+
+    _uid, dev_id, agent = setup_monitored(client)
+    for _ in range(10):
+        agent.tick("b")
+    d = client.post("/api/checkout/authorize", json={"amount_cents": 200000, "card_last4": "1111"}).json()
+    client.post(f"/api/voice/challenges/{d['challenge_id']}/response",
+                files={"wav": ("a.wav", b"RIFF0000", "audio/wav")},
+                headers={**ADMIN, "X-Fake-Decision": "BLOCK_SPOOF"})
+    login(client, "a")
+    un = client.post("/api/voice/challenges", json={"reason": "unlock"}).json()
+    r = client.post(f"/api/voice/challenges/{un['challenge_id']}/response",
+                    files={"wav": ("a.wav", b"RIFF0000", "audio/wav")})
+    assert r.json()["outcome"]["device_locked"] is False
+    drt = rt().hub.devices[uuid.UUID(dev_id)]
+    assert not any(m.label == "takeover_end" for m in drt.markers)
+    assert not any("Takeover ended" in f.text for f in drt.feed)
+    agent.close()
+
+
+def test_expired_proactive_challenge_has_one_feed_line(client):
+    """SC-6: an expired proactive challenge adds exactly one expiry line to the feed."""
+    from app.core.runtime import rt
+
+    _uid, dev_id, agent = setup_monitored(client)
+    for _ in range(12):
+        agent.tick("b")
+    ch = next(m for m in agent.pending if m["type"] == "challenge" and m["trigger"] == "proactive")
+    cid = uuid.UUID(ch["challenge_id"])
+    rt().repo_voice.challenges[cid]["expires_at"] = datetime.now(UTC) - timedelta(seconds=1)
+    drt = rt().hub.devices[uuid.UUID(dev_id)]
+    for _ in range(40):  # the hub loop sweeps once a second
+        if rt().repo_voice.challenges[cid]["status"] == "expired":
+            break
+        time.sleep(0.1)
+    time.sleep(0.2)
+    lines = [f.text for f in drt.feed if "expired" in f.text]
+    assert lines == ["Proactive challenge expired (no lock; actions keep stepping up)"], lines
+    agent.close()
+
+
+def test_demo_label_feed_line_is_human(client):
+    """SC-6: /demo/label reads as ground truth, never 'Label set to impostor/b'."""
+    from app.core.runtime import rt
+
+    _uid, dev_id, agent = setup_monitored(client)
+    for body, text in ((({"label": "impostor", "actor": "b"}), "Ground truth: someone else (B) at the keyboard"),
+                       (({"label": "genuine", "actor": "a"}), "Ground truth: owner (A) back")):
+        r = client.post("/api/demo/label", json={"device_id": dev_id, **body}, headers=ADMIN)
+        assert r.status_code == 200, r.text
+        feed = [f.text for f in rt().hub.devices[uuid.UUID(dev_id)].feed]
+        assert feed[-1] == text and not any(t.startswith("Label set to") for t in feed)
     agent.close()
 
 

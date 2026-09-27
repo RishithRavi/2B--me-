@@ -318,3 +318,80 @@ def test_decision_lookup_falls_back_to_tiger(client):
     login(client, "b")
     assert client.get(f"/api/decisions/{d['decision_id']}").status_code == 404  # not b@'s decision
     agent.close()
+
+
+# --- 9. co-presence: the window follows the laptop, a positive needs fresh browser input (SC-4) ---------
+_PATTERN = [3, 0, 5, 8, 1, 0, 6, 2, 9, 4, 0, 7, 3, 5, 1, 8, 2, 6, 0, 4]
+
+
+class _Clock:
+    """Stands in for the `time` module inside app.core.presence (wall and monotonic move together)."""
+
+    def __init__(self, t: float):
+        self.t = float(t)
+
+    def time(self) -> float:
+        return self.t
+
+    def monotonic(self) -> float:
+        return self.t
+
+
+def _binding_cfg():
+    from twobme_common.config import load_trust_config
+
+    return load_trust_config().binding
+
+
+def _correlated(end: int) -> tuple[dict[int, int], dict[int, int]]:
+    """Browser input on the 20 s ending at `end`, and the laptop's matching activity."""
+    browser = {end - 19 + i: v for i, v in enumerate(_PATTERN)}
+    return browser, {t: 3 * v + 1 for t, v in browser.items()}
+
+
+def _tracker(monkeypatch, t0: int):
+    from app.core import presence
+
+    clock = _Clock(t0)
+    monkeypatch.setattr(presence, "time", clock)
+    tr = presence.PresenceTracker(_binding_cfg())
+    browser, agent = _correlated(t0)
+    tr.add(list(browser.items()), None)
+    assert tr.update(agent).binding == "co-present" and tr.binding()[0] == "co-present"
+    return tr, clock, agent
+
+
+def test_presence_window_anchors_on_the_agent_not_the_last_browser_bucket():
+    from app.core.presence import evaluate
+
+    cfg, t0 = _binding_cfg(), 1_000_000
+    browser, agent = _correlated(t0)
+    assert evaluate(browser, agent, cfg).binding == "co-present"
+    # the browser stops at T while the laptop keeps reporting (idle) to T+40: the old seconds age out
+    agent.update({t: 0 for t in range(t0 + 1, t0 + 41)})
+    ev = evaluate(browser, agent, cfg)
+    assert ev.binding == "remote" and ev.active_s < cfg.min_active_s
+
+
+def test_presence_binding_is_remote_15s_after_the_last_browser_input(monkeypatch):
+    t0 = 1_000_000
+    tr, clock, agent = _tracker(monkeypatch, t0)
+    # a copied cookie shares the idle owner tab's sid: 15 s after A's last input it must not inherit Y
+    clock.t = t0 + 15
+    agent.update({t: 0 for t in range(t0 + 1, t0 + 16)})
+    tr.update(agent)
+    assert tr.binding()[0] == "remote"
+    tr.update(agent)  # no new agent tick either: still remote
+    assert tr.binding()[0] == "remote"
+
+
+def test_presence_binding_holds_2s_after_the_last_browser_input(monkeypatch):
+    t0 = 1_000_000
+    tr, clock, agent = _tracker(monkeypatch, t0)
+    clock.t = t0 + 2  # the owner stopped typing 2 s ago and presses Pay
+    agent.update({t0 + 1: 0, t0 + 2: 0})
+    tr.update(agent)
+    assert tr.binding()[0] == "co-present"
+    # the sticky positive alone (a non-decisive window) also holds while the input is this fresh
+    tr.last = tr.last.__class__("remote", None, 0, False)
+    assert tr.binding()[0] == "co-present"

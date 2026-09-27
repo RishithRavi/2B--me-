@@ -94,8 +94,18 @@ CHALLENGE_FEED = {
     "expired": ("Voice challenge expired ({trigger})", 2),
     "cancelled": ("Voice challenge cancelled ({trigger})", 1),
 }
+# a proactive challenge that expires never locks: its one feed line says so (whichever path expired it)
+PROACTIVE_EXPIRED = ("Proactive challenge expired (no lock; actions keep stepping up)", 3)
 TERMINAL = {"verified", "blocked_spoof", "blocked_impostor", "expired", "cancelled"}
 ADMIN_LOCK = "admin_lock"  # lock_reason of an /admin/actions lock (only an admin unlock or /demo/reset clears it)
+
+
+def _label_text(label: str, actor: str) -> str:
+    """Operator feed wording for a ground-truth label change (/demo/label)."""
+    who = "guest" if actor == "guest" else actor.upper()
+    if label == "impostor":
+        return f"Ground truth: someone else ({who}) at the keyboard"
+    return f"Ground truth: owner ({who}) back" if actor == "a" else f"Ground truth: genuine ({who})"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -952,7 +962,7 @@ class DeviceHub:
         drt.label, drt.actor = label, actor
         self.publish(drt, "label", LabelLive(label=label, actor=actor))
         if announce:
-            self.feed(drt, "label", f"Label set to {label}/{actor}")
+            self.feed(drt, "label", _label_text(label, actor))
         self._persist(drt)
 
     async def os_event(self, drt: DeviceRuntime, event: str, t: datetime) -> None:
@@ -1232,7 +1242,8 @@ class DeviceHub:
                            expires_at=row.get("expires_at"), verify_url=self.s.verify_url(challenge_id))
         if drt is not None:
             self.publish(drt, "challenge", cl)
-            line = CHALLENGE_FEED.get(status)
+            proactive_expired = status == "expired" and row["trigger"] == "proactive"
+            line = PROACTIVE_EXPIRED if proactive_expired else CHALLENGE_FEED.get(status)
             if line and row["trigger"] not in ("redteam", "sandbox"):
                 self.feed(drt, "challenge", line[0].format(trigger=row["trigger"].replace("_", "-"), attempt=attempt),
                           line[1])
@@ -1316,6 +1327,12 @@ class DeviceHub:
                 await self.send_agent(drt, AgentUnlock())
                 self.publish(drt, "unlock", {})
                 self.feed(drt, "lock", f"Device unlocked by {via}", 1)
+            if row["trigger"] == "unlock" and not drt.dev.locked and drt.label == "impostor":
+                # the owner's unlock VERIFY ends the open takeover: A's next actions are stamped genuine/a,
+                # the stage button flips back to "Mark takeover", and the label-aware stub default is VERIFY again
+                await self.add_marker(drt, "takeover_end", None,
+                                      f"owner verified by {'voice' if via == 'voice' else 'TOTP'}",
+                                      source=f"{via} unlock")
             if not drt.dev.locked:
                 drt.engine.anchor(self.cfg.anchors.verify)
                 drt.in_takeover = drt.failed_challenge = False
@@ -1356,7 +1373,9 @@ class DeviceHub:
                 if subject is not None and subject.role != "admin":
                     self.registry.revoke_user_sessions(subject.id)
                     self.live.close_user(subject.id)
-                self.anomaly(drt, kind, 5, before, drt.engine.confidence, drt.last_top, action="lock",
+                # a voice verdict is not a behavioral one: the deviations belong to the takeover anomaly
+                top = [] if kind in ("voice_spoof", "voice_impostor") else drt.last_top
+                self.anomaly(drt, kind, 5, before, drt.engine.confidence, top, action="lock",
                              challenge_id=row["id"])
             else:  # BLOCK_* on an unlock challenge: stays locked, severity-5 anomaly
                 self.anomaly(drt, kind, 5, before, drt.engine.confidence, [], action="unlock_denied",
@@ -1445,11 +1464,12 @@ class DeviceHub:
             for row in self.repo_voice.open_for_device(drt.device_id, now):
                 exp = row.get("expires_at")
                 if exp is not None and exp < now:
-                    with contextlib.suppress(Exception):
+                    try:  # the "expired" status event carries the one feed line (on_challenge_status)
                         await self.issuer.expire(row["id"])
+                    except Exception:
+                        if row["trigger"] == "proactive":
+                            self.feed(drt, "challenge", *PROACTIVE_EXPIRED)
                     self._resolve_attached(row["id"], "block", "challenge_expired")
-                    if row["trigger"] == "proactive":
-                        self.feed(drt, "challenge", "Proactive challenge expired (no lock; actions keep stepping up)", 3)
             if (drt.agent_ws is None and drt.agent_disconnected_at is not None and drt.session_id is not None
                     and mono - drt.agent_disconnected_at > self.cfg.session.end_after_ws_close_s):
                 self._end_session(drt, "ws_timeout")
