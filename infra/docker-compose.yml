@@ -29,6 +29,7 @@ services:
       dockerfile: infra/Dockerfile.api
       args:
         BASE: twobme-base:latest
+        UV_EXTRAS: ${UV_EXTRAS:-}
     image: twobme-api:latest
     restart: unless-stopped
     env_file:

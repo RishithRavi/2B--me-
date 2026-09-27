@@ -39,8 +39,9 @@ without running it.
    and tests. Done when Python 3.12 unit tests, actual Opus fallback and official
    ASVspoof5 metric parity pass.
 2. **C0 batch smoke:** load DF_Arena, ECAPA, Silero; verify logits and time each
-   on the batch box and VM. Adapters and `voice_model_smoke.py` implemented and
-   tested with fakes. Requires SSH target. Record actual RUNTIME results.
+   on the batch box and VM. Adapters, immutable-revision resolver, Linux setup,
+   preload check and `voice_model_smoke.py` are implemented. Requires SSH target
+   and consented 20+20 corpus paths. Record actual RUNTIME results.
 3. **C1:** official rules/template and corpus → resumable inference, 20+20
    direction test, safety TSV. Resumable single-process `hearsay predict` now
    implemented; four-worker tuning pending. Requires official materials and box.
@@ -98,3 +99,7 @@ resolution. The CP0 backend currently remains a stub.
   revisions and measured calibration, then run batch/VM model smoke and
   microphone validation. Core requests and setup are documented. Spectral
   dimensions and rank-offset ambiguities are resolved.
+- Repeatable host setup is now `scripts/voice_setup_box.sh`. It installs only on
+  Linux amd64, resolves full model SHAs, records the DF_Arena nested backbone,
+  preloads/warm-checks the models and runs the existing smoke harness when corpus
+  paths are supplied. Actual execution still needs the host and private data.

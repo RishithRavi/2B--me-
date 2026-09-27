@@ -27,10 +27,27 @@ Never commit `.env`.
 cd /opt/2bme && infra/deploy.sh          # pull, base image if uv.lock changed, web in node:22, compose up, health
 infra/deploy.sh --skip-web               # after rsyncing a locally built web/out
 infra/deploy.sh --rebuild-base           # force the dependency image
+UV_EXTRAS="--extra voice" infra/deploy.sh --rebuild-base  # real voice dependencies
 ```
+- Keep `UV_EXTRAS="--extra voice"` on later real-voice deploys so the exact API
+  sync does not remove the model stack. Stub demo deploys leave it unset.
 - The API runs migrations on start (idempotent). It starts even if Tiger is down (`/api/status` → `tiger:"down"`).
 - `/api/healthz` is 200 only after the voice warm-up.
-- Voice models (after the ws-voice merge): `docker compose --env-file .env -f infra/docker-compose.yml run --rm api python -m hearsay download-models`.
+- For real voice, first resolve and copy the generated nonsecret pins into `.env`,
+  then preload the exact models into the persistent `hf` volume:
+  ```bash
+  UV_EXTRAS="--extra voice" docker compose --env-file .env -f infra/docker-compose.yml run --rm api \
+    python scripts/voice_resolve_revisions.py --model df-arena --runtime-root /app/data/voice-runtime
+  # Copy VOICE_CM_MODEL, VOICE_CM_REVISION, VOICE_ECAPA_REVISION and
+  # VOICE_CALIBRATION_PATH from data/voice-runtime/voice-runtime.env into .env.
+  UV_EXTRAS="--extra voice" docker compose --env-file .env -f infra/docker-compose.yml run --rm api \
+    sh -ec 'python scripts/voice_preload_models.py --model df-arena \
+      --cm-revision "$VOICE_CM_REVISION" --ecapa-revision "$VOICE_ECAPA_REVISION" \
+      --speaker-cache /app/data/models/ecapa \
+      --output /app/data/voice-runtime/reports/model-preload.json'
+  ```
+  Real mode still requires the measured calibration JSON before `/api/healthz`
+  can become ready. Keep `VOICE_MODE=stub` until preload and calibration pass.
 - **No deploys Sun 09:00–11:30 ET.** After any API restart, run one `sandbox` challenge before the next judge.
 - Snapshots: after the first end-to-end run and at demo freeze (Vultr console → Snapshots).
 
