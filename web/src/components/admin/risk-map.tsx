@@ -48,7 +48,7 @@ function Cell({ row, selected, onSelect }: { row: RosterRow; selected: boolean; 
           onClick={onSelect}
           aria-label={`${row.handle}: ${row.locked ? "locked" : `${row.display ?? "—"}% ${levelLabel(row.level)}`}`}
           className={cn(
-            "relative flex h-12 w-[52px] shrink-0 flex-col items-center justify-center rounded-md transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+            "relative flex h-12 w-11 shrink-0 flex-col items-center justify-center rounded-md transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
             selected && "outline-2 outline-offset-2 outline-foreground",
             !row.online && "opacity-40",
           )}
@@ -117,7 +117,8 @@ export function RiskMap({
     >
       {/* Below lg the header has no room: the legend gets its own row above the grid. */}
       <Legend className="mb-2.5 flex-wrap gap-y-1 lg:hidden" />
-      <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
+      {/* 156px = three 44px cells + gaps + padding: the live org's 8 groups fit one row at 1440 (auto-fit stretches fewer). */}
+      <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(156px,1fr))]">
         {groups.map((g) => (
           <div key={g.team} className="rounded-lg bg-muted/35 p-2 ring-1 ring-foreground/5">
             <div className="mb-1.5 flex items-center justify-between gap-3 px-0.5">
@@ -128,7 +129,7 @@ export function RiskMap({
                 {g.locked ? ` · ${g.locked} locked` : ""}
               </span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1">
               {g.list.map((r) => (
                 <Cell key={r.device_id} row={r} selected={r.device_id === selectedId} onSelect={() => onSelect(r.device_id)} />
               ))}
