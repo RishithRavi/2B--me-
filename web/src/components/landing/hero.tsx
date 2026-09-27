@@ -18,7 +18,8 @@ export function Hero({ state, simulated }: { state: LiveState; simulated: boolea
   const locked = Boolean(trust?.locked || state.device?.locked);
   const level = locked ? "locked" : (trust?.level ?? "learning");
   const color = levelColor(level);
-  const latest = state.recent[0] ?? null;
+  // Operator ground-truth labels ("Label → impostor (actor b)") are internal; the hero shows what 2bME itself saw.
+  const latest = state.recent.find((f) => f.type !== "label") ?? null;
 
   return (
     <section className="relative overflow-hidden border-b">

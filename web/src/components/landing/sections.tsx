@@ -1,3 +1,5 @@
+"use client";
+
 import {
   AudioLines,
   Check,
@@ -14,6 +16,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { useVoiceMode } from "@/components/dashboard/voice-mode";
 import { TRUST_CONFIG } from "@/lib/contracts";
 import { levelColor } from "@/lib/ui";
 
@@ -42,7 +45,7 @@ const STEPS = [
   {
     icon: AudioLines,
     title: "Step up, never block on behavior",
-    body: "When trust falls below 40% or a risky action needs more, 2bME asks for an independent factor: a spoken random phrase checked for your voice and for cloning, or a one-time code. Only that check can block.",
+    body: "When trust falls below 40% or a risky action needs more, 2bME asks for an independent factor: a spoken random phrase checked for your voice and designed to flag synthetic speech, or a one-time code. Only that check can block.",
   },
 ];
 
@@ -182,8 +185,8 @@ export function RiskExamples() {
         ]}
         result={
           <span>
-            Owner verifies → <b className="font-mono text-trust-normal">Y</b>. Wrong or cloned voice → <b className="font-mono text-trust-suspicious">N</b>, device
-            locked.
+            Owner verifies → <b className="font-mono text-trust-normal">Y</b>. Wrong voice, or one the anti-spoof check flags as synthetic →{" "}
+            <b className="font-mono text-trust-suspicious">N</b>, device locked.
           </span>
         }
       />
@@ -229,6 +232,7 @@ const SAMPLE_BLOCK = `{
 }`;
 
 export function PrivacyPromise() {
+  const stubVoice = useVoiceMode(false) === "stub";
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="panel p-6">
@@ -301,11 +305,15 @@ export function PrivacyPromise() {
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
           Challenge audio is scored and then deleted. Only embeddings and scalar scores are stored.
+          {stubVoice && (
+            <span className="mt-2 block rounded-md border border-trust-watch/45 bg-trust-watch/10 px-2.5 py-1.5 text-xs text-trust-watch">
+              On this demo server the voice check is simulated: results are canned and badged.
+            </span>
+          )}
         </p>
         <blockquote className="mt-4 border-l-2 border-brand/60 pl-4 text-[15px] leading-relaxed">
           Our server deletes challenge audio after scoring and stores only embeddings and scores. ElevenLabs processes the prompt and STT audio and, on our
-          plan, retains it in account history (Zero Retention is enterprise-only).{" "}
-          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[13px]">STT_BACKEND=local</code> avoids this.
+          plan, retains it in account history (Zero Retention is enterprise-only). Local speech-to-text mode avoids this.
         </blockquote>
         <div className="mt-auto grid grid-cols-2 gap-3 pt-6 text-xs">
           <div className="rounded-lg bg-muted/50 p-3">
@@ -333,30 +341,39 @@ export function PrivacyPromise() {
 // Sponsors (only what is built)
 // ---------------------------------------------------------------------------
 
-const SPONSORS: { name: string; role: string; mono?: boolean; note?: string }[] = [
+const SPONSORS: { name: string; role: string; mono?: boolean; note?: string | ((stubVoice: boolean) => string) }[] = [
   { name: "Tiger Data", role: "behavior history, baselines and anomalies: hypertables, compression, continuous aggregates" },
   { name: "Vultr", role: "compute deployment target for the API and model + privacy-safe inference adapter", note: "integration ready" },
-  { name: "ElevenLabs", role: "spoken challenge prompts and synthetic voices for spoof testing" },
+  { name: "ElevenLabs", role: "spoken challenge prompts and synthetic voices for spoof testing", note: "prompts + spoof-test voices" },
   { name: ".tech", role: "2bme.tech: this site and the org console", mono: true },
-  { name: "NSA Hearsay", role: "voice anti-spoof: the synthetic-speech check in the step-up" },
+  {
+    name: "NSA Hearsay",
+    role: "voice anti-spoof: the synthetic-speech check in the step-up",
+    note: (stubVoice) => (stubVoice ? "simulated in this demo" : "anti-spoof"),
+  },
   { name: "Visa", role: "3DS-style Y/C/N checkout", note: "demo scenario, not affiliated" },
   { name: "Backboard", role: "long-term contextual behavior history", note: "roadmap" },
 ];
 
 export function SponsorStrip() {
+  // Voice results on a stub server are canned: the anti-spoof partner says so instead of implying a live check.
+  const stubVoice = useVoiceMode(false) === "stub";
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-border ring-1 ring-foreground/10 lg:grid-cols-4">
-      {SPONSORS.map((s) => (
-        <div key={s.name} className="bg-card p-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-            <div className={s.mono ? "font-mono text-lg font-semibold" : "text-lg font-semibold tracking-tight"}>{s.name}</div>
-            {s.note && (
-              <span className="rounded-full border border-trust-watch/40 px-1.5 py-px text-[10px] font-medium whitespace-nowrap text-trust-watch">{s.note}</span>
-            )}
+      {SPONSORS.map((s) => {
+        const note = typeof s.note === "function" ? s.note(stubVoice) : s.note;
+        return (
+          <div key={s.name} className="bg-card p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+              <div className={s.mono ? "font-mono text-lg font-semibold" : "text-lg font-semibold tracking-tight"}>{s.name}</div>
+              {note && (
+                <span className="rounded-full border border-trust-watch/40 px-1.5 py-px text-[10px] font-medium whitespace-nowrap text-trust-watch">{note}</span>
+              )}
+            </div>
+            <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{s.role}</div>
           </div>
-          <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{s.role}</div>
-        </div>
-      ))}
+        );
+      })}
       <div className="bg-card p-5">
         <div className="text-sm font-medium">Claims match what&apos;s built</div>
         <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">

@@ -91,7 +91,7 @@ export default function HomePage() {
         lead={
           <>
             Each leaf comes straight from our feature spec, and the count beside it is how many features back it. A dot lights up when a recent evidence
-            block carried that signal{simulated ? " (simulated stream)" : ""}. Hover a leaf to see its features.
+            block carried that signal{simulated ? " (simulated stream)" : ""}. Hover or tap a leaf to see its features.
           </>
         }
       >
@@ -135,7 +135,7 @@ export default function HomePage() {
 
       <footer className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-3 border-t px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:px-6">
         <Wordmark />
-        <span>HackGT 13 · continuous behavioral authentication · deploying to 2bme.tech</span>
+        <span>HackGT 13 · continuous behavioral authentication · 2bme.tech</span>
       </footer>
     </div>
   );
