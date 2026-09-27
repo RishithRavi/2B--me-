@@ -463,7 +463,7 @@ class Sim implements OrgSim {
       seq: ++e.seq,
       locked: e.locked,
     };
-    e.spark = [...e.spark, confidence].slice(-SPARK_MAX);
+    if (!e.locked) e.spark = [...e.spark, confidence].slice(-SPARK_MAX); // as applyOrg: a lock is not behavior
     if (!reasons?.some((r) => r === "admin_lock" || r === "admin_unlock")) {
       e.online = true;
       e.lastSeen = now;

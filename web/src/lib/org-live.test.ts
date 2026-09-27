@@ -228,6 +228,20 @@ describe("applyOrg", () => {
     expect(s.rows[0].flags).toEqual([]);
   });
 
+  it("keeps a lock's pinned trust out of the sparkline (no fake crash to 0)", () => {
+    const lock: LiveEvent = { type: "lock", device_id: DEV, t: new Date(T0).toISOString(), data: { reason: "admin_lock" } };
+    const unlock: LiveEvent = { type: "unlock", device_id: DEV, t: new Date(T0).toISOString(), data: {} };
+    let s = state([row({ sparkline: [0.95, 0.96] })]);
+    s = applyOrg(s, trust(0.0001, { locked: true, reasons: ["admin_lock"] }));
+    s = applyOrg(s, lock);
+    s = applyOrg(s, trust(0.0001, { locked: true }));
+    expect(s.rows[0]).toMatchObject({ locked: true, level: "locked", confidence: 0.0001, sparkline: [0.95, 0.96] });
+    s = applyOrg(s, unlock);
+    s = applyOrg(s, trust(0.96, { reasons: ["admin_unlock"] }));
+    expect(s.rows[0].sparkline).toEqual([0.95, 0.96, 0.96]);
+    expect(Math.min(...s.rows[0].sparkline)).toBeGreaterThan(0.9);
+  });
+
   it("keeps the first-seen time when an anomaly is re-sent with the same id", () => {
     const a = (t: number, action: string | null): LiveEvent => ({
       type: "anomaly",

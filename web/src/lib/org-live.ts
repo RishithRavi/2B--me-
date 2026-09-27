@@ -235,7 +235,9 @@ export function applyOrg(prev: OrgState, ev: LiveEvent, receivedAt: number = Dat
           locked,
           lock_reason: lockReason,
           level: rowLevel({ locked, mode: row.mode, confidence, level: d.level }),
-          sparkline: [...row.sparkline, confidence].slice(-SPARK_MAX),
+          // While locked the hub pins L at its floor (admin lock included): that is state, not behavior, so it stays
+          // out of the "last 5 min" line instead of drawing a fake crash to 0. The gauge and chips show the lock.
+          sparkline: locked ? row.sparkline : [...row.sparkline, confidence].slice(-SPARK_MAX),
           flags,
         };
       });
