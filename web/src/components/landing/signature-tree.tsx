@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { liveFeatureValues } from "@/components/dashboard/identity-card";
 import { FEATURE_SPEC, type Modality } from "@/lib/contracts";
 import type { LiveState } from "@/lib/live";
-import { MODALITIES, featureLabel, modalityColor, modalityIcon, modalityLabel } from "@/lib/ui";
+import { MODALITIES, featureLabel, modalityColor, modalityIcon } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 const RECENT_MS = 90_000;
@@ -57,51 +57,85 @@ const TITLES: Record<Modality, string> = {
   temporal: "Temporal signature",
 };
 
-/** The goal.txt BEHAVIORAL SIGNATURE, rendered from feature_spec.yaml (every leaf maps to real features). */
+/** The newGoal BEHAVIORAL SIGNATURE, rendered from feature_spec.yaml (every leaf maps to real features). */
 export function SignatureTree({ state, live }: { state: LiveState; live: boolean }) {
   const active = useMemo(() => leafActivity(state), [state]);
+  const totalLeaves = MODALITIES.reduce((n, m) => n + Object.keys(SIGNATURE[m]).length, 0);
+  const totalFeatures = MODALITIES.reduce((n, m) => n + FEATURE_SPEC.modalities[m].features.length, 0);
+  const lit = live ? MODALITIES.reduce((n, m) => n + Object.values(active[m] ?? {}).filter(Boolean).length, 0) : 0;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-      {MODALITIES.map((m) => {
-        const Icon = modalityIcon(m);
-        const leaves = Object.entries(SIGNATURE[m]);
-        return (
-          <div key={m} className="panel p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="grid size-7 place-items-center rounded-lg" style={{ background: `color-mix(in oklch, ${modalityColor(m)} 16%, transparent)` }}>
-                <Icon className="size-4" style={{ color: modalityColor(m) }} />
-              </span>
-              <span className="text-sm font-medium">{TITLES[m]}</span>
+    <div>
+      {/* root node + connector bar (drawn only where the branches sit side by side) */}
+      <div className="flex flex-col items-center">
+        <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-2xl border bg-card px-4 py-2 shadow-sm">
+          <span className="font-mono text-xs font-semibold tracking-[0.14em] whitespace-nowrap uppercase">Behavioral signature</span>
+          <span className="tnum font-mono text-[11px] whitespace-nowrap text-muted-foreground">
+            {totalLeaves} leaves · {totalFeatures} features
+          </span>
+          {live && (
+            <span className="tnum inline-flex items-center gap-1.5 font-mono text-[11px] whitespace-nowrap text-muted-foreground">
+              <span className="size-1.5 animate-pulse-dot rounded-full bg-brand" />
+              {lit} live
+            </span>
+          )}
+        </div>
+        <div className="h-5 w-px bg-border" />
+      </div>
+      <div className="relative hidden lg:block">
+        <div className="absolute top-0 right-[10%] left-[10%] h-px bg-border" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {MODALITIES.map((m) => {
+          const Icon = modalityIcon(m);
+          const leaves = Object.entries(SIGNATURE[m]);
+          return (
+            <div key={m} className="relative lg:pt-5">
+              <span className="absolute top-0 left-1/2 hidden h-5 w-px bg-border lg:block" />
+              <div className="panel h-full p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="grid size-7 place-items-center rounded-lg" style={{ background: `color-mix(in oklch, ${modalityColor(m)} 16%, transparent)` }}>
+                    <Icon className="size-4" style={{ color: modalityColor(m) }} />
+                  </span>
+                  <span className="text-sm font-medium">{TITLES[m]}</span>
+                </div>
+                <ul className="relative space-y-2 border-l border-border pl-3.5">
+                  {leaves.map(([leaf, feats]) => {
+                    const on = live && active[m]?.[leaf];
+                    return (
+                      <li key={leaf} className="group relative">
+                        <span className="absolute top-[0.55rem] -left-3.5 h-px w-2.5 bg-border" />
+                        <div className="flex items-center gap-2 text-[13px]">
+                          <span
+                            className={cn("size-1.5 shrink-0 rounded-full transition-colors", on && "animate-pulse-dot")}
+                            style={{ background: on ? modalityColor(m) : "var(--muted-foreground)", opacity: on ? 1 : 0.35 }}
+                            title={on ? "seen in a recent block" : "no recent evidence"}
+                          />
+                          <span className={cn(on ? "text-foreground" : "text-muted-foreground")}>{leafLabel(leaf)}</span>
+                          <span className="tnum ml-auto font-mono text-[10px] text-muted-foreground/70">{feats.length}</span>
+                        </div>
+                        <div className="mt-0.5 hidden pl-3.5 text-[11px] leading-snug text-muted-foreground group-hover:block">
+                          {feats.map((f) => featureLabel(f)).join(" · ")}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="mt-3 font-mono text-[10px] text-muted-foreground">
+                  {FEATURE_SPEC.modalities[m].features.length} features · block = {FEATURE_SPEC.modalities[m].n_ref}{" "}
+                  {FEATURE_SPEC.modalities[m].n_unit.replace("_", "-")}
+                </div>
+              </div>
             </div>
-            <ul className="relative space-y-2 border-l border-border pl-3.5">
-              {leaves.map(([leaf, feats]) => {
-                const on = live && active[m]?.[leaf];
-                return (
-                  <li key={leaf} className="group relative">
-                    <span className="absolute top-[0.55rem] -left-3.5 h-px w-2.5 bg-border" />
-                    <div className="flex items-center gap-2 text-[13px]">
-                      <span
-                        className={cn("size-1.5 shrink-0 rounded-full transition-colors", on && "animate-pulse-dot")}
-                        style={{ background: on ? modalityColor(m) : "var(--muted)" }}
-                        title={on ? "seen in a recent block" : "no recent evidence"}
-                      />
-                      <span className={cn(on ? "text-foreground" : "text-muted-foreground")}>{leaf.charAt(0).toUpperCase() + leaf.slice(1)}</span>
-                    </div>
-                    <div className="mt-0.5 hidden pl-3.5 text-[11px] leading-snug text-muted-foreground group-hover:block">
-                      {feats.map((f) => featureLabel(f)).join(" · ")}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-3 font-mono text-[10px] text-muted-foreground">
-              {FEATURE_SPEC.modalities[m].features.length} features · {modalityLabel(m, true).toLowerCase()} block = {FEATURE_SPEC.modalities[m].n_ref}{" "}
-              {FEATURE_SPEC.modalities[m].n_unit.replace("_", "-")}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
+}
+
+/** "keyboard-mouse transitions" → "Keyboard ↔ mouse transitions" (the newGoal wording). */
+function leafLabel(leaf: string): string {
+  const s = leaf.replace("keyboard-mouse", "keyboard ↔ mouse");
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

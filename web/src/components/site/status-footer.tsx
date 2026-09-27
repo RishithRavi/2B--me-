@@ -29,8 +29,11 @@ const MOCK_STATUS: StatusOut = {
   model_backend: "twobme_ml",
 };
 
-function Item({ ok, label, hint, className }: { ok: boolean | null; label: string; hint?: string; className?: string }) {
-  const color = ok === null ? "var(--muted-foreground)" : ok ? "var(--trust-normal)" : "var(--trust-suspicious)";
+type Tone = "ok" | "bad" | "warn" | "neutral";
+
+function Item({ ok, tone, label, hint, className }: { ok?: boolean | null; tone?: Tone; label: string; hint?: string; className?: string }) {
+  const t: Tone = tone ?? (ok === null || ok === undefined ? "neutral" : ok ? "ok" : "bad");
+  const color = { ok: "var(--trust-normal)", bad: "var(--trust-suspicious)", warn: "var(--trust-watch)", neutral: "var(--muted-foreground)" }[t];
   const body = (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", className)}>
       <span className="size-1.5 rounded-full" style={{ background: color }} />
@@ -46,7 +49,37 @@ function Item({ ok, label, hint, className }: { ok: boolean | null; label: strin
   );
 }
 
-/** Thin P0 status strip: Tiger up/down, voice warm, writer queue/drops, devices online. Tolerates API down. */
+/** What is actually running, from /status (StatusOut.model_backend, else the older inference.model_backend). */
+export function modelBackend(s: StatusOut): string | null {
+  if (s.model_backend) return s.model_backend;
+  const v = s.inference?.["model_backend"];
+  return typeof v === "string" ? v : null;
+}
+
+function explanations(s: StatusOut): string | null {
+  const v = s.inference?.["explanations"];
+  return typeof v === "string" ? v : null;
+}
+
+/** Stub voice is badged loudly: its results are canned, never live analysis (§8 C2 "Stub honesty"). */
+function StubVoice() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-trust-watch/50 bg-trust-watch/15 px-2 py-px font-sans text-[11px] font-semibold whitespace-nowrap text-trust-watch">
+          <span className="size-1.5 animate-pulse-dot rounded-full bg-trust-watch" />
+          Voice: simulated (stub)
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">VOICE_MODE=stub: voice results on this server are canned demo outcomes, not a live analysis of the audio.</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * Thin P0 status strip: stub-voice warning, Tiger, model backend, voice, writer queue/drops, devices online, retrain
+ * mode and explanation source. Tolerates API down.
+ */
 export function StatusFooter() {
   const pathname = usePathname();
   const mock = useMockMode();
@@ -87,6 +120,8 @@ export function StatusFooter() {
   }, [mock, mounted]);
 
   if (pathname === "/overlay") return null; // the Electron overlay has no site chrome
+  const backend = status ? modelBackend(status) : null;
+  const explain = status ? explanations(status) : null;
 
   return (
     <footer className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/85 backdrop-blur-md">
@@ -95,16 +130,49 @@ export function StatusFooter() {
           <Item ok={offline ? false : null} label={offline ? "API offline" : "checking API…"} hint={checkedAt ? `last check ${fmtAgo(checkedAt)}` : undefined} />
         ) : (
           <>
+            {status.voice_mode === "stub" && <StubVoice />}
             <Item ok={status.ok} label={`API ${status.version}`} hint={`uptime ${fmtDuration(status.uptime_s)}${status.demo_mode ? " · demo mode" : ""}`} />
             <Item ok={status.tiger === "up"} label={`Tiger ${status.tiger}`} hint="Tiger Cloud (TimescaleDB): history, baselines, anomalies" />
-            <Item ok={status.voice_warm} label={status.voice_warm ? "voice warm" : "voice cold"} hint="Voice models loaded (VAD, ECAPA, anti-spoof)" />
+            {backend && (
+              <Item
+                tone={backend === "twobme_ml" ? "ok" : "warn"}
+                label={`model ${backend}`}
+                hint={
+                  backend === "twobme_ml"
+                    ? "twobme_ml: per-user one-class detector, trained only on the enrolled person's blocks"
+                    : "fallback: median/MAD distance to the enrolled baseline (twobme_ml not installed on this server)"
+                }
+              />
+            )}
+            {status.voice_mode === "real" ? (
+              <Item ok={status.voice_warm} label={status.voice_warm ? "voice real · warm" : "voice real · cold"} hint="Real voice pipeline: VAD, speech-to-text, speaker match, anti-spoof, DSP/FFT" />
+            ) : (
+              status.voice_mode !== "stub" && (
+                <Item ok={status.voice_warm} label={status.voice_warm ? "voice warm" : "voice cold"} hint="Voice step-up ready (models loaded and warmed up)" />
+              )
+            )}
             <Item
               ok={status.writer.dropped === 0 && status.writer.failed_batches === 0}
               label={`writer q ${status.writer.queued} · drop ${status.writer.dropped}`}
               hint={`flushed ${status.writer.flushed.toLocaleString()} rows · failed batches ${status.writer.failed_batches}${status.writer.last_flush_at ? ` · last flush ${fmtAgo(status.writer.last_flush_at)}` : ""}`}
             />
             <Item ok={status.devices_online > 0} label={`${status.devices_online} device${status.devices_online === 1 ? "" : "s"} online`} />
-            {status.continuous_update && <Item ok={null} label="continuous update on" />}
+            <Item
+              tone="neutral"
+              label={status.continuous_update ? "manual retrain" : "model frozen"}
+              hint={
+                status.continuous_update
+                  ? "Only high-confidence genuine blocks become update candidates; retraining is operator-triggered (Retrain now)"
+                  : "Demo freeze: no retraining"
+              }
+            />
+            {explain && (
+              <Item
+                tone="neutral"
+                label={`explanations ${explain}`}
+                hint={explain === "vultr" ? "Anomaly explanations from Vultr Serverless Inference (feature z-scores only)" : "Anomaly explanations use a local template (no inference key set)"}
+              />
+            )}
           </>
         )}
         <span className="ml-auto hidden whitespace-nowrap sm:inline">
