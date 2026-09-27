@@ -4,6 +4,7 @@ import { Archive, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { SimulatedBadge } from "@/components/dashboard/voice-analysis";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -122,7 +123,19 @@ function outcomeTone(decision: string | null, resolution: string | null): { text
   return { text: d, color: "var(--trust-watch)" };
 }
 
-export function AnomaliesList({ rows }: { rows: AnomalyRow[] }) {
+const VOICE_KINDS = new Set<string>(["voice_spoof", "voice_impostor"]);
+
+export function AnomaliesList({
+  rows,
+  voiceSimulated = false,
+  explanations = null,
+}: {
+  rows: AnomalyRow[];
+  /** Stub voice server: voice-result anomalies came from canned outcomes, so they carry the "Simulated voice result" badge. */
+  voiceSimulated?: boolean;
+  /** Where explanations come from (/status inference.explanations): "template" ones are marked as such. */
+  explanations?: "vultr" | "template" | null;
+}) {
   return (
     <ol className="divide-y">
       {rows.map((a) => {
@@ -132,6 +145,7 @@ export function AnomaliesList({ rows }: { rows: AnomalyRow[] }) {
             <div className="flex flex-wrap items-center gap-2">
               <Severity n={a.severity} />
               <span className="text-sm font-medium capitalize">{anomalyLabel(a.kind)}</span>
+              {voiceSimulated && VOICE_KINDS.has(a.kind) && <SimulatedBadge />}
               <span className="font-mono text-[11px] text-muted-foreground">
                 {fmtClock(a.time)} · {fmtAgo(a.time)}
               </span>
@@ -163,6 +177,14 @@ export function AnomaliesList({ rows }: { rows: AnomalyRow[] }) {
               </div>
             )}
             <p className={cn("text-sm leading-relaxed", a.explanation ? "text-muted-foreground" : "text-muted-foreground/60 italic")}>
+              {a.explanation && explanations === "template" && (
+                <span
+                  className="mr-1.5 inline-flex -translate-y-px items-center rounded border px-1 py-px align-middle font-mono text-[9px] tracking-wide text-muted-foreground uppercase"
+                  title="Written by a local template from the feature z-scores (no inference key on this server)"
+                >
+                  template
+                </span>
+              )}
               {a.explanation ?? "Explanation pending (Vultr inference writes it from the feature z-scores only)."}
             </p>
           </li>

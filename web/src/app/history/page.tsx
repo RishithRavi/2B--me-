@@ -3,8 +3,9 @@
 import { Database, History as HistoryIcon, ListTree, RefreshCw, Ruler, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { useVoiceMode } from "@/components/dashboard/voice-mode";
 import { AnomaliesList, BaselineTable, SessionsTable, TigerCard } from "@/components/history/panels";
 import { TrustTimeline } from "@/components/history/trust-timeline";
 import { EmptyState, PageHeader } from "@/components/site/empty-state";
@@ -73,6 +74,26 @@ function blip(s: SessionRow): boolean {
   return s.status !== "active" && s.n_ticks <= 1 && s.n_anomalies === 0;
 }
 
+type ExplanationSource = "vultr" | "template" | null;
+
+/** One /status read for where anomaly explanations come from (inference.explanations). Mock mode: the template. */
+function useExplanationSource(mock: boolean): ExplanationSource {
+  const [src, setSrc] = useState<ExplanationSource>(null);
+  useEffect(() => {
+    if (mock) return;
+    const ctl = new AbortController();
+    api
+      .status(ctl.signal)
+      .then((s) => {
+        const v = s.inference?.["explanations"];
+        setSrc(v === "vultr" || v === "template" ? v : null);
+      })
+      .catch(() => {});
+    return () => ctl.abort();
+  }, [mock]);
+  return mock ? "template" : src;
+}
+
 // Deep links from /admin (breach trace-back): ?session_id=<id> opens that session; ?device_id=<id> shows only that
 // device's sessions and anomalies (the server filters when it supports device_id; this page always filters too) and
 // opens its most recent real session. Without params the newest real session opens, not a just-reset empty one.
@@ -93,6 +114,8 @@ function HistoryInner() {
   const isAdmin = mock || me.me?.role === "admin";
   const [picked, setPicked] = useState<string | null>(null);
   const [modality, setModality] = useState<Modality>("keyboard");
+  const voiceSimulated = useVoiceMode(mock) === "stub";
+  const explanations = useExplanationSource(mock);
 
   // Trace-back: ask the server for this device only, and filter here as well so an older server can't leak others in.
   const byDevice = Boolean(deviceParam && !mock);
@@ -220,7 +243,7 @@ function HistoryInner() {
 
         <Panel title="Anomalies" icon={ListTree} hint="with explanations and challenge outcome" action={<ResourceBadge res={anomalies} />} className="xl:col-span-7">
           <Body res={{ ...anomalies, data: anomalyRows }} empty={deviceParam ? "No anomalies recorded for this device" : "No anomalies yet"}>
-            {(rows) => <AnomaliesList rows={rows} />}
+            {(rows) => <AnomaliesList rows={rows} voiceSimulated={voiceSimulated} explanations={explanations} />}
           </Body>
         </Panel>
 
