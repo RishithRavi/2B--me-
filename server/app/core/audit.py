@@ -16,6 +16,7 @@ human admin that token resolves to.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import time
@@ -28,6 +29,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from app.core.runtime import rt
 from twobme_common.types import AnomalyLive, AuditRow, utcnow
 
 log = logging.getLogger("twobme.audit")
@@ -89,6 +91,39 @@ class DevTrack:
     last_remote_at: datetime | None = None
     last_redteam_audit: float = 0.0
     prelock_conf: float | None = None  # admin lock: behavioral confidence restored on admin unlock
+    drift_on: bool = False             # insider drift currently raised (one alert per rising edge)
+    drift_checked: float = 0.0         # monotonic time of the last insider-drift evaluation
+
+
+# insider drift (roster flag + one org alert per episode): UEBA-style slow drift in the watch band
+DRIFT_WINDOW_S = 300.0
+DRIFT_MIN_POINTS = 24          # >= 2 min of 5 s ticks before the insider-drift flag can fire
+DRIFT_BELOW = 0.80
+DRIFT_FRACTION = 0.60
+DRIFT_MAX_SUSPICIOUS = 0.10    # a window that was mostly < 0.40 is a (past) takeover, not a slow drift
+DRIFT_CHECK_S = 10.0           # the audit hook re-evaluates it at most this often per device
+DRIFT_SUMMARY = "Insider drift: most of the last 5 min below 80% with no takeover — review activity, don't block"
+
+
+def drift_points(drt: Any) -> list[Any]:
+    """The trust points of the last DRIFT_WINDOW_S (learning/locked points excluded)."""
+    now = utcnow()
+    return [p for p in list(drt.history)
+            if 0 <= (now - p.t).total_seconds() <= DRIFT_WINDOW_S and p.level not in ("learning", "locked")]
+
+
+def insider_drift(drt: Any, level: str, takeover: bool) -> bool:
+    """Sustained sub-0.80 confidence (>= 60% of the last 5 min) on a device still labelled genuine with no
+    takeover marker, that is not (and in this window was not) a takeover suspicion: UEBA-style slow drift in the
+    watch band, not a sudden swap."""
+    if takeover or drt.label != "genuine" or drt.in_takeover or level in ("learning", "locked"):
+        return False
+    pts = drift_points(drt)
+    if len(pts) < DRIFT_MIN_POINTS:
+        return False
+    if sum(1 for p in pts if p.confidence < 0.40) / len(pts) > DRIFT_MAX_SUSPICIOUS:
+        return False
+    return sum(1 for p in pts if p.confidence < DRIFT_BELOW) / len(pts) >= DRIFT_FRACTION
 
 
 LEVEL_SEVERITY = {"suspicious": 3, "watch": 2, "normal": 0, "learning": 0}
@@ -222,6 +257,7 @@ class AuditLog:
         if level is None:
             return
         t = self.track(drt.dev.id)
+        self._check_drift(drt, t, level)
         prev = t.audited_level
         if prev is None or level == prev:
             t.audited_level, t.pending_level, t.pending_n = level, None, 0
@@ -247,6 +283,35 @@ class AuditLog:
             summary += " · " + why[0]
         self._emit_dev(drt, "trust_change", summary, LEVEL_SEVERITY.get(level, 0))
 
+    def _check_drift(self, drt: Any, t: DevTrack, level: str) -> None:
+        """Insider drift raises one alert per episode: evaluated at most every DRIFT_CHECK_S per device; on the
+        rising edge an anomaly goes through the hub (Tiger row, live event, explainer), so the roster's last alert
+        can be acknowledged; the falling edge re-arms it."""
+        now = time.monotonic()
+        if now - t.drift_checked < DRIFT_CHECK_S:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:  # a sync caller: nothing to schedule on, try again on the next trust event
+            return
+        t.drift_checked = now
+        try:
+            on = insider_drift(drt, level, level == "suspicious" or drt.in_takeover)
+        except Exception:  # never costs the trust-change row below
+            log.exception("insider-drift check failed")
+            return
+        if on and not t.drift_on:
+            loop.call_soon(self._raise_drift, drt)  # never re-enter hub.publish from inside its hook
+        t.drift_on = on
+
+    def _raise_drift(self, drt: Any) -> None:
+        try:
+            first = min(drift_points(drt), key=lambda p: p.t, default=None)  # the confidence ~5 min ago
+            rt().hub.anomaly(drt, "trust_drop", 3, before=first.confidence if first is not None else None,
+                             after=drt.engine.confidence, top=drt.last_top, action="insider_drift")
+        except Exception:
+            log.exception("insider-drift alert not raised")
+
     def _on_anomaly(self, drt: Any, a: Any) -> None:
         t = self.track(drt.dev.id)
         if a.id in self._anoms:  # an explanation update for an anomaly we already logged
@@ -262,6 +327,9 @@ class AuditLog:
             t.last_redteam_audit = now
         else:
             t.last_anomaly, t.last_anomaly_at = a, utcnow()
+        if a.action == "insider_drift":
+            self._emit_dev(drt, "alert", DRIFT_SUMMARY, 3, a.id)
+            return
         summary = ALERT_TEXT.get(a.kind, a.kind.replace("_", " ").capitalize())
         top = a.top_features[0] if a.top_features else None
         if a.kind in VOICE_KINDS:  # a voice verdict, not a behavioral deviation: say whether the voice was simulated

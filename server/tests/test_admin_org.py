@@ -557,3 +557,59 @@ def test_audit_unit_voice_alert_text(monkeypatch):
     monkeypatch.setattr(voice_demo, "voice_mode", lambda: "real")
     assert alert("voice_spoof") == "Synthetic voice blocked"
 
+def test_insider_drift_raises_one_acknowledgeable_alert_per_episode(client):
+    """Sustained watch-band trust with no takeover raises ONE org alert (a Tiger/live anomaly the roster's last alert
+    shows, so it can be acknowledged); it re-arms only after the episode ends."""
+    import asyncio
+
+    from app.core.audit import DRIFT_SUMMARY
+    from app.core.runtime import rt
+    from twobme_common.types import TrustPoint, utcnow
+
+    _uid, dev_a, agent = setup_monitored(client)
+    for _ in range(3):
+        agent.tick("a")
+    r = rt()
+    drt = r.hub.devices[uuid.UUID(dev_a)]
+    tr = r.extras["audit"].track(uuid.UUID(dev_a))
+
+    def drift_history() -> None:
+        now = utcnow()
+        drt.session_started_at = now - timedelta(seconds=300)
+        for i in range(40):
+            drt.history.append(TrustPoint(t=now - timedelta(seconds=5 * (40 - i)), confidence=0.70, level="watch"))
+
+    def tick_and_settle() -> None:
+        tr.drift_checked = 0.0  # skip the 10 s throttle
+        agent.tick("a")
+        client.portal.call(asyncio.sleep, 0.05)  # the alert is scheduled with call_soon, outside hub.publish
+
+    def drift_alerts() -> list[dict]:
+        return [x for x in audit(client, device_id=dev_a, limit=300) if x["kind"] == "alert"
+                and x["summary"] == DRIFT_SUMMARY]
+
+    tick_and_settle()
+    assert not drift_alerts() and tr.drift_on is False  # a normal device: no alert
+    drift_history()
+    tick_and_settle()
+    rows = drift_alerts()
+    assert len(rows) == 1 and rows[0]["severity"] == 3 and rows[0]["handle"] == "A" and rows[0]["ref_id"]
+    assert tr.drift_on is True
+    row = row_for(roster(client), dev_a)
+    assert "insider_drift" in row["flags"] and "takeover_suspected" not in row["flags"]
+    la = row["last_anomaly"]
+    assert la["id"] == rows[0]["ref_id"] and la["kind"] == "trust_drop" and la["action"] == "insider_drift"
+    assert la["trust_before"] == pytest.approx(0.70) and la["severity"] == 3
+    # still drifting: no second alert
+    tick_and_settle()
+    assert len(drift_alerts()) == 1
+    # acknowledgeable like any other alert
+    ack = act(client, dev_a, "ack_alert", anomaly_id=la["id"])
+    assert ack.status_code == 200 and ack.json()["summary"] == "Alert acknowledged (insider drift)"
+
+    # a takeover (marker) is never an insider drift
+    tr.drift_on = False
+    client.post("/api/demo/marker", json={"device_id": dev_a, "label": "takeover_start"}, headers=ADMIN)
+    tick_and_settle()
+    assert tr.drift_on is False and len(drift_alerts()) == 1
+    agent.close()
