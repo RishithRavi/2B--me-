@@ -21,10 +21,22 @@ cleanup() { [ -n "$PID" ] && kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev
 trap cleanup EXIT
 
 docker compose -f infra/docker-compose.dev.yml up -d db >/dev/null
-for _ in $(seq 1 60); do
-  docker compose -f infra/docker-compose.dev.yml exec -T db pg_isready -U postgres -d tsdb >/dev/null 2>&1 && break
+ready_streak=0
+for _ in $(seq 1 120); do
+  if docker compose -f infra/docker-compose.dev.yml exec -T db pg_isready -U postgres -d tsdb >/dev/null 2>&1 \
+    && docker compose -f infra/docker-compose.dev.yml exec -T db psql -U postgres -d postgres -qc "SELECT 1" >/dev/null 2>&1; then
+    ready_streak=$((ready_streak + 1))
+    [ "$ready_streak" -ge 3 ] && break
+  else
+    ready_streak=0
+  fi
   sleep 1
 done
+if [ "$ready_streak" -lt 3 ]; then
+  echo "TimescaleDB did not become stably ready"
+  docker compose -f infra/docker-compose.dev.yml logs --tail=80 db
+  exit 1
+fi
 if [ -z "${E2E_DB_URL:-}" ]; then  # fresh database every run (no cross-run training contamination)
   docker compose -f infra/docker-compose.dev.yml exec -T db psql -U postgres -d postgres -qc "DROP DATABASE IF EXISTS tsdb_e2e WITH (FORCE)" >/dev/null
   docker compose -f infra/docker-compose.dev.yml exec -T db psql -U postgres -d postgres -qc "CREATE DATABASE tsdb_e2e" >/dev/null

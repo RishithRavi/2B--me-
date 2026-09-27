@@ -307,3 +307,12 @@ Format: `- HH:MM ET · <who> · <what> · <next / blockers>`
 - Kept the claim bounded to what exists in the repository: deploy scripts, Caddy/Compose configuration,
   privacy-safe anomaly-explanation input and a deterministic no-credential fallback. No live production
   deployment, DNS change or public-domain availability is claimed.
+
+## 2026-09-26 — Integrated release candidate
+
+- Built `codex/release-candidate` from the gate-green `ws-voice` integration branch and carried forward
+  the bounded Vultr documentation/UI changes.
+- Added a GitHub Actions merge gate and a concise `RELEASE_CHECKLIST.md` that separates automated checks
+  from fresh A/B trials, public deployment, real-voice calibration and hardware rehearsal.
+- Aligned the product wording with the implementation: the server scores privacy-safe aggregates, and
+  the active identity model uses keyboard, mouse and scroll while workflow/temporal remain diagnostic.

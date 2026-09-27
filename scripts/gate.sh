@@ -12,6 +12,7 @@ cd "$(git rev-parse --show-toplevel)"
 stream="${1:-all}"
 results=()
 failed=0
+if command -v pnpm >/dev/null 2>&1; then pnpm_cmd="pnpm"; else pnpm_cmd="corepack pnpm"; fi
 
 step() {  # step <name> <cmd...>
   local name="$1"; shift
@@ -51,16 +52,16 @@ fi
 if [ "${GATE_SKIP_WEB:-0}" = "1" ]; then
   skip "web" "GATE_SKIP_WEB=1"
 elif [ -d web/node_modules ]; then
-  step "web typecheck" bash -c "cd web && corepack pnpm run typecheck"
-  step "web tests" bash -c "cd web && corepack pnpm run test"
+  step "web typecheck" bash -c "cd web && $pnpm_cmd run typecheck"
+  step "web tests" bash -c "cd web && $pnpm_cmd run test"
 else
-  skip "web" "web/node_modules missing (cd web && corepack pnpm i)"
+  skip "web" "web/node_modules missing (pnpm --dir web install --frozen-lockfile)"
 fi
 
 if [ -d overlay/node_modules ]; then
-  step "overlay typecheck + tests" bash -c "cd overlay && corepack pnpm run test"
+  step "overlay typecheck + tests" bash -c "cd overlay && $pnpm_cmd run test"
 else
-  skip "overlay" "overlay/node_modules missing (cd overlay && corepack pnpm i)"
+  skip "overlay" "overlay/node_modules missing (pnpm --dir overlay install --frozen-lockfile)"
 fi
 
 if [ "${GATE_SKIP_E2E:-0}" = "1" ]; then

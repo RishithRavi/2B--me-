@@ -19,7 +19,8 @@ Most security checks happen once, at login. 2bME keeps asking one question for t
 one-class, 1:1 check against a single person's own baseline, so it needs no database of other people.
 
 1. **Enroll one person.** A macOS agent turns keyboard, trackpad, scroll and app-switching **timing** into
-   privacy-safe aggregate blocks. The server learns a baseline from that one person's blocks.
+   privacy-safe aggregate blocks. The server learns a baseline from that one person's blocks; the identity
+   model scores keyboard, mouse and scroll evidence, and workflow/temporal blocks are captured for diagnostics.
 2. **Continuous trust.** Every 5 s, fresh blocks are scored against the baseline and accumulated into a
    calibrated trust score, P(still the owner). A password never raises it.
 3. **Risk-based step-up.** When trust falls below 40%, or a risky action needs more (a $2,000 checkout
@@ -115,11 +116,13 @@ docker compose -f infra/docker-compose.dev.yml up -d db  # local TimescaleDB-HA 
 TIGER_DATABASE_URL=postgres://postgres:postgres@localhost:5433/tsdb COOKIE_SECURE=false DEMO_MODE=true \
   ADMIN_TOKEN=dev-admin SEED_PASSWORD_A=dev-a SEED_PASSWORD_B=dev-b SEED_PASSWORD_ADMIN=dev-admin-pw \
   uv run uvicorn app.main:app --app-dir server --port 8000
-cd web && corepack pnpm i && corepack pnpm dev           # http://localhost:3000 (proxies /api to :8000)
+npm install --global pnpm@12.6.0                         # once per development machine
+cd web && pnpm i && pnpm dev                             # http://localhost:3000 (proxies /api to :8000)
 scripts/gate.sh core                                     # merge gate
 ```
 Contracts: edit `packages/common/src/twobme_common/types.py` or `contracts/*.yaml`, then
 `uv run python scripts/core_gen_ts.py` (regenerates `web/src/lib/contracts.ts` + report schemas).
+Release and evidence steps: see `RELEASE_CHECKLIST.md`.
 
 No backend? Every page has a clearly labelled simulated mode: add `?mock=1` (for example
 `/dashboard?stage=1&mock=1`, `/admin?mock=1`, `/lab?mock=1`, which shows SAMPLE fixtures). The flag
