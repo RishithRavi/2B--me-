@@ -1,11 +1,11 @@
 "use client";
 
-import { FlaskConical, LogIn, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { FlaskConical, LogIn, LogOut, Menu, Moon, Sun, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { api, errorMessage } from "@/lib/api";
 import { useMockMode } from "@/lib/mode";
 import { clearMe, useMe } from "@/lib/session";
@@ -40,6 +41,10 @@ export function Nav() {
   const { status, me } = useMe();
   const mock = useMockMode();
   const theme = useTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
+  // A plain <a> on purpose: the full page load with ?mock=0 clears the tab's sticky mock mode (lib/mode.ts).
+  const exitHref = `${pathname}?mock=0`;
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   async function logout() {
     try {
@@ -61,13 +66,14 @@ export function Nav() {
           <Wordmark />
         </Link>
 
-        <nav className="scrollbar-thin -mx-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 sm:ml-4">
+        <nav aria-label="Main" className="scrollbar-thin -mx-1 hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 py-1 sm:ml-4 sm:flex">
           {LINKS.map((l) => {
-            const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
+            const active = isActive(l.href);
             return (
               <Link
                 key={l.href}
                 href={l.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "relative rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground",
                   active && "text-foreground",
@@ -79,12 +85,33 @@ export function Nav() {
             );
           })}
         </nav>
+        <div className="flex-1 sm:hidden" />
 
         <div className="flex shrink-0 items-center gap-1.5">
           {mock && (
-            <Badge variant="outline" className="hidden gap-1 border-trust-watch/40 font-mono text-[10px] tracking-wider text-trust-watch uppercase sm:inline-flex">
-              <FlaskConical /> Mock data
-            </Badge>
+            <>
+              {/* Phones: a compact badge that opens the menu, where Exit demo lives. */}
+              <button
+                type="button"
+                onClick={() => setMenuOpen(true)}
+                aria-label="Mock data (open the menu to exit the demo)"
+                title="Mock data"
+                className="inline-flex h-6 items-center rounded-4xl border border-trust-watch/40 bg-trust-watch/8 px-1.5 text-trust-watch outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:hidden"
+              >
+                <FlaskConical className="size-3.5" />
+              </button>
+              <span className="hidden h-6 items-center overflow-hidden rounded-4xl border border-trust-watch/40 text-trust-watch sm:inline-flex">
+                <span className="inline-flex items-center gap-1 px-2 font-mono text-[10px] tracking-wider uppercase">
+                  <FlaskConical className="size-3" /> Mock data
+                </span>
+                <a
+                  href={exitHref}
+                  className="inline-flex h-full items-center border-l border-trust-watch/40 px-2 text-[11px] font-medium outline-none hover:bg-trust-watch/12 focus-visible:bg-trust-watch/12"
+                >
+                  Exit demo
+                </a>
+              </span>
+            </>
           )}
           <Button
             variant="ghost"
@@ -97,27 +124,45 @@ export function Nav() {
           {status === "ok" && me ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5">
+                <Button variant="outline" size="sm" className="gap-1.5" aria-label="Account menu">
                   <UserRound />
-                  <span className="hidden max-w-[10rem] truncate sm:inline">{me.handle}</span>
-                  {me.role === "admin" && <span className="hidden font-mono text-[10px] text-muted-foreground uppercase sm:inline">obs</span>}
+                  <span className="hidden max-w-[10rem] truncate sm:inline">{mock ? "Demo observer" : me.handle}</span>
+                  {me.role === "admin" && !mock && <span className="hidden font-mono text-[10px] text-muted-foreground uppercase sm:inline">obs</span>}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-52">
                 <DropdownMenuLabel className="space-y-0.5">
-                  <div className="text-sm font-medium">{me.email}</div>
-                  <div className="text-xs font-normal text-muted-foreground">
-                    {me.role === "admin" ? "Observer (admin)" : "User"}
-                    {me.device ? ` · ${me.device.label}` : ""}
-                  </div>
+                  {mock ? (
+                    <>
+                      <div className="text-sm font-medium">Simulated demo session</div>
+                      <div className="text-xs font-normal text-muted-foreground">Demo observer · synthetic data, no account</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-sm font-medium">{me.email}</div>
+                      <div className="text-xs font-normal text-muted-foreground">
+                        {me.role === "admin" ? "Observer (admin)" : "User"}
+                        {me.device ? ` · ${me.device.label}` : ""}
+                      </div>
+                    </>
+                  )}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/dashboard?stage=1">Stage view (projector)</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void logout()} disabled={mock}>
-                  <LogOut /> Log out
-                </DropdownMenuItem>
+                {mock ? (
+                  <DropdownMenuItem asChild>
+                    {/* Full page load: ?mock=0 ends the demo before the real login. */}
+                    <a href="/login?mock=0">
+                      <LogIn /> Log in (exits demo)
+                    </a>
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onSelect={() => void logout()}>
+                    <LogOut /> Log out
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : status === "loading" ? (
@@ -129,8 +174,52 @@ export function Nav() {
               </Link>
             </Button>
           )}
+          <Button variant="ghost" size="icon-sm" className="sm:hidden" aria-label="Open menu" onClick={() => setMenuOpen(true)}>
+            <Menu />
+          </Button>
         </div>
       </div>
+
+      {/* Phones: the page links (and the demo switch) in a sheet. */}
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <SheetContent side="right" className="w-72 gap-0 p-0">
+          <SheetHeader className="border-b px-4 pt-4 pb-3">
+            <SheetTitle>Menu</SheetTitle>
+            <SheetDescription className="sr-only">Site pages</SheetDescription>
+          </SheetHeader>
+          <nav aria-label="Main" className="flex flex-col gap-0.5 p-2">
+            {LINKS.map((l) => {
+              const active = isActive(l.href);
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => setMenuOpen(false)}
+                  className={cn(
+                    "flex items-center justify-between rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+                    active && "bg-muted font-medium text-foreground",
+                  )}
+                >
+                  {l.label}
+                  {active && <span className="size-1.5 rounded-full bg-foreground" aria-hidden />}
+                </Link>
+              );
+            })}
+          </nav>
+          {mock && (
+            <div className="mx-2 mt-2 space-y-2 rounded-lg border border-trust-watch/40 bg-trust-watch/8 p-3">
+              <div className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-wider text-trust-watch uppercase">
+                <FlaskConical className="size-3" /> Mock data
+              </div>
+              <p className="text-xs text-muted-foreground">This tab shows synthetic data simulated in your browser.</p>
+              <Button asChild size="sm" variant="outline" className="w-full">
+                <a href={exitHref}>Exit demo</a>
+              </Button>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </header>
   );
 }
