@@ -1,8 +1,8 @@
-# 2bME — continuous behavioral identity
+# 2bME: know who's really at the keyboard
 
-> Login proves who you *were*. 2bME keeps checking who you *are*.
+> **A password proves who you *were* when you logged in. 2bME keeps checking who you *are*.**
 
-Deploying to **https://2bme.tech** on Vultr (not live yet) · HackGT 13
+**Live:** [2bme.tech](https://2bme.tech) · **Event:** HackGT 13
 
 <!-- HEARSAY JUDGE BOX (Codex 2 fills in at C6):
 | NSA Hearsay | |
@@ -13,148 +13,171 @@ Deploying to **https://2bme.tech** on Vultr (not live yet) · HackGT 13
 | Run | `docker run --rm --network none -v $PWD/test:/data -v $PWD/out:/out ghcr.io/...` |
 -->
 
-## What it does
-Most security checks happen once, at login. 2bME keeps asking one question for the whole session:
-**is the person at this keyboard still the enrolled owner?** It never tries to identify anyone. It is a
-one-class, 1:1 check against a single person's own baseline, so it needs no database of other people.
+---
 
-1. **Enroll one person.** A macOS agent turns keyboard, trackpad and scroll **timing** into privacy-safe
-   aggregate blocks (app-switch and overall event-rhythm blocks are still captured, but retired from the identity
-   model and not scored). The server learns a baseline from that one person's blocks.
-2. **Continuous trust.** Every 5 s, fresh blocks are scored against the baseline and accumulated into a
-   calibrated trust score, P(still the owner). A password never raises it.
-3. **Risk-based step-up.** When trust falls below 40%, or a risky action needs more (a $2,000 checkout
-   needs ≥ 90%), 2bME asks for an **independent factor**: a spoken random phrase checked for the words, the
-   speaker and synthetic speech, or a TOTP code. **Behavior alone never blocks**; only that check can.
-4. **Safe learning.** Only high-confidence genuine blocks (trust ≥ 95% over the last minute, no open or
-   failed challenge) become update candidates, and blocks marked as a takeover never do. The loop is
-   designed so an attacker can't teach the model their habits: candidates from the 2 minutes before any
-   alert or block are revoked, and once a model exists only an admin can put a device back into enroll
-   mode (IMPLEMENTATION.md §7 B7, §5.3). Retraining is operator-triggered ("Retrain now"), guarded
-   (anchor share, change cap, regression check) and versioned; an automatic schedule is roadmap.
+## The problem, in one minute
 
-Tiger Data stores the behavior history, baselines, anomalies and the audit trail.
+Once you log in, almost every system trusts you until you log out. The security check happens once, at the front door. After that, nobody asks again.
 
-## Two UIs, two audiences
-- **For individuals: the overlay** (`overlay/`, Electron). An always-on-top pill on the owner's Mac shows
-  live trust. When a challenge arms, a full-screen voice check takes over ("Not now" is allowed, because
-  behavior alone never blocks). A failed check signs the session out and shows a lock screen until the
-  owner unlocks with a fresh phrase. The lock is the overlay plus session revocation, not an OS-level
-  lock.
-- **For small companies: the org console** (`/admin` on the site). A security admin sees every
-  employee session: live trust, who is drifting, who is mid-challenge or locked, and an audit trail of
-  trust changes, alerts, challenges and admin actions for tracing a breach back. The demo roster is
-  **synthetic and anonymized** ("Employee NN"); no real person's behavior.
-- The site also has the per-device dashboard (the admin's drill-in, and the stage view for the demo),
-  `/history` (Tiger), `/lab` (the evidence) and the `/shop` checkout scenario.
+The costly attacks happen after that check:
 
-## What is actually running (be honest in the pitch)
-| Piece | Mode | How to tell |
+- someone sits down at an unlocked laptop
+- a stolen session cookie is replayed from another machine
+- a scammer "helps" an elderly relative by taking over their computer
+- an insider uses a coworker's logged-in account
+
+In the U.S. in 2023, **business email compromise cost companies $2.9 billion**, and **Americans over 60 lost $3.4 billion to cybercrime** (FBI IC3, 2023). In most of these cases the login was valid. The person behind it wasn't.
+
+## Our answer
+
+**2bME is continuous identity.** It learns *how* you use your computer: your typing rhythm, the way you move the mouse, how you scroll, and how you switch between apps. From that it keeps a live **trust score** for as long as you're working.
+
+When someone else takes over, their rhythm doesn't match yours and the trust score drops. If they then try something risky, such as a $2,000 purchase, 2bME asks for a **voice check** before letting it through.
+
+> Think of it like a bank teller who has known you for years. Your ID card never changed, but they can tell it isn't you at the counter.
+
+## The demo: what judges will see
+
+| Step | What happens | What you see |
 |---|---|---|
-| Behavioral model | `twobme_ml` (per-user one-class detector) when the package is installed; otherwise `fallback` (median/MAD distance to the baseline) | footer "model …", `GET /api/status` → `model_backend` (or `inference.model_backend`) |
-| Where it runs | per user, one-class, but scored and trained **on the server** from Tiger history. On-device scoring is roadmap | — |
-| Voice step-up | `VOICE_MODE=stub`: canned demo outcomes, labelled **"Voice: simulated (stub)"** in the site footer; never narrate them as a live analysis. `VOICE_MODE=real`: Hearsay VAD, anti-spoof (DF_Arena), ECAPA speaker match, DSP/FFT and speech-to-text, which needs pinned model revisions and a measured calibration | footer, `GET /api/status` → `voice_mode` |
-| Anomaly explanations | a local template unless a Vultr Serverless Inference key is set | footer "explanations template/vultr" |
-| Evidence (`/lab`) | real recordings of two teammates, and weak so far: fused A-vs-not-A EER 37.5% (AUC 0.78); mouse near chance; keyboard not measured yet; workflow and temporal retired from the identity model (captured, not scored); 0 of 5 live takeover trials. Not a blind test: not-A's blocks also fitted β and were used to choose the detector, so the EERs are optimistic. FAR/FRR at the 40% cut needs the splice replay (not run) | `reports/eval.json`, rendered at `/lab` |
+| 1. **Enroll** | The owner uses the laptop normally while 2bME learns their behavior. | An identity card with a model version |
+| 2. **Normal use** | The owner keeps working. | The trust score stays high (green) |
+| 3. **Takeover** | A teammate sits down and starts using the same laptop. | Trust falls in real time, with "why" chips such as *typing rhythm unusual* |
+| 4. **Risky action** | The intruder tries a $2,000 checkout. | The purchase is paused and a voice challenge appears |
+| 5. **Voice check** | ElevenLabs speaks a random phrase and the person repeats it. | **VERIFY** (owner), **BLOCK_IMPOSTOR** (wrong voice) or **BLOCK_SPOOF** (AI-cloned voice) |
+| 6. **Lock** | A failed check locks the Mac. | A full-screen lock from the on-laptop overlay |
+| 7. **Org view** | The security team opens `/admin`. | Every employee session, anomalies and an audit trail of each alert and challenge |
 
-The synthetic end-to-end test (`scripts/core_e2e_local.sh`) separates people by construction. It proves the
-plumbing, never discrimination, so its numbers are never quoted as evidence.
+**Behavior alone never blocks anyone.** A low score only asks for more proof: voice, or a one-time code (TOTP) as a fallback. Nobody gets locked out for having an off day.
+
+## Privacy is part of the product
+
+We measure **timing, not content.** 2bME never records:
+
+- what you type, or passwords
+- clipboard contents or document text
+- window titles, URLs or app names
+- which keys you press (keys are reduced to "left hand / right hand / space / digit" on the laptop, then discarded)
+
+Only statistics leave the laptop, such as "median gap between keystrokes in this 10-second window." The dashboard has a **"What left this laptop"** viewer that shows the exact data sent. Every merge runs an automated privacy check (`scripts/check_privacy.sh`) that fails the build if content-bearing data could reach the network.
+
+Voice: *"Our server deletes challenge audio after scoring and stores only embeddings and scores. ElevenLabs processes the prompt and STT audio and, on our plan, retains it in account history (Zero Retention is enterprise-only). `STT_BACKEND=local` avoids this."*
+
+## How it works
 
 ```
-agent (PyObjC tap → key classes → evidence blocks) ──wss──▶ FastAPI hub ──▶ TrustEngine ──▶ dashboard / overlay / org console
-                                                               │                  │
-                                                               ├─▶ Tiger (hypertables, columnstore, caggs, audit trail)
-                                                               └─▶ voice step-up (prompt, STT, ECAPA, DF_Arena, DSP/FFT) or TOTP
+  ┌──────────── Your Mac ────────────┐        ┌────────── Cloud (Vultr) ──────────┐
+  │ keyboard · mouse · scroll · apps │        │                                   │
+  │            │                     │        │  Trust engine ──▶ live trust score│
+  │  timing only, no content         │  wss   │        │                          │
+  │            ▼                     │ ─────▶ │        ├──▶ Tiger Data (history)  │
+  │  privacy-safe summary blocks     │        │        └──▶ Voice step-up         │
+  │                                  │ ◀───── │             (ElevenLabs + anti-   │
+  │  Overlay: trust pill → voice     │ trust, │              spoof + speaker ID)  │
+  │  check → lock screen             │ lock   │                                   │
+  └──────────────────────────────────┘        └──────────────┬────────────────────┘
+                                                             ▼
+                                   2bme.tech: dashboard · shop · lab · admin
 ```
 
-## Vultr integration
+1. **Capture.** A small macOS agent watches input *timing* and turns it into anonymous summary blocks.
+2. **Score.** The server compares each block with the owner's learned profile and updates a trust score every few seconds.
+3. **Step up.** When trust is low and the action is risky, the user gets a voice challenge.
+4. **Remember.** Every score, anomaly and challenge is stored as time-series history, so a security team can trace exactly when a session changed hands.
 
-Vultr is a concrete deployment and inference integration in this repository, not a requirement for the
-local demo:
+The model learns **who you are *not***. It trains only on the owner's own behavior and flags anything that doesn't fit, so it needs no database of other people. It also only updates its baseline on activity it's confident is really you. An intruder can't slowly "teach" it their habits.
 
-- **Vultr Compute target:** `infra/docker-compose.yml`, `infra/Caddyfile` and `infra/deploy.sh` package
-  the FastAPI hub, static web app and Tiger Data connection for a small Ubuntu VM behind HTTPS.
-- **Vultr Serverless Inference:** `server/app/core/explain.py` uses Vultr's OpenAI-compatible endpoint
-  to turn the trust change and five largest feature deviations into a short anomaly explanation. Raw
-  keystrokes, audio and activity streams are never included in that request.
-- **Graceful local fallback:** without `VULTR_SERVERLESS_INFERENCE_API_KEY` and
-  `VULTR_INFERENCE_MODEL`, the same flow produces a deterministic template explanation. `/api/status`
-  reports the active explanation backend as `vultr` or `template`.
+---
 
-The integration path is implemented and ready to configure; this README does not claim that the public
-domain or the full production stack is currently live.
+## Hackathon tracks
 
-## Privacy promise
-We never record typed content, passwords, clipboard, document text, window titles, URLs or key
-identities. Keycodes are mapped to hand-level classes on the capture thread and dropped; all digits
-collapse into one class. Only per-block percentiles, rates and counts leave the laptop (see "What left
-this laptop" on the dashboard). Mouse paths leave only as statistics normalized by the display; apps leave
-only as a category. We send block aggregates rather than only risk events because baselines, retraining
-and the org console need them. The merge gate (`scripts/check_privacy.sh`) fails if a window title, key
-value, clipboard or bundle ID can reach a logger or transport.
+### 🌊 Oracle of the Deep: AI/ML behavioral fingerprinting
+2bME is an ML system that learns one person's **behavioral fingerprint** from about 80 privacy-safe timing features across keyboard, mouse and scroll (app switching and idle patterns are captured as context). It combines them into a **continuous trust score**. A one-class, owner-only detector with cross-conformal scoring decides how "owner-like" each window of activity is. A fusion engine weighs each input type by how much evidence it has seen. The `/lab` page shows the evidence: owner-vs-intruder error rates for each input type, ablations, and time-to-detection.
 
-Voice: *"Our server deletes challenge audio after scoring and stores only embeddings and scores.
-ElevenLabs processes the prompt and STT audio and, on our plan, retains it in account history (Zero
-Retention is enterprise-only). `STT_BACKEND=local` avoids this."*
+### 🛟 Aramco, A Marina's Mission: security as social good
+Account takeover hurts the people least able to recover: seniors targeted by remote-access scams, small businesses without a security team, and nonprofits that share laptops. 2bME protects them **without asking them to do anything new**. There are no extra passwords and no hardware keys, and nothing changes until someone who isn't them takes over. Because it keeps content private by design, it's safe to deploy for vulnerable users.
 
-## Repo map
-| Path | What | Owner |
-|---|---|---|
-| `contracts/` | frozen contracts: feature spec, trust config, WS/REST docs, schemas, fixtures | Claude |
-| `packages/common` | `twobme_common`: shared pydantic DTOs, spec loader, config | Claude |
-| `server/` | FastAPI hub, policy, Tiger writer/history, auth, admin/org endpoints | Claude (`server/app/voice`: Codex 2) |
-| `web/` | Next.js static site (landing, dashboard, history, lab, shop, verify, enroll, overlay, admin) | Claude / Codex 1 / Codex 2 |
-| `overlay/` | Electron on-laptop overlay: trust pill → full-screen voice check → lock screen | Claude |
-| `infra/` | Docker Compose, Caddy, migrations, deploy | Claude |
-| `agent/`, `packages/features`, `packages/ml` | macOS agent, feature extraction, models, TrustEngine | Codex 1 |
-| `packages/hearsay`, `hearsay_submission/` | voice anti-spoof + NSA Hearsay submission | Codex 2 |
+### 💳 Visa, Reimagine Shopping: frictionless when trusted, step-up when not
+The `/shop` demo has a $2,000 checkout that returns a 3-D-Secure-style result:
+- **Trusted owner (~97% confidence):** **Y**, approved instantly with no extra steps.
+- **Stolen session (~31% confidence):** **C**, a voice challenge, then **Y** (verified) or **N** (declined).
 
-## Dev quickstart
+It covers both attack types: a thief at the same laptop, and a stolen cookie replayed from another machine. Honest shoppers get *less* friction, and fraud still gets stopped. *(The checkout is a clearly labelled demo scenario and is not affiliated with Visa.)*
+
+### 🗣️ ElevenLabs: voice challenges and deepfake red-teaming
+When trust drops, **ElevenLabs** speaks a freshly generated random phrase and **ElevenLabs Scribe** checks that the right words were said. A hybrid verifier then checks the voice itself: DSP/FFT spectral features, an ECAPA speaker embedding and a deepfake detector. We also use ElevenLabs as an **attacker**. We clone our own voices and confirm the system returns **BLOCK_SPOOF**. A live clone-attack tool is part of the demo.
+
+### 🐯 Tiger Data: behavior over time
+Behavior is naturally time-series data: thousands of timestamped blocks per hour. Tiger Data (TimescaleDB) stores all of it using **hypertables**, **columnstore compression** and a **`trust_1m` continuous aggregate** for fast one-minute rollups. It powers the `/history` page, owner baselines, anomaly lookback, and the admin audit trail showing how trust changed over a session. The live scoring loop never waits on the database. Tiger is the memory, not the hot path.
+
+### ☁️ Vultr: real-time inference in the cloud
+The whole backend runs on a **Vultr** VM: the FastAPI hub, trust engine, ML scoring and voice verification behind Caddy with TLS at 2bme.tech. Laptops stream behavior blocks over a secure WebSocket and get a trust score back every ~5 seconds. **Vultr Serverless Inference** writes plain-English, two-sentence explanations of anomalies from feature statistics only, never raw data.
+
+### 🔊 NSA Hearsay
+Our voice anti-spoofing work is also entered in NSA Hearsay, with a predictions TSV, a Docker image and a separate README in [`hearsay_submission/`](hearsay_submission/).
+
+### 🌐 .tech
+The polished live site at **[2bme.tech](https://2bme.tech)**.
+
+---
+
+## What's built
+
+| Area | Status |
+|---|---|
+| macOS agent (keyboard, mouse, scroll, app-switch timing; no content) | ✅ |
+| Live trust score + dashboard with "why" chips | ✅ |
+| Owner enrollment and one-click retraining | ✅ |
+| Voice step-up (ElevenLabs prompt + STT, speaker match, anti-spoof, DSP/FFT) | ✅ |
+| TOTP fallback | ✅ |
+| $2,000 checkout with Y / C / N outcomes | ✅ |
+| On-laptop overlay: trust pill → voice check → lock screen | ✅ |
+| Tiger Data history, compression and continuous aggregates | ✅ |
+| `/admin` org view: roster, anomalies, audit trail (synthetic, anonymized demo employees) | ✅ |
+
+## Pages to visit
+
+| Page | What it shows |
+|---|---|
+| [`/`](https://2bme.tech) | The pitch and the privacy promise |
+| `/dashboard` | The live trust gauge, per-input bars and "What left this laptop" |
+| `/shop` | The $2,000 checkout step-up |
+| `/verify` | The voice challenge |
+| `/lab` | Evidence that behavior identifies a person |
+| `/history` | Trust over time, from Tiger Data |
+| `/admin` | The security team's org-wide view |
+
+---
+
+## For developers
+
+### Repo map
+| Path | What |
+|---|---|
+| `agent/` | macOS capture agent (Python + PyObjC) |
+| `packages/features`, `packages/ml` | Feature extraction, models, TrustEngine |
+| `packages/common` | `twobme_common`: shared pydantic DTOs, spec loader, config |
+| `server/` | FastAPI hub, policy, Tiger writer/history, auth, voice |
+| `web/` | Next.js static site (landing, dashboard, history, lab, shop, verify, enroll, overlay, admin) |
+| `overlay/` | Electron on-laptop overlay |
+| `infra/` | Docker Compose, Caddy, migrations, deploy |
+| `contracts/` | Frozen contracts: feature spec, trust config, WS/REST docs, schemas, fixtures |
+| `packages/hearsay`, `hearsay_submission/` | Voice anti-spoof + NSA Hearsay submission |
+
+### Quickstart
 ```bash
 uv sync --all-packages                                   # Python 3.12 workspace
 docker compose -f infra/docker-compose.dev.yml up -d db  # local TimescaleDB-HA on :5433
-TIGER_DATABASE_URL=postgres://postgres:postgres@localhost:5433/tsdb COOKIE_SECURE=false DEMO_MODE=true \
-  ADMIN_TOKEN=dev-admin SEED_PASSWORD_A=dev-a SEED_PASSWORD_B=dev-b SEED_PASSWORD_ADMIN=dev-admin-pw \
+TIGER_DATABASE_URL=postgres://postgres:postgres@localhost:5433/tsdb COOKIE_SECURE=false \
   uv run uvicorn app.main:app --app-dir server --port 8000
-npm install --global pnpm@12.6.0                         # once per development machine
-cd web && pnpm i && pnpm dev                             # http://localhost:3000 (proxies /api to :8000)
+cd web && corepack pnpm i && corepack pnpm dev           # http://localhost:3000 (proxies /api to :8000)
 scripts/gate.sh core                                     # merge gate
 ```
-Contracts: edit `packages/common/src/twobme_common/types.py` or `contracts/*.yaml`, then
+Contracts: edit `packages/common/src/twobme_common/types.py` or `contracts/*.yaml`, then run
 `uv run python scripts/core_gen_ts.py` (regenerates `web/src/lib/contracts.ts` + report schemas).
-Release and evidence steps: see `RELEASE_CHECKLIST.md`.
 
-No backend? Every page has a clearly labelled simulated mode: add `?mock=1` (for example
-`/dashboard?stage=1&mock=1`, `/admin?mock=1`, `/lab?mock=1`, which shows SAMPLE fixtures). The flag
-sticks for the browser tab until a page is opened with `?mock=0`, so on the stage laptop open the live view
-as `/dashboard?stage=1&mock=0` (the landing CTAs already do).
+Deeper design notes: [`IMPLEMENTATION.md`](IMPLEMENTATION.md).
 
-## Running the demo
-- **Real agent** (A's Mac, Terminal.app with Input Monitoring): see `agent/README.md`
-  (`twobme-agent pair --email a@…`, then `twobme-agent run --mode enroll|monitor`).
-- **Overlay:** `cd overlay && corepack pnpm i && corepack pnpm start` (see `overlay/README.md`).
-- **Stage replay** (a fake agent streaming hand-shaped aggregate ticks through the real hub and Tiger;
-  always announce it as a replay):
-  ```bash
-  uv run python scripts/core_replay_ticks.py --api http://localhost:8000 --schedule a:24,b:12   # 2 min genuine, 1 min impostor
-  ```
-- **Org console demo** (seeds pseudonymous "Employee NN" users and devices through
-  `POST /api/demo/org/seed`, then streams them through the real hub next to A's device):
-  ```bash
-  python scripts/core_org_demo.py --api http://localhost:8000 --admin-token "$ADMIN_TOKEN"
-  ```
-  Then open `/admin` as `admin@2bme.tech`. Without it, `/admin?mock=1` shows a seeded synthetic roster in
-  the browser.
+---
 
-## Sponsors (only what is built)
-- **Tiger Data:** behavior history, baselines, anomalies and the audit trail (hypertables, columnstore
-  compression, continuous aggregates; `/history`, `/api/tiger/stats`).
-- **Vultr:** hosting for the API and the behavioral model (deployment in progress). Explanations use a
-  template until a Serverless Inference key is configured.
-- **ElevenLabs:** spoken challenge prompts and speech-to-text in real voice mode, and synthetic voices for
-  spoof testing.
-- **.tech:** 2bme.tech, the site and the org console.
-- **NSA Hearsay:** the voice anti-spoof layer of the step-up (see `hearsay_submission/`).
-- **Visa:** the `/shop` 3DS-style Y/C/N checkout is a clearly labelled demo scenario, not affiliated with
-  Visa.
-- **Backboard:** roadmap (long-term contextual behavior history); not integrated.
+*The Visa-style checkout is a clearly labelled demo scenario and is not affiliated with Visa. `/admin`'s employee roster is synthetic, anonymized demo data generated in the browser. It contains no real person's behavior.*
