@@ -4,6 +4,7 @@ import { Archive, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { SimulatedBadge } from "@/components/dashboard/voice-analysis";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,14 +28,25 @@ function ConfCell({ v }: { v: number | null }) {
   );
 }
 
-export function SessionsTable({ rows, selected, onSelect }: { rows: SessionRow[]; selected: string | null; onSelect: (id: string) => void }) {
+export function SessionsTable({
+  rows,
+  selected,
+  onSelect,
+  deviceLabel,
+}: {
+  rows: SessionRow[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+  /** Employee or device name for a session's device_id (null when unknown to this viewer). */
+  deviceLabel?: (deviceId: string | null) => string | null;
+}) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Started</TableHead>
-          <TableHead>Duration</TableHead>
-          <TableHead className="text-right">Ticks</TableHead>
+          <TableHead className="hidden sm:table-cell">Duration</TableHead>
+          <TableHead className="hidden text-right sm:table-cell">Ticks</TableHead>
           <TableHead>Avg</TableHead>
           <TableHead>Min</TableHead>
           <TableHead className="text-right">Anomalies</TableHead>
@@ -45,6 +57,7 @@ export function SessionsTable({ rows, selected, onSelect }: { rows: SessionRow[]
           const start = Date.parse(s.started_at);
           const end = s.ended_at ? Date.parse(s.ended_at) : Date.now();
           const active = s.session_id === selected;
+          const who = deviceLabel?.(s.device_id) ?? null;
           return (
             <TableRow
               key={s.session_id}
@@ -56,13 +69,14 @@ export function SessionsTable({ rows, selected, onSelect }: { rows: SessionRow[]
                 <div className="flex flex-col">
                   <span className="text-sm">{fmtAgo(s.started_at)}</span>
                   <span className="font-mono text-[10px] text-muted-foreground">
+                    {who && <span className="font-sans text-foreground/80">{who} · </span>}
                     {shortId(s.session_id)} · {s.channel}
                     {s.status === "active" ? " · live" : ""}
                   </span>
                 </div>
               </TableCell>
-              <TableCell className="tnum font-mono text-xs">{fmtDuration((end - start) / 1000)}</TableCell>
-              <TableCell className="tnum text-right font-mono text-xs">{s.n_ticks.toLocaleString()}</TableCell>
+              <TableCell className="tnum hidden font-mono text-xs sm:table-cell">{fmtDuration((end - start) / 1000)}</TableCell>
+              <TableCell className="tnum hidden text-right font-mono text-xs sm:table-cell">{s.n_ticks.toLocaleString()}</TableCell>
               <TableCell>
                 <ConfCell v={s.avg_confidence} />
               </TableCell>
@@ -109,7 +123,19 @@ function outcomeTone(decision: string | null, resolution: string | null): { text
   return { text: d, color: "var(--trust-watch)" };
 }
 
-export function AnomaliesList({ rows }: { rows: AnomalyRow[] }) {
+const VOICE_KINDS = new Set<string>(["voice_spoof", "voice_impostor"]);
+
+export function AnomaliesList({
+  rows,
+  voiceSimulated = false,
+  explanations = null,
+}: {
+  rows: AnomalyRow[];
+  /** Stub voice server: voice-result anomalies came from canned outcomes, so they carry the "Simulated voice result" badge. */
+  voiceSimulated?: boolean;
+  /** Where explanations come from (/status inference.explanations): "template" ones are marked as such. */
+  explanations?: "vultr" | "template" | null;
+}) {
   return (
     <ol className="divide-y">
       {rows.map((a) => {
@@ -119,6 +145,7 @@ export function AnomaliesList({ rows }: { rows: AnomalyRow[] }) {
             <div className="flex flex-wrap items-center gap-2">
               <Severity n={a.severity} />
               <span className="text-sm font-medium capitalize">{anomalyLabel(a.kind)}</span>
+              {voiceSimulated && VOICE_KINDS.has(a.kind) && <SimulatedBadge />}
               <span className="font-mono text-[11px] text-muted-foreground">
                 {fmtClock(a.time)} · {fmtAgo(a.time)}
               </span>
@@ -150,6 +177,14 @@ export function AnomaliesList({ rows }: { rows: AnomalyRow[] }) {
               </div>
             )}
             <p className={cn("text-sm leading-relaxed", a.explanation ? "text-muted-foreground" : "text-muted-foreground/60 italic")}>
+              {a.explanation && explanations === "template" && (
+                <span
+                  className="mr-1.5 inline-flex -translate-y-px items-center rounded border px-1 py-px align-middle font-mono text-[9px] tracking-wide text-muted-foreground uppercase"
+                  title="Written by a local template from the feature z-scores (no inference key on this server)"
+                >
+                  template
+                </span>
+              )}
               {a.explanation ?? "Explanation pending (Vultr inference writes it from the feature z-scores only)."}
             </p>
           </li>
@@ -238,15 +273,23 @@ export function TigerCard({ stats, isAdmin, onCompressed, mock }: { stats: Tiger
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-6">
-        <div>
-          <div className="eyebrow">Columnstore</div>
-          <div className="tnum mt-1 text-3xl font-semibold tracking-tight">
-            {totalAfter > 0 ? `${(totalBefore / totalAfter).toFixed(1)}×` : "—"}
+        {totalAfter > 0 ? (
+          <div>
+            <div className="eyebrow">Columnstore</div>
+            <div className="tnum mt-1 text-3xl font-semibold tracking-tight">{`${(totalBefore / totalAfter).toFixed(1)}×`}</div>
+            <div className="text-xs text-muted-foreground">
+              {fmtBytes(totalBefore)} → {fmtBytes(totalAfter)}
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            {fmtBytes(totalBefore)} → {fmtBytes(totalAfter)}
+        ) : (
+          <div className="max-w-xs">
+            <div className="eyebrow">Columnstore</div>
+            <div className="mt-1 text-xl font-semibold tracking-tight">Not compressed yet</div>
+            <div className="text-xs leading-snug text-muted-foreground">
+              No chunk is old enough yet (policy: after 2 h). Admins: Compress now compresses chunks older than 1 h.
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex flex-wrap gap-1.5">
           {stats.caggs.map((c) => (
             <Badge key={c} variant="outline" className="font-mono text-[10px]">
@@ -290,7 +333,7 @@ export function TigerCard({ stats, isAdmin, onCompressed, mock }: { stats: Tiger
                 </div>
               </TableCell>
               <TableCell className="tnum text-right font-mono text-xs text-muted-foreground">
-                {fmtBytes(h.before_bytes)} → {fmtBytes(h.after_bytes)}
+                {(h.after_bytes ?? 0) > 0 ? `${fmtBytes(h.before_bytes)} → ${fmtBytes(h.after_bytes)}` : "uncompressed"}
               </TableCell>
               <TableCell className="tnum text-right font-mono text-xs">{h.ratio !== null ? `${h.ratio.toFixed(1)}×` : "—"}</TableCell>
             </TableRow>
@@ -320,7 +363,7 @@ export function TigerCard({ stats, isAdmin, onCompressed, mock }: { stats: Tiger
                     className="font-mono text-[11px]"
                     style={{ color: j.last_run_status === "Success" ? "var(--trust-normal)" : j.last_run_status ? "var(--trust-suspicious)" : "var(--muted-foreground)" }}
                   >
-                    {j.last_run_status ?? "never"}
+                    {j.last_run_status ?? "not run yet"}
                   </span>
                 </TableCell>
               </TableRow>

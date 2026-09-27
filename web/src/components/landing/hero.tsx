@@ -1,31 +1,52 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, Building2, Laptop, MonitorPlay, PlayCircle } from "lucide-react";
+import { ArrowRight, Building2, Laptop, LogIn, MonitorPlay, PlayCircle } from "lucide-react";
 import { Dot } from "@/components/site/empty-state";
 import { Button } from "@/components/ui/button";
 import { useMounted, useNow } from "@/lib/hooks";
 import type { LiveState } from "@/lib/live";
 import { feedTone, fmtClock, levelColor, levelLabel, toneColor } from "@/lib/ui";
 
-import { LIVE_DASHBOARD, ORG_CONSOLE_DEMO, SIMULATED_TAKEOVER } from "./links";
+import { LIVE_DASHBOARD, ORG_CONSOLE_DEMO, SIGN_IN_LIVE, SIMULATED_TAKEOVER } from "./links";
 import { TrustSparkline } from "./trust-sparkline";
 
-export function Hero({ state, simulated }: { state: LiveState; simulated: boolean }) {
+/**
+ * The main call to action. A visitor can't open a live device without an account, so they get the labelled
+ * simulation; a signed-in owner or observer gets their live stage view.
+ */
+export function PrimaryCta({ signedIn }: { signedIn: boolean }) {
+  return (
+    <Button asChild size="lg" className="h-10 px-4">
+      {signedIn ? (
+        <a href={LIVE_DASHBOARD}>
+          <MonitorPlay /> Open the live stage view <ArrowRight />
+        </a>
+      ) : (
+        <a href={SIMULATED_TAKEOVER}>
+          <PlayCircle /> Watch a simulated takeover <ArrowRight />
+        </a>
+      )}
+    </Button>
+  );
+}
+
+export function Hero({ state, simulated, signedIn }: { state: LiveState; simulated: boolean; signedIn: boolean }) {
   const now = useNow(1000);
   const mounted = useMounted();
   const trust = state.trust;
   const locked = Boolean(trust?.locked || state.device?.locked);
   const level = locked ? "locked" : (trust?.level ?? "learning");
   const color = levelColor(level);
-  const latest = state.recent[0] ?? null;
+  // Operator ground-truth labels ("Label → impostor (actor b)") are internal; the hero shows what 2bME itself saw.
+  const latest = state.recent.find((f) => f.type !== "label") ?? null;
 
   return (
     <section className="relative overflow-hidden border-b">
       <div className="bg-console-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black_10%,transparent_65%)]" />
       <div className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[60rem] -translate-x-1/2 rounded-full bg-brand/10 blur-3xl" />
-      <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:py-24">
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="space-y-7">
+      <div className="relative mx-auto grid max-w-6xl gap-12 px-4 pt-8 pb-12 sm:px-6 sm:py-16 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:py-24">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="space-y-5 sm:space-y-7">
           <p className="eyebrow">Continuous behavioral authentication</p>
           <h1 className="text-4xl leading-[1.08] font-semibold tracking-tight text-balance sm:text-5xl">
             Login proves who you <em className="text-muted-foreground">were</em>.
@@ -33,7 +54,7 @@ export function Hero({ state, simulated }: { state: LiveState; simulated: boolea
             <span className="text-brand-gradient">2bME</span> keeps checking who you <em className="text-brand">are</em>.
           </h1>
           <p className="max-w-xl text-lg text-pretty text-muted-foreground">
-            2bME learns how one person types, points, scrolls and switches apps, from timing alone and never content. It keeps a live trust score for
+            2bME learns how one person types, points and scrolls, from timing alone and never content. It keeps a live trust score for
             whoever is at the keyboard. When the rhythm stops matching, it asks for an independent check, a spoken phrase or a one-time code, instead of
             trusting the login.
           </p>
@@ -49,11 +70,7 @@ export function Hero({ state, simulated }: { state: LiveState; simulated: boolea
 
           <div className="space-y-3">
             <div className="flex flex-wrap gap-3">
-              <Button asChild size="lg" className="h-10 px-4">
-                <a href={LIVE_DASHBOARD}>
-                  <MonitorPlay /> Watch the live dashboard <ArrowRight />
-                </a>
-              </Button>
+              <PrimaryCta signedIn={signedIn} />
               <Button asChild size="lg" variant="outline" className="h-10 px-4">
                 <a href={ORG_CONSOLE_DEMO}>
                   <Building2 /> Open the org console demo
@@ -61,10 +78,18 @@ export function Hero({ state, simulated }: { state: LiveState; simulated: boolea
               </Button>
             </div>
             <a
-              href={SIMULATED_TAKEOVER}
+              href={signedIn ? SIMULATED_TAKEOVER : SIGN_IN_LIVE}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
             >
-              <PlayCircle className="size-4" /> No account? Watch a simulated takeover
+              {signedIn ? (
+                <>
+                  <PlayCircle className="size-4" /> Or watch a simulated takeover
+                </>
+              ) : (
+                <>
+                  <LogIn className="size-4" /> Owner or observer? Sign in for the live device
+                </>
+              )}
             </a>
           </div>
         </motion.div>

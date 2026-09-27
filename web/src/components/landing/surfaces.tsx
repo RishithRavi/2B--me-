@@ -97,7 +97,7 @@ function MiniLock() {
         <Lock className="size-3.5 text-trust-locked" />
       </div>
       <div className="text-[11px] font-semibold text-white">This Mac is locked</div>
-      <div className="max-w-[70%] text-[7px] leading-snug text-white/60">A cloned voice answered the check. The session was signed out.</div>
+      <div className="max-w-[70%] text-[7px] leading-snug text-white/60">The voice check flagged a synthetic voice. The session was signed out.</div>
       <span className="mt-0.5 inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[7px] font-medium text-black">
         <Mic className="size-2" /> Unlock with voice
       </span>
@@ -133,8 +133,8 @@ type Row = { who: string; team: string; pct: number; locked?: boolean; alert: st
 // Synthetic, anonymized employees (illustration only). Level is derived from the displayed %, never stored.
 const ROSTER: Row[] = [
   { who: "Employee 12", team: "Finance", pct: 31, alert: "takeover suspected · 2 min ago" },
-  { who: "Employee 07", team: "Support", pct: 0, locked: true, alert: "cloned voice blocked · 6 min ago" },
-  { who: "Employee 03", team: "Sales", pct: 64, alert: "unusual app switching · 21 min ago" },
+  { who: "Employee 07", team: "Support", pct: 0, locked: true, alert: "synthetic voice blocked · 6 min ago" },
+  { who: "Employee 03", team: "Sales", pct: 64, alert: "unusual pointer rhythm · 21 min ago" },
   { who: "Employee 18", team: "Engineering", pct: 97, alert: "none today" },
   { who: "Employee 01", team: "Finance", pct: 98, alert: "none today" },
   { who: "Employee 15", team: "Ops", pct: 95, alert: "none today" },
@@ -143,7 +143,7 @@ const ROSTER: Row[] = [
 const AUDIT = [
   ["19:42:10", "Employee 12", "trust 96% → 31%, challenge armed"],
   ["19:42:31", "admin", "force re-verify: Employee 12"],
-  ["19:36:02", "Employee 07", "voice check: cloned voice blocked, device locked"],
+  ["19:36:02", "Employee 07", "voice check: synthetic voice blocked, device locked"],
   ["19:21:47", "Employee 03", "level normal → watch"],
 ] as const;
 
@@ -250,6 +250,7 @@ export function ProductSurfaces() {
             </li>
           ))}
         </ol>
+        <p className="mt-4 text-[11px] text-muted-foreground">Illustration · voice results are simulated in this demo</p>
       </div>
 
       <div className="panel flex flex-col p-6">
@@ -266,7 +267,9 @@ export function ProductSurfaces() {
           <OrgConsoleMock />
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[11px] text-muted-foreground">Illustration. The console demo uses synthetic, anonymized employees.</p>
+          <p className="text-[11px] text-muted-foreground">
+            Illustration · voice results are simulated in this demo. The console demo uses synthetic, anonymized employees.
+          </p>
           <Button asChild size="sm" variant="outline">
             <a href={ORG_CONSOLE_DEMO}>
               Open the org console demo <ArrowRight />

@@ -223,7 +223,7 @@ export default function LabPage() {
       </div>
 
       <p className="mt-8 border-t pt-4 text-xs text-muted-foreground">
-        Impostor data comes from teammates only (2 people). Numbers are small-sample development evidence and are quoted as measured, including where
+        Impostor data comes from one teammate only. Numbers are small-sample development evidence and are quoted as measured, including where
         they are weak.
       </p>
     </div>

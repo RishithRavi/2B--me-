@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { liveFeatureValues } from "@/components/dashboard/identity-card";
+import { isRetired } from "@/components/lab/metrics";
 import { FEATURE_SPEC, type Modality } from "@/lib/contracts";
 import type { LiveState } from "@/lib/live";
 import { MODALITIES, featureLabel, modalityColor, modalityIcon } from "@/lib/ui";
@@ -93,11 +94,19 @@ export function SignatureTree({ state, live }: { state: LiveState; live: boolean
             <div key={m} className="relative lg:pt-5">
               <span className="absolute top-0 left-1/2 hidden h-5 w-px bg-border lg:block" />
               <div className="panel h-full p-4">
-                <div className="mb-3 flex items-center gap-2">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <span className="grid size-7 place-items-center rounded-lg" style={{ background: `color-mix(in oklch, ${modalityColor(m)} 16%, transparent)` }}>
                     <Icon className="size-4" style={{ color: modalityColor(m) }} />
                   </span>
                   <span className="text-sm font-medium">{TITLES[m]}</span>
+                  {isRetired(m) && (
+                    <span
+                      className="rounded-full border px-1.5 py-px font-mono text-[9px] tracking-wide whitespace-nowrap text-muted-foreground uppercase"
+                      title="Captured by the agent, but retired from the identity model: not scored"
+                    >
+                      captured · not scored
+                    </span>
+                  )}
                 </div>
                 <ul className="relative space-y-2 border-l border-border pl-3.5">
                   {leaves.map(([leaf, feats]) => {

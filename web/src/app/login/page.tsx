@@ -1,16 +1,23 @@
 "use client";
 
 import { ArrowRight, Loader2, ShieldCheck } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { SIMULATED_TAKEOVER } from "@/components/landing/links";
 import { Wordmark } from "@/components/site/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
+import { clearMockMode } from "@/lib/mode";
 import { refreshMe } from "@/lib/session";
+
+/** Where to go after signing in: a same-site path from ?next= (never "//host" or a full URL), else the dashboard. */
+function nextPath(search: string): string {
+  const next = new URLSearchParams(search).get("next");
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/dashboard";
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,8 +32,9 @@ export default function LoginPage() {
     setError(null);
     try {
       await api.login(email.trim(), password);
+      clearMockMode(); // a visitor who watched the simulation first must now see their live data
       await refreshMe();
-      router.push("/dashboard");
+      router.push(nextPath(window.location.search));
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.offline ? "Can't reach the 2bME API right now." : err.status === 401 ? "Wrong email or password." : err.detail);
@@ -90,9 +98,10 @@ export default function LoginPage() {
         </form>
         <p className="mt-6 text-center text-xs text-muted-foreground">
           No account?{" "}
-          <Link href="/dashboard?mock=1" className="underline underline-offset-4 hover:text-foreground">
-            Watch the simulated stream
-          </Link>
+          {/* plain <a>: a full page load, so the nav and footer re-read mock mode (landing/links.ts) */}
+          <a href={SIMULATED_TAKEOVER} className="underline underline-offset-4 hover:text-foreground">
+            Watch a simulated takeover
+          </a>
         </p>
       </div>
     </div>

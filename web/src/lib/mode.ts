@@ -23,6 +23,15 @@ export function isMockMode(): boolean {
   }
 }
 
+/** Drop the sticky ?mock=1 for this tab (a real sign-in means the visitor wants live data now). */
+export function clearMockMode(): void {
+  try {
+    window.sessionStorage.removeItem(KEY);
+  } catch {
+    /* storage blocked */
+  }
+}
+
 const noopSubscribe = () => () => {};
 
 /** Hydration-safe: false during prerender, the real value after hydration. */
