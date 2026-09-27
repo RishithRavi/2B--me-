@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuditRow, LiveEvent, RosterRow, TrustLive } from "./contracts";
 import {
   ackedRefs,
+  alertCounts,
   alertingDrops,
   alertRows,
   applyOrg,
@@ -12,6 +13,7 @@ import {
   mergeAudit,
   mergeRoster,
   normalizeRow,
+  openAlerts,
   OrgStore,
   orgKpis,
   parseOrgEvent,
@@ -299,8 +301,19 @@ describe("derived views", () => {
       row({ device_id: "d", level: "locked", locked: true }),
       row({ device_id: "e", online: false }),
     ];
-    const k = orgKpis(rows, [audit("1", -5), audit("2", -90), audit("3", -1, { severity: 1 })], T0);
-    expect(k).toMatchObject({ total: 5, online: 4, atRisk: 2, suspicious: 1, watch: 1, locked: 1, openChallenges: 1, alertsLastHour: 1, synthetic: 5 });
+    const k = orgKpis(
+      rows,
+      [
+        audit("1", -5, { device_id: "b", ref_id: "an-b" }),
+        audit("2", -90, { device_id: "c", ref_id: "an-c" }),
+        audit("3", -1, { device_id: "a", severity: 2 }),
+        audit("4", -2, { kind: "admin_action", device_id: "d", severity: 4, summary: "Admin lock" }),
+        audit("5", -3, { kind: "lock", device_id: "d", severity: 5 }),
+      ],
+      T0,
+    );
+    // Open: b (watch) and c (suspicious). a recovered (normal, no flags); d has no detection, only admin/lock rows.
+    expect(k).toMatchObject({ total: 5, online: 4, atRisk: 2, suspicious: 1, watch: 1, locked: 1, openChallenges: 1, openAlerts: 2, alertsLastHour: 2, synthetic: 5 });
   });
 
   it("sorts the real device first, then by risk", () => {
@@ -351,7 +364,37 @@ describe("derived views", () => {
       audit("3", 1, { kind: "admin_action", summary: "Note: hi", ref_id: null, severity: 0 }),
     ];
     expect([...ackedRefs(rows).keys()].sort()).toEqual(["an1", "an2"]);
-    expect(alertRows(rows).map((r) => r.id)).toEqual(["5", "2"]);
+    // Detections only: admin actions (even a severity-4 lock) are never alerts.
+    expect(alertRows(rows).map((r) => r.id)).toEqual(["2"]);
+  });
+
+  it("collapses re-armed detections to the newest per device and counts them", () => {
+    const OTHER = "33333333-3333-4333-8333-333333333333";
+    const trail = [
+      audit("r3", -1, { ref_id: "an3", severity: 4 }),
+      audit("x", -2, { kind: "challenge", ref_id: "c1", severity: 3 }),
+      audit("o1", -3, { device_id: OTHER, handle: "Employee 02", ref_id: "ano", severity: 3 }),
+      audit("r2", -4, { ref_id: "an2", severity: 4 }),
+      audit("r1", -70, { ref_id: "an1", severity: 4 }),
+    ];
+    expect(alertRows(trail).map((r) => r.id)).toEqual(["r3", "o1"]);
+    expect(alertCounts(trail, T0)).toEqual(new Map([[DEV, 2], [OTHER, 1]]));
+  });
+
+  it("opens an alert only while its device is still at risk and nobody acknowledged it", () => {
+    const OTHER = "33333333-3333-4333-8333-333333333333";
+    const trail = [
+      audit("a1", -1, { ref_id: "an1", severity: 4 }),
+      audit("o1", -2, { device_id: OTHER, ref_id: "ano", severity: 3 }),
+    ];
+    const risky = row({ level: "suspicious", confidence: 0.2, display: 20, flags: ["takeover_suspected"] });
+    const fine = row({ device_id: OTHER, handle: "Employee 02" });
+    const acked = (id: string) => new Map([[id, audit("k", 0, { kind: "admin_action", ref_id: id, summary: "Acknowledged alert: trust drop" })]]);
+    expect(openAlerts(trail, new Map(), [risky, fine]).map((r) => r.id)).toEqual(["a1"]);
+    expect(openAlerts(trail, acked("an1"), [risky, fine])).toEqual([]);
+    // Flags alone keep it open (insider drift in the watch band, or a pending challenge), recovery resolves it.
+    expect(openAlerts(trail, new Map(), [row({ flags: ["insider_drift"] }), fine]).map((r) => r.id)).toEqual(["a1"]);
+    expect(openAlerts(trail, new Map(), [row(), fine])).toEqual([]);
   });
 
   it("exports CSV oldest first with escaping", () => {

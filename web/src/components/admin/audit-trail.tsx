@@ -62,7 +62,7 @@ export function AuditTrail({
   );
   const traced = filter.device !== "all" ? rows.find((r) => r.device_id === filter.device) ?? null : null;
   const first = byDevice.length ? byDevice[byDevice.length - 1] : null;
-  const alerts = byDevice.filter((r) => r.severity >= 3).length;
+  const alerts = byDevice.filter((r) => r.kind === "alert").length; // same rows as the Alert filter chip
   const dashHref = traced ? `/dashboard?device_id=${encodeURIComponent(traced.device_id)}` : "/dashboard";
 
   return (

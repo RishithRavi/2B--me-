@@ -690,6 +690,17 @@ class Sim implements OrgSim {
     );
     if (e.anomaly) e.anomaly.challenge_id = c.live.challenge_id;
     this.emitAnomaly(out, e, now);
+    // Like the live audit log, every anomaly is one detection row (the rail and the open-alerts KPI read these).
+    this.emitAudit(
+      out,
+      e,
+      now,
+      "alert",
+      spoof ? "Synthetic voice on the voice check: the phrase was right, the voice was generated" : "Different speaker on the voice check: the voice didn't match the owner",
+      5,
+      "system",
+      e.anomaly?.id ?? null,
+    );
     e.locked = true;
     e.lockReason = spoof ? "voice_spoof" : "voice_impostor"; // the hub's own lock reasons (hub._blocked)
     this.setFlag(e, "admin_locked", false);

@@ -18,6 +18,7 @@ import type { AdminActionIn, Level } from "@/lib/contracts";
 import { useNow } from "@/lib/hooks";
 import {
   ackedRefs,
+  alertCounts,
   alertingDrops,
   alertRows,
   levelDrops,
@@ -102,6 +103,7 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
   const kpis = useMemo(() => orgKpis(state.rows, state.audit, now), [state.rows, state.audit, now]);
   const alerts = useMemo(() => alertRows(state.audit), [state.audit]);
   const acked = useMemo(() => ackedRefs(state.audit), [state.audit]);
+  const alertCountBy = useMemo(() => alertCounts(state.audit, now), [state.audit, now]);
   const lastAlertBy = useMemo(() => {
     const m = new Map<string, string>();
     for (const a of alerts) if (a.device_id && !m.has(a.device_id)) m.set(a.device_id, a.t);
@@ -303,7 +305,7 @@ export function AdminView({ source, preview = false }: { source: "live" | "demo"
             />
           </div>
           <div className="min-w-0 lg:col-span-4">
-            <AlertsRail alerts={alerts} acked={acked} now={now} onSelect={select} className="lg:sticky lg:top-18 lg:max-h-[calc(100dvh-5.5rem)]" />
+            <AlertsRail alerts={alerts} acked={acked} rows={state.rows} counts={alertCountBy} now={now} onSelect={select} className="lg:sticky lg:top-18 lg:max-h-[calc(100dvh-5.5rem)]" />
           </div>
         </div>
 

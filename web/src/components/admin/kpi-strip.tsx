@@ -113,13 +113,13 @@ export function KpiStrip({ kpis, loading }: { kpis: OrgKpis; loading?: boolean }
         hot={kpis.openChallenges > 0}
       />
       <Tile
-        label="Alerts · last hour"
-        short="Alerts · 1 h"
-        value={kpis.alertsLastHour}
-        sub="severity ≥ 3 in the audit trail"
+        label="Open alerts"
+        short="Open alerts"
+        value={kpis.openAlerts}
+        sub={`unacknowledged detections · ${kpis.alertsLastHour} in the last hour`}
         icon={Siren}
         color="var(--trust-suspicious)"
-        hot={kpis.alertsLastHour > 0}
+        hot={kpis.openAlerts > 0}
       />
     </div>
   );

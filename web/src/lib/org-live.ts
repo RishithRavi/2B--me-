@@ -357,11 +357,61 @@ export function sortRoster(rows: readonly RosterRow[], by: RosterSort = "risk"):
   });
 }
 
-export const ALERT_SEVERITY = 3;
+const HOUR_MS = 60 * 60 * 1000;
 
-/** Alerts rail: every audit row at severity ≥ 3 (alert, high, lock), newest first. */
-export function alertRows(audit: readonly AuditRow[], limit = 40): AuditRow[] {
-  return audit.filter((r) => r.severity >= ALERT_SEVERITY).slice(0, limit);
+/**
+ * Alerts rail: detections only (kind "alert", one per anomaly the hub raised), collapsed to the newest per device,
+ * newest first. Admin actions, locks and challenges are never alerts, whatever their severity, and a re-armed
+ * incident stays one entry (alertCounts carries the ×N).
+ */
+export function alertRows(audit: readonly AuditRow[], limit = Infinity): AuditRow[] {
+  const seen = new Set<string>();
+  const out: AuditRow[] = [];
+  for (const r of audit) {
+    if (r.kind !== "alert") continue;
+    const key = r.device_id ?? `row:${r.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Detections per device in the last hour (the rail's ×N). */
+export function alertCounts(audit: readonly AuditRow[], now: number = Date.now()): Map<string, number> {
+  const since = now - HOUR_MS;
+  const out = new Map<string, number>();
+  for (const r of audit) {
+    if (r.kind === "alert" && r.device_id && tms(r.t) >= since) out.set(r.device_id, (out.get(r.device_id) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** A device an alert can still be about: below Normal, locked, flagged, or mid-challenge. */
+export function stillAtRisk(row: RosterRow): boolean {
+  return (
+    row.locked ||
+    row.level === "watch" ||
+    row.level === "suspicious" ||
+    row.level === "locked" ||
+    row.flags.includes("takeover_suspected") ||
+    row.flags.includes("insider_drift") ||
+    row.open_challenge !== null
+  );
+}
+
+/**
+ * Open alerts: the newest detection per device that no admin acknowledged, on a device that is still at risk. A
+ * device that recovered (back to Normal, flags cleared) counts as resolved. The KPI and the rail both use this.
+ */
+export function openAlerts(alerts: readonly AuditRow[], acked: ReadonlyMap<string, AuditRow>, rows: readonly RosterRow[]): AuditRow[] {
+  const byDevice = new Map(rows.map((r) => [r.device_id, r]));
+  return alertRows(alerts).filter((a) => {
+    if (a.ref_id && acked.has(a.ref_id)) return false;
+    const row = a.device_id ? byDevice.get(a.device_id) : undefined;
+    return row !== undefined && stillAtRisk(row);
+  });
 }
 
 /** Anomaly ids an admin has acknowledged (an admin_action audit row whose ref_id is that anomaly). */
@@ -381,12 +431,15 @@ export interface OrgKpis {
   watch: number;
   locked: number;
   openChallenges: number;
+  /** unacknowledged detections on devices still at risk (openAlerts) */
+  openAlerts: number;
+  /** detections (kind "alert") in the last hour, re-arms included */
   alertsLastHour: number;
   synthetic: number;
 }
 
 export function orgKpis(rows: readonly RosterRow[], audit: readonly AuditRow[], now: number = Date.now()): OrgKpis {
-  const hourAgo = now - 60 * 60 * 1000;
+  const hourAgo = now - HOUR_MS;
   let online = 0;
   let suspicious = 0;
   let watch = 0;
@@ -401,8 +454,9 @@ export function orgKpis(rows: readonly RosterRow[], audit: readonly AuditRow[], 
     else if (r.level === "watch") watch++;
     if (r.open_challenge) openChallenges++;
   }
-  const alertsLastHour = audit.filter((a) => a.severity >= ALERT_SEVERITY && tms(a.t) >= hourAgo).length;
-  return { total: rows.length, online, atRisk: suspicious + watch, suspicious, watch, locked, openChallenges, alertsLastHour, synthetic };
+  const alertsLastHour = audit.filter((a) => a.kind === "alert" && tms(a.t) >= hourAgo).length;
+  const open = openAlerts(alertRows(audit), ackedRefs(audit), rows).length;
+  return { total: rows.length, online, atRisk: suspicious + watch, suspicious, watch, locked, openChallenges, openAlerts: open, alertsLastHour, synthetic };
 }
 
 export interface LevelDrop {
