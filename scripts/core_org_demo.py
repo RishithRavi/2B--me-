@@ -14,8 +14,9 @@ attributes the engine's resets to the human admin.
   * Employee 07 — takeover: impostor-style blocks from T+60 s → trust falls → suspicious → the hub arms a
     proactive voice challenge, which is left for the admin to act on (Lock / Force re-verify / Acknowledge).
   * Employee 13 — insider drift (intermittent credential sharing): over ~4 min a growing share of ticks is
-    off-baseline, steered from the confidence the hub returns so trust ramps into the watch band and settles at
-    ~0.62 without arming a challenge → the roster's `insider_drift` flag.
+    off-baseline, steered from the confidence the hub returns (with hysteresis) so trust steps once into the watch
+    band at T+60 s and settles at ~0.62 without arming a challenge → the roster's `insider_drift` flag and one
+    insider-drift alert per loop.
   * Employee 19 — away: the laptop "closes" from T+120 s to T+300 s (roster shows it offline, then reconnects).
   * Employee 04 — remote session: NOT simulated. A remote-binding decision needs a web session of that user and
     org-demo users have no usable password; no admin endpoint creates decisions on a user's behalf.
@@ -201,13 +202,19 @@ class Ctx:
         return time.monotonic() - self.loop_start
 
 
-def drift_target(t: float, start: float = 10.0, ramp: float = 230.0, floor: float = 0.62) -> float | None:
-    """Confidence the insider-drift employee is steered toward: 0.97 at `start`, concave ramp to `floor` over
-    `ramp` seconds (crosses 0.80 after ~85 s), then held."""
+def drift_target(t: float, start: float = 10.0, step_at: float = 60.0, end: float = 240.0,
+                 floor: float = 0.62) -> float | None:
+    """Confidence the insider-drift employee is steered toward. It never lingers at the 0.80 normal/watch edge (a
+    device hovering there flips Normal/Watch every tick): 0.97 at `start`, easing to 0.88 by `step_at`, one step to
+    0.72 (well inside the watch band), then a slow ramp to `floor` by `end`, then held."""
     if t < start:
         return None
-    x = min(1.0, (t - start) / ramp) ** 0.7
-    return 0.97 - (0.97 - floor) * x
+    if t < step_at:
+        return 0.97 - (0.97 - 0.88) * (t - start) / (step_at - start)
+    return 0.72 - (0.72 - floor) * min(1.0, (t - step_at) / (end - step_at))
+
+
+DRIFT_HYSTERESIS = 0.02  # keep the current mix until trust is this far past the target, so it does not dither
 
 
 def next_drift(emp: Employee, t: float, takeover_at: float) -> float:
@@ -222,7 +229,12 @@ def next_drift(emp: Employee, t: float, takeover_at: float) -> float:
     if emp.role == "drift":
         target = drift_target(t)
         conf = emp.last.get("confidence") if emp.last else None
-        emp.drift = 1.0 if (target is not None and conf is not None and conf > target) else 0.0
+        if target is None or conf is None:
+            emp.drift = 0.0
+        elif conf > target + DRIFT_HYSTERESIS:
+            emp.drift = 1.0
+        elif conf < target - DRIFT_HYSTERESIS:
+            emp.drift = 0.0
         return emp.drift
     return 0.0
 

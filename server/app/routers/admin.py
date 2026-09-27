@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import AdminPrincipal, CurrentPrincipal
 from app.core import voice_demo
-from app.core.audit import AuditLog, acting, actor_name, is_synthetic_email, model_backend
+from app.core.audit import AuditLog, acting, actor_name, insider_drift, is_synthetic_email, model_backend
 from app.core.hub import DeviceRuntime
 from app.core.runtime import rt
 from app.db import history as H
@@ -38,11 +38,6 @@ from twobme_common.types import (
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 ONLINE_S = 30.0
-DRIFT_WINDOW_S = 300.0
-DRIFT_MIN_POINTS = 24          # >= 2 min of 5 s ticks before the insider-drift flag can fire
-DRIFT_BELOW = 0.80
-DRIFT_FRACTION = 0.60
-DRIFT_MAX_SUSPICIOUS = 0.10    # a window that was mostly < 0.40 is a (past) takeover, not a slow drift
 REMOTE_WINDOW = timedelta(minutes=10)
 SPARK_N = 60
 LEVEL_RANK = {"locked": 0, "suspicious": 1, "watch": 2, "normal": 3, "learning": 4}
@@ -73,22 +68,6 @@ def _drt(device_id: UUID) -> DeviceRuntime:
 
 
 # --- roster ---------------------------------------------------------------------------------------------
-def insider_drift(drt: DeviceRuntime, level: str, takeover: bool) -> bool:
-    """Sustained sub-0.80 confidence (>= 60% of the last 5 min) on a device still labelled genuine with no
-    takeover marker, that is not (and in this window was not) a takeover suspicion: UEBA-style slow drift in the
-    watch band, not a sudden swap."""
-    if takeover or drt.label != "genuine" or drt.in_takeover or level in ("learning", "locked"):
-        return False
-    now = utcnow()
-    pts = [p for p in list(drt.history)
-           if 0 <= (now - p.t).total_seconds() <= DRIFT_WINDOW_S and p.level not in ("learning", "locked")]
-    if len(pts) < DRIFT_MIN_POINTS:
-        return False
-    if sum(1 for p in pts if p.confidence < 0.40) / len(pts) > DRIFT_MAX_SUSPICIOUS:
-        return False
-    return sum(1 for p in pts if p.confidence < DRIFT_BELOW) / len(pts) >= DRIFT_FRACTION
-
-
 def roster_row(drt: DeviceRuntime) -> RosterRow:
     r = rt()
     hub, dev = r.hub, drt.dev
@@ -131,7 +110,9 @@ def roster_row(drt: DeviceRuntime) -> RosterRow:
         model_version=mi.version if mi.status == "ready" or (mi.version and mi.status == "training") else None,
         model_backend=model_backend(r.models, dev.user_id),
         last_anomaly=tr.last_anomaly if tr else None, last_anomaly_at=tr.last_anomaly_at if tr else None,
-        sparkline=[round(p.confidence, 4) for p in list(drt.history)[-SPARK_N:]], flags=flags,
+        # the pinned minimum an admin lock (or a locked tick) records is not behavior: never part of the sparkline
+        sparkline=[round(p.confidence, 4) for p in list(drt.history) if p.level != "locked"][-SPARK_N:],
+        flags=flags,
     )
 
 
@@ -226,7 +207,8 @@ async def ack_alert(drt: DeviceRuntime, anomaly_id: UUID | None) -> tuple[str, U
     a.acked.add(anomaly_id)
     r.writer.execute("UPDATE anomalies SET resolution = 'acknowledged' WHERE id = $1", anomaly_id)
     tr = a.track(drt.device_id)
-    kind = tr.last_anomaly.kind if tr.last_anomaly is not None and tr.last_anomaly.id == anomaly_id else "alert"
+    la = tr.last_anomaly if tr.last_anomaly is not None and tr.last_anomaly.id == anomaly_id else None
+    kind = "alert" if la is None else "insider_drift" if la.action == "insider_drift" else la.kind
     return kind.replace("_", " "), anomaly_id
 
 
